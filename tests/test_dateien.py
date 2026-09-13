@@ -76,6 +76,35 @@ def test_manifest_ist_die_einzige_versionsquelle():
         assert version not in text, f"Version fest verdrahtet in {pfad.name}"
 
 
+def test_manifest_schluessel_sind_sortiert():
+    """hassfest verlangt: domain, name, dann alphabetisch.
+
+    Das gilt auch für benutzerdefinierte Integrationen - der erste Anlauf ist
+    genau daran gescheitert.
+    """
+    schluessel = list(_json(INTEGRATION / "manifest.json"))
+    assert schluessel[:2] == ["domain", "name"]
+    assert schluessel[2:] == sorted(schluessel[2:]), schluessel
+
+
+def test_config_schema_ist_gesetzt():
+    """Wer async_setup hat, muss ein CONFIG_SCHEMA angeben - sagt hassfest."""
+    benutzt = {
+        knoten.attr
+        for knoten in ast.walk(_baum("__init__.py"))
+        if isinstance(knoten, ast.Attribute)
+    }
+    assert "config_entry_only_config_schema" in benutzt
+    zuweisungen = {
+        ziel.id
+        for knoten in ast.walk(_baum("__init__.py"))
+        if isinstance(knoten, ast.Assign)
+        for ziel in knoten.targets
+        if isinstance(ziel, ast.Name)
+    }
+    assert "CONFIG_SCHEMA" in zuweisungen
+
+
 def test_hacs_json_passt():
     hacs = _json(WURZEL / "hacs.json")
     assert hacs["content_in_root"] is False

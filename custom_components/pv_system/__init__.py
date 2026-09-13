@@ -82,6 +82,12 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 CONF_NAME = "name"
 
+# Diese Integration kennt keine YAML-Konfiguration; eingerichtet wird sie über
+# die Oberfläche. Das ausdrücklich zu sagen ist nicht nur Formsache: Wer
+# "pv_system:" in die configuration.yaml schreibt, bekommt damit eine klare
+# Meldung statt eines stillen Nichtstuns.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 
 def karten_url(hass: HomeAssistant) -> str:
     """URL der Karte mit Versionsanhang gegen den Browser-Cache."""
