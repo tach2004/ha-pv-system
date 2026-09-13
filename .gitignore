@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Werkzeuge
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Editoren und Systeme
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Node – nur für die Werkzeuge rund um die Karte, nie für die Auslieferung
+node_modules/
+package-lock.json
+
+# Nichts Persönliches ins Repository: Schaltpläne, Exporte, Zwischenstände
+skizzen/
+*.pdf

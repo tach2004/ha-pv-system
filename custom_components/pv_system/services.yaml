@@ -1,0 +1,157 @@
+# Die Dienste sind der Weg, auf dem die Karte die Anlage verändert: in der
+# Karte auf die Module tippen, Anzahl und Leistung eintragen, fertig. Sie
+# funktionieren genauso aus einer Automatisierung heraus.
+
+set_modules:
+  target:
+    entity:
+      integration: pv_system
+      domain: sensor
+  fields:
+    plant:
+      required: true
+      example: Ost-Dach
+      selector:
+        text:
+    count:
+      selector:
+        number:
+          min: 0
+          max: 500
+          step: 1
+          mode: box
+    peak_wp:
+      selector:
+        number:
+          min: 1
+          max: 2000
+          step: 1
+          unit_of_measurement: Wp
+          mode: box
+    series:
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          mode: box
+    parallel:
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          mode: box
+    manufacturer:
+      selector:
+        text:
+    model:
+      selector:
+        text:
+
+set_battery:
+  target:
+    entity:
+      integration: pv_system
+      domain: sensor
+  fields:
+    plant:
+      required: true
+      example: Ost-Dach
+      selector:
+        text:
+    enabled:
+      selector:
+        boolean:
+    capacity_kwh:
+      selector:
+        number:
+          min: 0.1
+          max: 1000
+          step: 0.01
+          unit_of_measurement: kWh
+          mode: box
+    nominal_voltage:
+      selector:
+        select:
+          translation_key: system_voltage
+          options: ["12", "24", "48", "96", "hv"]
+
+set_charger:
+  target:
+    entity:
+      integration: pv_system
+      domain: sensor
+  fields:
+    plant:
+      required: true
+      example: Ost-Dach
+      selector:
+        text:
+    enabled:
+      selector:
+        boolean:
+    system_voltage:
+      selector:
+        select:
+          translation_key: system_voltage
+          options: ["12", "24", "48", "96", "hv"]
+    max_current:
+      selector:
+        number:
+          min: 1
+          max: 500
+          step: 1
+          unit_of_measurement: A
+          mode: box
+
+set_inverter:
+  target:
+    entity:
+      integration: pv_system
+      domain: sensor
+  fields:
+    plant:
+      required: true
+      example: Ost-Dach
+      selector:
+        text:
+    enabled:
+      selector:
+        boolean:
+    rated_power_w:
+      selector:
+        number:
+          min: 50
+          max: 100000
+          step: 10
+          unit_of_measurement: W
+          mode: box
+    phase:
+      selector:
+        select:
+          translation_key: phase
+          options: ["l1", "l2", "l3"]
+
+add_plant:
+  target:
+    entity:
+      integration: pv_system
+      domain: sensor
+  fields:
+    name:
+      example: West-Dach
+      selector:
+        text:
+
+remove_plant:
+  target:
+    entity:
+      integration: pv_system
+      domain: sensor
+  fields:
+    plant:
+      required: true
+      example: West-Dach
+      selector:
+        text:

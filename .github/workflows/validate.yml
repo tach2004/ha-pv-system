@@ -1,0 +1,64 @@
+name: Prüfen
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  schedule:
+    # Einmal die Woche: hassfest und HACS ändern ihre Regeln, ohne dass sich
+    # hier etwas ändert. Ein Fehlschlag soll auffallen, bevor jemand installiert.
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+jobs:
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # Die Marke liegt nicht in home-assistant/brands - für eine
+          # benutzerdefinierte Integration ist das der Normalfall.
+          ignore: brands
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pyyaml ruff
+      - name: Rechnung, Struktur und Dateien
+        run: |
+          python3 tests/test_rechnung.py
+          python3 tests/test_topologie.py
+          python3 tests/test_dateien.py
+      - name: Übersetzungen sind aktuell
+        run: |
+          python3 scripts/uebersetzungen.py
+          git diff --exit-code -- custom_components/pv_system/strings.json \
+                                  custom_components/pv_system/translations
+      - name: Ruff
+        run: ruff check --select F,E9,B,I --target-version py312 custom_components tests scripts
+
+  karte:
+    name: Karte
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Syntax der Lovelace-Karte
+        run: node --check custom_components/pv_system/frontend/pv-system-card.js

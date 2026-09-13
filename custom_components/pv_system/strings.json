@@ -1,0 +1,529 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "name": "Name",
+          "phases": "Phases",
+          "plant_count": "Number of plants",
+          "power_entity": "Grid meter (total power)",
+          "power_sign": "Power sign"
+        },
+        "data_description": {
+          "plant_count": "A plant is everything behind one inverter. Can be changed at any time.",
+          "power_sign": "How the meter counts. Chosen wrongly the card shows the flow reversed."
+        },
+        "description": "One site can hold several plants. Modules, charge controllers, batteries and inverters are filled in afterwards under “Configure”.",
+        "title": "Set up PV system"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_capacity": {
+        "name": "Battery capacity"
+      },
+      "battery_energy": {
+        "name": "Battery energy"
+      },
+      "battery_power": {
+        "name": "Battery power"
+      },
+      "battery_soc": {
+        "name": "Battery level"
+      },
+      "grid_export_energy": {
+        "name": "Grid export energy"
+      },
+      "grid_export_power": {
+        "name": "Grid export"
+      },
+      "grid_frequency": {
+        "name": "Grid frequency"
+      },
+      "grid_import_energy": {
+        "name": "Grid import energy"
+      },
+      "grid_import_power": {
+        "name": "Grid import"
+      },
+      "grid_power": {
+        "name": "Grid power"
+      },
+      "house_power": {
+        "name": "House consumption"
+      },
+      "inverter_load": {
+        "name": "Inverter load"
+      },
+      "inverter_power": {
+        "name": "Inverter power"
+      },
+      "phase_power": {
+        "name": "Grid {phase}"
+      },
+      "phase_pv_power": {
+        "name": "Production {phase}"
+      },
+      "phase_voltage": {
+        "name": "Voltage {phase}"
+      },
+      "plant_battery_energy": {
+        "name": "Battery energy"
+      },
+      "plant_battery_power": {
+        "name": "Battery power"
+      },
+      "plant_battery_runtime": {
+        "name": "Remaining runtime"
+      },
+      "plant_battery_soc": {
+        "name": "Battery level"
+      },
+      "plant_battery_temperature": {
+        "name": "Battery temperature"
+      },
+      "plant_battery_voltage": {
+        "name": "Battery voltage"
+      },
+      "plant_charger_input_voltage": {
+        "name": "Charge controller input voltage"
+      },
+      "plant_charger_output_voltage": {
+        "name": "Charge controller output voltage"
+      },
+      "plant_charger_power": {
+        "name": "Charge controller power"
+      },
+      "plant_charger_temperature": {
+        "name": "Charge controller temperature"
+      },
+      "plant_inverter_load": {
+        "name": "Load"
+      },
+      "plant_inverter_power": {
+        "name": "Inverter power"
+      },
+      "plant_inverter_temperature": {
+        "name": "Inverter temperature"
+      },
+      "plant_pv_peak_power": {
+        "name": "Module peak power"
+      },
+      "plant_pv_power": {
+        "name": "PV power"
+      },
+      "plant_pv_utilisation": {
+        "name": "Utilisation"
+      },
+      "plant_pv_voltage": {
+        "name": "PV voltage"
+      },
+      "plant_string_layout": {
+        "name": "String layout"
+      },
+      "pv_energy": {
+        "name": "PV yield"
+      },
+      "pv_peak_power": {
+        "name": "PV peak power"
+      },
+      "pv_power": {
+        "name": "PV power"
+      },
+      "pv_utilisation": {
+        "name": "PV utilisation"
+      },
+      "self_consumption": {
+        "name": "Self-consumption"
+      },
+      "self_sufficiency": {
+        "name": "Self-sufficiency"
+      },
+      "status": {
+        "name": "Status",
+        "state": {
+          "charging": "Battery charging",
+          "discharging": "Battery discharging",
+          "exporting": "Exporting",
+          "idle": "Idle",
+          "importing": "Importing"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "battery": {
+        "data": {
+          "capacity_kwh": "Capacity",
+          "charged_energy_entity": "Charged energy",
+          "chemistry": "Cell chemistry",
+          "current_entity": "Current",
+          "cycles_entity": "Charge cycles",
+          "discharged_energy_entity": "Discharged energy",
+          "enabled": "Present",
+          "health_entity": "State of health",
+          "manufacturer": "Manufacturer",
+          "min_soc": "Discharge limit",
+          "model": "Model",
+          "name": "Name",
+          "nominal_voltage": "Nominal voltage",
+          "power_entity": "Power",
+          "power_sign": "Power sign",
+          "soc_entity": "State of charge",
+          "temperature_entity": "Temperature",
+          "voltage_entity": "Voltage"
+        },
+        "data_description": {
+          "min_soc": "Discharge stops here. Remaining runtime is calculated against this limit.",
+          "power_entity": "The sensor reporting current power. W, kW and MW are recognised.",
+          "power_sign": "How the meter counts. Chosen wrongly the card shows the flow reversed."
+        },
+        "description": "Optional. Capacity and state of charge together give the stored energy.",
+        "title": "Battery – {plant}"
+      },
+      "charger": {
+        "data": {
+          "enabled": "Present",
+          "input_current_entity": "Input current (PV)",
+          "input_voltage_entity": "Input voltage (PV)",
+          "manufacturer": "Manufacturer",
+          "max_current": "Maximum charge current",
+          "model": "Model",
+          "name": "Name",
+          "output_current_entity": "Output current (battery)",
+          "output_voltage_entity": "Output voltage (battery)",
+          "power_entity": "Power",
+          "state_entity": "Operating state",
+          "system_voltage": "System voltage",
+          "temperature_entity": "Temperature",
+          "yield_entity": "Yield meter"
+        },
+        "data_description": {
+          "input_voltage_entity": "The voltage coming from the modules - often three digits on an MPPT.",
+          "output_voltage_entity": "The voltage on the battery side, i.e. 24 V, 48 V and so on.",
+          "power_entity": "The sensor reporting current power. W, kW and MW are recognised."
+        },
+        "description": "Optional. Without one the modules go straight to the inverter.",
+        "title": "Charge controller – {plant}"
+      },
+      "display": {
+        "data": {
+          "animate": "Animate flow lines",
+          "feed_in_price": "Feed-in tariff",
+          "price_per_kwh": "Energy price",
+          "show_strings": "Draw string layout"
+        },
+        "title": "Appearance"
+      },
+      "grid": {
+        "data": {
+          "export_energy_entity": "Export meter",
+          "export_power_entity": "Export power",
+          "frequency_entity": "Frequency",
+          "import_energy_entity": "Import meter",
+          "import_power_entity": "Import power",
+          "l1_current_entity": "Current L1",
+          "l1_power_entity": "Power L1",
+          "l1_voltage_entity": "Voltage L1",
+          "l2_current_entity": "Current L2",
+          "l2_power_entity": "Power L2",
+          "l2_voltage_entity": "Voltage L2",
+          "l3_current_entity": "Current L3",
+          "l3_power_entity": "Power L3",
+          "l3_voltage_entity": "Voltage L3",
+          "meter_model": "Meter model",
+          "name": "Name",
+          "phases": "Phases",
+          "power_entity": "Total power",
+          "power_sign": "Power sign"
+        },
+        "data_description": {
+          "power_entity": "The sensor reporting current power. W, kW and MW are recognised.",
+          "power_sign": "How the meter counts. Chosen wrongly the card shows the flow reversed."
+        },
+        "description": "The total meter is enough. If phases are measured individually the card draws them separately.",
+        "title": "Grid and meter"
+      },
+      "house": {
+        "data": {
+          "calculate": "Calculate house consumption",
+          "energy_entity": "Energy meter",
+          "power_entity": "Power"
+        },
+        "data_description": {
+          "calculate": "Consumption = inverter power + grid power. A measured value takes precedence.",
+          "power_entity": "The sensor reporting current power. W, kW and MW are recognised."
+        },
+        "title": "House and consumption"
+      },
+      "init": {
+        "description": "Changes are only applied once you pick “Save and close” in the menu.",
+        "menu_options": {
+          "display": "Appearance",
+          "grid": "Grid and meter",
+          "house": "House and consumption",
+          "plants": "Plants",
+          "save": "Save and close"
+        },
+        "title": "PV system"
+      },
+      "inverter": {
+        "data": {
+          "ac_current_entity": "AC current",
+          "ac_voltage_entity": "AC voltage",
+          "dc_voltage_entity": "DC voltage",
+          "enabled": "Present",
+          "energy_entity": "Energy meter",
+          "frequency_entity": "Frequency",
+          "hybrid": "Hybrid inverter",
+          "manufacturer": "Manufacturer",
+          "mode_entity": "Operating mode",
+          "model": "Model",
+          "name": "Name",
+          "phase": "Phase",
+          "power_entity": "Power",
+          "rated_power_w": "Rated power",
+          "temperature_entity": "Temperature"
+        },
+        "data_description": {
+          "phase": "Which phase this single-phase inverter feeds into.",
+          "power_entity": "The sensor reporting current power. W, kW and MW are recognised."
+        },
+        "description": "Designed for single-phase inverters running in parallel with the grid.",
+        "title": "Inverter – {plant}"
+      },
+      "modules": {
+        "data": {
+          "azimuth": "Azimuth",
+          "count": "Number of modules",
+          "current_entity": "Current",
+          "energy_entity": "Energy meter",
+          "manufacturer": "Manufacturer",
+          "model": "Model",
+          "parallel": "Parallel strings",
+          "peak_wp": "Power per module",
+          "power_entity": "Power",
+          "series": "Modules in series per string",
+          "tilt": "Tilt",
+          "voltage_entity": "Voltage"
+        },
+        "data_description": {
+          "count": "How many modules belong to this plant.",
+          "parallel": "Four in series, two such strings in parallel makes eight modules.",
+          "peak_wp": "Peak power of a single module as printed on its label.",
+          "power_entity": "The sensor reporting current power. W, kW and MW are recognised.",
+          "series": "Leave empty to get a matching layout suggested."
+        },
+        "description": "Current layout: {peak}",
+        "title": "Modules – {plant}"
+      },
+      "plant_delete": {
+        "data": {
+          "confirm": "Really delete"
+        },
+        "description": "Remove “{plant}” including all its sensors?",
+        "title": "Delete plant"
+      },
+      "plant_menu": {
+        "description": "Changes are only applied once you pick “Save and close” in the menu.",
+        "menu_options": {
+          "battery": "Battery",
+          "charger": "Charge controller",
+          "inverter": "Inverter",
+          "modules": "Modules",
+          "plant_delete": "Delete plant",
+          "plant_name": "Name",
+          "plants": "Another plant",
+          "save": "Save and close"
+        },
+        "title": "Plant {plant}"
+      },
+      "plant_name": {
+        "data": {
+          "name": "Name"
+        },
+        "title": "Plant name"
+      },
+      "plants": {
+        "data": {
+          "plant": "Plant"
+        },
+        "description": "{count} plants are set up. Which one do you want to edit?",
+        "title": "Plants"
+      }
+    }
+  },
+  "selector": {
+    "battery_sign": {
+      "options": {
+        "positive_charge": "Positive = charging",
+        "positive_discharge": "Positive = discharging"
+      }
+    },
+    "chemistry": {
+      "options": {
+        "agm": "AGM",
+        "gel": "Gel",
+        "lead_acid": "Lead-acid",
+        "li_ion": "Lithium-ion",
+        "lifepo4": "LiFePO₄",
+        "nmc": "NMC",
+        "other": "Other"
+      }
+    },
+    "grid_sign": {
+      "options": {
+        "positive_export": "Positive = exporting to grid",
+        "positive_import": "Positive = importing from grid"
+      }
+    },
+    "phase": {
+      "options": {
+        "l1": "L1",
+        "l2": "L2",
+        "l3": "L3"
+      }
+    },
+    "phase_count": {
+      "options": {
+        "1": "Single phase",
+        "2": "Two phases",
+        "3": "Three phases"
+      }
+    },
+    "system_voltage": {
+      "options": {
+        "12": "12 V",
+        "24": "24 V",
+        "48": "48 V",
+        "96": "96 V",
+        "hv": "High voltage (> 100 V)"
+      }
+    }
+  },
+  "services": {
+    "add_plant": {
+      "description": "Create another plant.",
+      "fields": {
+        "name": {
+          "description": "Name of the new plant.",
+          "name": "Name"
+        }
+      },
+      "name": "Add plant"
+    },
+    "remove_plant": {
+      "description": "Remove a plant including all its sensors.",
+      "fields": {
+        "plant": {
+          "description": "Id or name of the plant.",
+          "name": "Plant"
+        }
+      },
+      "name": "Remove plant"
+    },
+    "set_battery": {
+      "description": "Change capacity and nominal voltage of a battery.",
+      "fields": {
+        "capacity_kwh": {
+          "description": "Capacity",
+          "name": "Capacity"
+        },
+        "enabled": {
+          "description": "Present",
+          "name": "Present"
+        },
+        "nominal_voltage": {
+          "description": "Nominal voltage",
+          "name": "Nominal voltage"
+        },
+        "plant": {
+          "description": "Plant",
+          "name": "Plant"
+        }
+      },
+      "name": "Set battery"
+    },
+    "set_charger": {
+      "description": "Change system voltage and charge current of a controller.",
+      "fields": {
+        "enabled": {
+          "description": "Present",
+          "name": "Present"
+        },
+        "max_current": {
+          "description": "Maximum charge current",
+          "name": "Maximum charge current"
+        },
+        "plant": {
+          "description": "Plant",
+          "name": "Plant"
+        },
+        "system_voltage": {
+          "description": "System voltage",
+          "name": "System voltage"
+        }
+      },
+      "name": "Set charge controller"
+    },
+    "set_inverter": {
+      "description": "Change rated power and phase of an inverter.",
+      "fields": {
+        "enabled": {
+          "description": "Present",
+          "name": "Present"
+        },
+        "phase": {
+          "description": "Which phase this single-phase inverter feeds into.",
+          "name": "Phase"
+        },
+        "plant": {
+          "description": "Plant",
+          "name": "Plant"
+        },
+        "rated_power_w": {
+          "description": "Rated power",
+          "name": "Rated power"
+        }
+      },
+      "name": "Set inverter"
+    },
+    "set_modules": {
+      "description": "Change count, power and layout of a plant's modules.",
+      "fields": {
+        "count": {
+          "description": "How many modules belong to this plant.",
+          "name": "Number of modules"
+        },
+        "manufacturer": {
+          "description": "Manufacturer",
+          "name": "Manufacturer"
+        },
+        "model": {
+          "description": "Model",
+          "name": "Model"
+        },
+        "parallel": {
+          "description": "Four in series, two such strings in parallel makes eight modules.",
+          "name": "Parallel strings"
+        },
+        "peak_wp": {
+          "description": "Peak power of a single module as printed on its label.",
+          "name": "Power per module"
+        },
+        "plant": {
+          "description": "Plant",
+          "name": "Plant"
+        },
+        "series": {
+          "description": "Leave empty to get a matching layout suggested.",
+          "name": "Modules in series per string"
+        }
+      },
+      "name": "Set modules"
+    }
+  },
+  "title": "PV-System"
+}
