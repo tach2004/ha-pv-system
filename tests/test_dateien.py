@@ -391,6 +391,27 @@ def test_karte_wird_von_der_integration_ausgeliefert():
     assert "add_extra_js_url" not in benutzt
 
 
+def test_zahlenfeld_setzt_keine_leere_einheit():
+    """unit_of_measurement darf nie ausdrücklich None sein.
+
+    Home Assistant prüft das Feld mit vol.Optional(...): str. Ein None ist
+    keine Zeichenkette, der Selektor wirft beim Bauen des Formulars, und der
+    Konfigurationsdialog lässt sich gar nicht mehr öffnen - sichtbar nur als
+    "400: Bad Request". Genau so ist die erste Fassung ausgeliefert worden.
+    """
+    for knoten in ast.walk(_baum("config_flow.py")):
+        if not isinstance(knoten, ast.Call):
+            continue
+        if getattr(knoten.func, "attr", None) != "NumberSelectorConfig":
+            continue
+        for wort in knoten.keywords:
+            if wort.arg == "unit_of_measurement":
+                raise AssertionError(
+                    "unit_of_measurement gehört nur gesetzt, wenn es eine "
+                    "Einheit gibt - sonst den Schlüssel weglassen."
+                )
+
+
 def test_lovelace_feldname_wird_nicht_fest_verdrahtet():
     """Das Feld heißt bis 2026.1 "mode" und ab 2026.2 "resource_mode".
 

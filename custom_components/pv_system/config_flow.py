@@ -148,15 +148,24 @@ def _zahl(
     schritt: float,
     einheit: str | None = None,
 ) -> selector.NumberSelector:
-    return selector.NumberSelector(
-        selector.NumberSelectorConfig(
-            min=minimum,
-            max=maximum,
-            step=schritt,
-            unit_of_measurement=einheit,
-            mode=selector.NumberSelectorMode.BOX,
-        )
+    """Zahlenfeld, Einheit optional.
+
+    Die Einheit wird weggelassen statt auf None gesetzt. Das ist kein
+    Schönheitsfehler: Home Assistant prüft das Feld mit
+    ``vol.Optional("unit_of_measurement"): str``, und ein ausdrückliches None
+    ist keine Zeichenkette. Der Selektor wirft dann beim Bauen des Formulars,
+    der Konfigurationsdialog lässt sich gar nicht erst öffnen, und in der
+    Oberfläche steht nur "400: Bad Request".
+    """
+    config = selector.NumberSelectorConfig(
+        min=minimum,
+        max=maximum,
+        step=schritt,
+        mode=selector.NumberSelectorMode.BOX,
     )
+    if einheit is not None:
+        config["unit_of_measurement"] = einheit
+    return selector.NumberSelector(config)
 
 
 def _sensor(
@@ -224,6 +233,146 @@ def _mit_vorschlag(
     return vol.Schema(felder)
 
 
+def _felder_module() -> dict[Any, Any]:
+    return {
+        vol.Required(CONF_MODULE_COUNT): _zahl(0, 500, 1),
+        vol.Required(CONF_MODULE_PEAK): _zahl(1, 2000, 1, "Wp"),
+        vol.Optional(CONF_MODULES_IN_SERIES): _zahl(0, 60, 1),
+        vol.Optional(CONF_STRINGS_PARALLEL): _zahl(0, 60, 1),
+        vol.Optional(CONF_MODULE_MANUFACTURER): _text(),
+        vol.Optional(CONF_MODULE_MODEL): _text(),
+        vol.Optional(CONF_TILT): _zahl(0, 90, 1, "°"),
+        vol.Optional(CONF_AZIMUTH): _zahl(-180, 360, 1, "°"),
+        vol.Optional(CONF_PV_POWER): _sensor("power"),
+        vol.Optional(CONF_PV_VOLTAGE): _sensor("voltage"),
+        vol.Optional(CONF_PV_CURRENT): _sensor("current"),
+        vol.Optional(CONF_PV_ENERGY): _sensor("energy"),
+    }
+
+
+def _felder_laderegler() -> dict[Any, Any]:
+    return {
+        vol.Required(CONF_ENABLED): bool,
+        vol.Optional(CONF_CHARGER_NAME): _text(),
+        vol.Optional(CONF_CHARGER_MANUFACTURER): _text(),
+        vol.Optional(CONF_CHARGER_MODEL): _text(),
+        vol.Required(CONF_SYSTEM_VOLTAGE): _auswahl(
+            SYSTEM_VOLTAGES, "system_voltage"
+        ),
+        vol.Optional(CONF_CHARGER_MAX_CURRENT): _zahl(1, 500, 1, "A"),
+        vol.Optional(CONF_CHARGER_IN_VOLTAGE): _sensor("voltage"),
+        vol.Optional(CONF_CHARGER_IN_CURRENT): _sensor("current"),
+        vol.Optional(CONF_CHARGER_OUT_VOLTAGE): _sensor("voltage"),
+        vol.Optional(CONF_CHARGER_OUT_CURRENT): _sensor("current"),
+        vol.Optional(CONF_CHARGER_POWER): _sensor("power"),
+        vol.Optional(CONF_CHARGER_YIELD): _sensor("energy"),
+        vol.Optional(CONF_CHARGER_TEMPERATURE): _sensor("temperature"),
+        vol.Optional(CONF_CHARGER_STATE): _beliebig(),
+    }
+
+
+def _felder_batterie() -> dict[Any, Any]:
+    return {
+        vol.Required(CONF_ENABLED): bool,
+        vol.Optional(CONF_BATTERY_NAME): _text(),
+        vol.Optional(CONF_BATTERY_MANUFACTURER): _text(),
+        vol.Optional(CONF_BATTERY_MODEL): _text(),
+        vol.Required(CONF_CAPACITY): _zahl(0.1, 1000, 0.01, "kWh"),
+        vol.Required(CONF_NOMINAL_VOLTAGE): _auswahl(
+            SYSTEM_VOLTAGES, "system_voltage"
+        ),
+        vol.Required(CONF_CHEMISTRY): _auswahl(CHEMISTRIES, "chemistry"),
+        vol.Required(CONF_BATTERY_MIN_SOC): _zahl(0, 90, 1, "%"),
+        vol.Required(CONF_POWER_SIGN): _auswahl(BATTERY_SIGNS, "battery_sign"),
+        vol.Optional(CONF_BATTERY_SOC): _sensor("battery"),
+        vol.Optional(CONF_BATTERY_POWER): _sensor("power"),
+        vol.Optional(CONF_BATTERY_VOLTAGE): _sensor("voltage"),
+        vol.Optional(CONF_BATTERY_CURRENT): _sensor("current"),
+        vol.Optional(CONF_BATTERY_TEMPERATURE): _sensor("temperature"),
+        vol.Optional(CONF_BATTERY_HEALTH): _sensor(),
+        vol.Optional(CONF_BATTERY_CYCLES): _sensor(),
+        vol.Optional(CONF_BATTERY_CHARGED): _sensor("energy"),
+        vol.Optional(CONF_BATTERY_DISCHARGED): _sensor("energy"),
+    }
+
+
+def _felder_wechselrichter() -> dict[Any, Any]:
+    return {
+        vol.Required(CONF_ENABLED): bool,
+        vol.Optional(CONF_INVERTER_NAME): _text(),
+        vol.Optional(CONF_INVERTER_MANUFACTURER): _text(),
+        vol.Optional(CONF_INVERTER_MODEL): _text(),
+        vol.Required(CONF_RATED_POWER): _zahl(50, 100000, 10, "W"),
+        vol.Required(CONF_PHASE): _auswahl(PHASES, "phase"),
+        vol.Required(CONF_INVERTER_HYBRID): bool,
+        vol.Optional(CONF_INVERTER_POWER): _sensor("power"),
+        vol.Optional(CONF_INVERTER_AC_VOLTAGE): _sensor("voltage"),
+        vol.Optional(CONF_INVERTER_AC_CURRENT): _sensor("current"),
+        vol.Optional(CONF_INVERTER_DC_VOLTAGE): _sensor("voltage"),
+        vol.Optional(CONF_INVERTER_FREQUENCY): _sensor("frequency"),
+        vol.Optional(CONF_INVERTER_TEMPERATURE): _sensor("temperature"),
+        vol.Optional(CONF_INVERTER_ENERGY): _sensor("energy"),
+        vol.Optional(CONF_INVERTER_MODE): _beliebig(),
+    }
+
+
+def _felder_haus() -> dict[Any, Any]:
+    return {
+        vol.Required(CONF_HOUSE_CALCULATE): bool,
+        vol.Optional(CONF_HOUSE_POWER): _sensor("power"),
+        vol.Optional(CONF_HOUSE_ENERGY): _sensor("energy"),
+    }
+
+
+def _felder_darstellung() -> dict[Any, Any]:
+    return {
+        vol.Required(CONF_ANIMATE): bool,
+        vol.Required(CONF_SHOW_STRINGS): bool,
+        vol.Optional(CONF_CURRENCY_PRICE): _zahl(0, 10, 0.0001, "EUR/kWh"),
+        vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, 0.0001, "EUR/kWh"),
+    }
+
+
+def _felder_netz() -> dict[Any, Any]:
+    felder: dict[Any, Any] = {
+        vol.Required(CONF_GRID_NAME): _text(),
+        vol.Optional(CONF_METER_MODEL): _text(),
+        vol.Required(CONF_PHASES): _auswahl(["1", "2", "3"], "phase_count"),
+        vol.Required(CONF_POWER_SIGN): _auswahl(GRID_SIGNS, "grid_sign"),
+        vol.Optional(CONF_GRID_POWER): _sensor("power"),
+        vol.Optional(CONF_GRID_IMPORT_POWER): _sensor("power"),
+        vol.Optional(CONF_GRID_EXPORT_POWER): _sensor("power"),
+        vol.Optional(CONF_GRID_IMPORT_ENERGY): _sensor("energy"),
+        vol.Optional(CONF_GRID_EXPORT_ENERGY): _sensor("energy"),
+        vol.Optional(CONF_GRID_FREQUENCY): _sensor("frequency"),
+    }
+    for phase in PHASES:
+        felder[vol.Optional(CONF_PHASE_POWER.format(phase=phase))] = _sensor("power")
+        felder[vol.Optional(CONF_PHASE_VOLTAGE.format(phase=phase))] = _sensor(
+            "voltage"
+        )
+        felder[vol.Optional(CONF_PHASE_CURRENT.format(phase=phase))] = _sensor(
+            "current"
+        )
+    return felder
+
+
+def _schema_einrichtung() -> vol.Schema:
+    """Das Formular des ersten Schritts."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_NAME, default=DEFAULT_NAME): _text(),
+            vol.Required(CONF_PLANT_COUNT, default=1): _zahl(1, 20, 1),
+            vol.Required(CONF_PHASES, default="3"): _auswahl(
+                ["1", "2", "3"], "phase_count"
+            ),
+            vol.Optional(CONF_GRID_POWER): _sensor("power"),
+            vol.Required(CONF_POWER_SIGN, default=GRID_SIGNS[0]): _auswahl(
+                GRID_SIGNS, "grid_sign"
+            ),
+        }
+    )
+
 # --------------------------------------------------------------- Einrichtung
 
 
@@ -264,19 +413,7 @@ class PvSystemConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME, default=DEFAULT_NAME): _text(),
-                    vol.Required(CONF_PLANT_COUNT, default=1): _zahl(1, 20, 1),
-                    vol.Required(CONF_PHASES, default=3): _auswahl(
-                        ["1", "2", "3"], "phase_count"
-                    ),
-                    vol.Optional(CONF_GRID_POWER): _sensor("power"),
-                    vol.Required(
-                        CONF_POWER_SIGN, default=GRID_SIGNS[0]
-                    ): _auswahl(GRID_SIGNS, "grid_sign"),
-                }
-            ),
+            data_schema=_schema_einrichtung(),
         )
 
     @staticmethod
@@ -428,20 +565,7 @@ class PvSystemOptionsFlow(OptionsFlow):
             self._anlage[CONF_MODULES] = module_normalisieren(user_input)
             return await self.async_step_plant_menu()
 
-        felder = {
-            vol.Required(CONF_MODULE_COUNT): _zahl(0, 500, 1),
-            vol.Required(CONF_MODULE_PEAK): _zahl(1, 2000, 1, "Wp"),
-            vol.Optional(CONF_MODULES_IN_SERIES): _zahl(0, 60, 1),
-            vol.Optional(CONF_STRINGS_PARALLEL): _zahl(0, 60, 1),
-            vol.Optional(CONF_MODULE_MANUFACTURER): _text(),
-            vol.Optional(CONF_MODULE_MODEL): _text(),
-            vol.Optional(CONF_TILT): _zahl(0, 90, 1, "°"),
-            vol.Optional(CONF_AZIMUTH): _zahl(-180, 360, 1, "°"),
-            vol.Optional(CONF_PV_POWER): _sensor("power"),
-            vol.Optional(CONF_PV_VOLTAGE): _sensor("voltage"),
-            vol.Optional(CONF_PV_CURRENT): _sensor("current"),
-            vol.Optional(CONF_PV_ENERGY): _sensor("energy"),
-        }
+        felder = _felder_module()
         module = self._anlage[CONF_MODULES]
         return self.async_show_form(
             step_id="modules",
@@ -461,24 +585,7 @@ class PvSystemOptionsFlow(OptionsFlow):
             self._anlage[CONF_CHARGER] = laderegler_normalisieren(user_input)
             return await self.async_step_plant_menu()
 
-        felder = {
-            vol.Required(CONF_ENABLED): bool,
-            vol.Optional(CONF_CHARGER_NAME): _text(),
-            vol.Optional(CONF_CHARGER_MANUFACTURER): _text(),
-            vol.Optional(CONF_CHARGER_MODEL): _text(),
-            vol.Required(CONF_SYSTEM_VOLTAGE): _auswahl(
-                SYSTEM_VOLTAGES, "system_voltage"
-            ),
-            vol.Optional(CONF_CHARGER_MAX_CURRENT): _zahl(1, 500, 1, "A"),
-            vol.Optional(CONF_CHARGER_IN_VOLTAGE): _sensor("voltage"),
-            vol.Optional(CONF_CHARGER_IN_CURRENT): _sensor("current"),
-            vol.Optional(CONF_CHARGER_OUT_VOLTAGE): _sensor("voltage"),
-            vol.Optional(CONF_CHARGER_OUT_CURRENT): _sensor("current"),
-            vol.Optional(CONF_CHARGER_POWER): _sensor("power"),
-            vol.Optional(CONF_CHARGER_YIELD): _sensor("energy"),
-            vol.Optional(CONF_CHARGER_TEMPERATURE): _sensor("temperature"),
-            vol.Optional(CONF_CHARGER_STATE): _beliebig(),
-        }
+        felder = _felder_laderegler()
         return self.async_show_form(
             step_id="charger",
             data_schema=_mit_vorschlag(felder, self._anlage[CONF_CHARGER]),
@@ -494,28 +601,7 @@ class PvSystemOptionsFlow(OptionsFlow):
             self._anlage[CONF_BATTERY] = batterie_normalisieren(user_input)
             return await self.async_step_plant_menu()
 
-        felder = {
-            vol.Required(CONF_ENABLED): bool,
-            vol.Optional(CONF_BATTERY_NAME): _text(),
-            vol.Optional(CONF_BATTERY_MANUFACTURER): _text(),
-            vol.Optional(CONF_BATTERY_MODEL): _text(),
-            vol.Required(CONF_CAPACITY): _zahl(0.1, 1000, 0.01, "kWh"),
-            vol.Required(CONF_NOMINAL_VOLTAGE): _auswahl(
-                SYSTEM_VOLTAGES, "system_voltage"
-            ),
-            vol.Required(CONF_CHEMISTRY): _auswahl(CHEMISTRIES, "chemistry"),
-            vol.Required(CONF_BATTERY_MIN_SOC): _zahl(0, 90, 1, "%"),
-            vol.Required(CONF_POWER_SIGN): _auswahl(BATTERY_SIGNS, "battery_sign"),
-            vol.Optional(CONF_BATTERY_SOC): _sensor("battery"),
-            vol.Optional(CONF_BATTERY_POWER): _sensor("power"),
-            vol.Optional(CONF_BATTERY_VOLTAGE): _sensor("voltage"),
-            vol.Optional(CONF_BATTERY_CURRENT): _sensor("current"),
-            vol.Optional(CONF_BATTERY_TEMPERATURE): _sensor("temperature"),
-            vol.Optional(CONF_BATTERY_HEALTH): _sensor(),
-            vol.Optional(CONF_BATTERY_CYCLES): _sensor(),
-            vol.Optional(CONF_BATTERY_CHARGED): _sensor("energy"),
-            vol.Optional(CONF_BATTERY_DISCHARGED): _sensor("energy"),
-        }
+        felder = _felder_batterie()
         return self.async_show_form(
             step_id="battery",
             data_schema=_mit_vorschlag(felder, self._anlage[CONF_BATTERY]),
@@ -531,23 +617,7 @@ class PvSystemOptionsFlow(OptionsFlow):
             self._anlage[CONF_INVERTER] = wechselrichter_normalisieren(user_input)
             return await self.async_step_plant_menu()
 
-        felder = {
-            vol.Required(CONF_ENABLED): bool,
-            vol.Optional(CONF_INVERTER_NAME): _text(),
-            vol.Optional(CONF_INVERTER_MANUFACTURER): _text(),
-            vol.Optional(CONF_INVERTER_MODEL): _text(),
-            vol.Required(CONF_RATED_POWER): _zahl(50, 100000, 10, "W"),
-            vol.Required(CONF_PHASE): _auswahl(PHASES, "phase"),
-            vol.Required(CONF_INVERTER_HYBRID): bool,
-            vol.Optional(CONF_INVERTER_POWER): _sensor("power"),
-            vol.Optional(CONF_INVERTER_AC_VOLTAGE): _sensor("voltage"),
-            vol.Optional(CONF_INVERTER_AC_CURRENT): _sensor("current"),
-            vol.Optional(CONF_INVERTER_DC_VOLTAGE): _sensor("voltage"),
-            vol.Optional(CONF_INVERTER_FREQUENCY): _sensor("frequency"),
-            vol.Optional(CONF_INVERTER_TEMPERATURE): _sensor("temperature"),
-            vol.Optional(CONF_INVERTER_ENERGY): _sensor("energy"),
-            vol.Optional(CONF_INVERTER_MODE): _beliebig(),
-        }
+        felder = _felder_wechselrichter()
         return self.async_show_form(
             step_id="inverter",
             data_schema=_mit_vorschlag(felder, self._anlage[CONF_INVERTER]),
@@ -563,26 +633,7 @@ class PvSystemOptionsFlow(OptionsFlow):
             self._daten[CONF_GRID] = netz_normalisieren(user_input)
             return await self.async_step_init()
 
-        felder: dict[Any, Any] = {
-            vol.Required(CONF_GRID_NAME): _text(),
-            vol.Optional(CONF_METER_MODEL): _text(),
-            vol.Required(CONF_PHASES): _auswahl(["1", "2", "3"], "phase_count"),
-            vol.Required(CONF_POWER_SIGN): _auswahl(GRID_SIGNS, "grid_sign"),
-            vol.Optional(CONF_GRID_POWER): _sensor("power"),
-            vol.Optional(CONF_GRID_IMPORT_POWER): _sensor("power"),
-            vol.Optional(CONF_GRID_EXPORT_POWER): _sensor("power"),
-            vol.Optional(CONF_GRID_IMPORT_ENERGY): _sensor("energy"),
-            vol.Optional(CONF_GRID_EXPORT_ENERGY): _sensor("energy"),
-            vol.Optional(CONF_GRID_FREQUENCY): _sensor("frequency"),
-        }
-        for phase in PHASES:
-            felder[vol.Optional(CONF_PHASE_POWER.format(phase=phase))] = _sensor("power")
-            felder[vol.Optional(CONF_PHASE_VOLTAGE.format(phase=phase))] = _sensor(
-                "voltage"
-            )
-            felder[vol.Optional(CONF_PHASE_CURRENT.format(phase=phase))] = _sensor(
-                "current"
-            )
+        felder = _felder_netz()
 
         werte = dict(self._daten[CONF_GRID])
         werte[CONF_PHASES] = str(werte.get(CONF_PHASES) or 3)
@@ -599,11 +650,7 @@ class PvSystemOptionsFlow(OptionsFlow):
             self._daten[CONF_HOUSE] = haus_normalisieren(user_input)
             return await self.async_step_init()
 
-        felder = {
-            vol.Required(CONF_HOUSE_CALCULATE): bool,
-            vol.Optional(CONF_HOUSE_POWER): _sensor("power"),
-            vol.Optional(CONF_HOUSE_ENERGY): _sensor("energy"),
-        }
+        felder = _felder_haus()
         return self.async_show_form(
             step_id="house",
             data_schema=_mit_vorschlag(felder, self._daten[CONF_HOUSE]),
@@ -618,12 +665,7 @@ class PvSystemOptionsFlow(OptionsFlow):
             self._daten[CONF_DISPLAY] = darstellung_normalisieren(user_input)
             return await self.async_step_init()
 
-        felder = {
-            vol.Required(CONF_ANIMATE): bool,
-            vol.Required(CONF_SHOW_STRINGS): bool,
-            vol.Optional(CONF_CURRENCY_PRICE): _zahl(0, 10, 0.0001, "EUR/kWh"),
-            vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, 0.0001, "EUR/kWh"),
-        }
+        felder = _felder_darstellung()
         return self.async_show_form(
             step_id="display",
             data_schema=_mit_vorschlag(felder, self._daten[CONF_DISPLAY]),

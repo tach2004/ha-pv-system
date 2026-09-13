@@ -86,6 +86,28 @@ jobs:
           ):
               importlib.import_module(name)
               print(f"  ok  {name}")
+
+          # Der Importtest allein reicht nicht: Ein Selektor entsteht erst,
+          # wenn das Formular gebaut wird. Genau dort ist einmal ein
+          # unit_of_measurement=None hängengeblieben - der Dialog ließ sich
+          # nicht mehr öffnen, und in der Oberfläche stand nur
+          # "400: Bad Request". Deshalb werden hier alle Formulare erzeugt.
+          from pv_system import config_flow as cf
+
+          print("Formulare:")
+          cf._schema_einrichtung()
+          print("  ok  Einrichtung")
+          for name in (
+              "_felder_module",
+              "_felder_laderegler",
+              "_felder_batterie",
+              "_felder_wechselrichter",
+              "_felder_netz",
+              "_felder_haus",
+              "_felder_darstellung",
+          ):
+              cf._mit_vorschlag(getattr(cf, name)(), {})
+              print(f"  ok  {name}")
           PY
 
   karte:
