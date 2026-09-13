@@ -47,6 +47,8 @@ gemeinsame Einheiten und setzt daraus ein Bild zusammen.
   Zähler Bezug oder Einspeisung bedeutet.
 * **Ändern direkt in der Karte**: Auf die Module tippen, Anzahl und Leistung
   eintragen, fertig.
+* **Eigenes Symbol** statt des Puzzleteils – ab Home Assistant 2026.3 ohne
+  Umweg über einen Eintrag in `home-assistant/brands`.
 
 ## Installation
 

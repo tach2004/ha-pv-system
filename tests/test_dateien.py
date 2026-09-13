@@ -418,6 +418,27 @@ def test_mindestversion_ist_belegt():
     assert _json(WURZEL / "hacs.json")["homeassistant"] == "2025.2.0"
 
 
+def test_marke_wird_mit_ausgeliefert():
+    """Der Ordner "brand" neben den Modulen ist das ganze Geheimnis.
+
+    Home Assistant erkennt daran (has_branding = "brand" in _top_level_files),
+    dass die Integration ein eigenes Logo mitbringt, und liefert es ab 2026.3
+    unter /api/brands/integration/pv_system/icon.png aus. Ohne diesen Ordner
+    steht in HACS das Puzzleteil.
+    """
+    marke = INTEGRATION / "brand"
+    assert marke.is_dir()
+    for name, kante in (("icon.png", 256), ("icon@2x.png", 512)):
+        datei = marke / name
+        assert datei.is_file(), name
+        # PNG-Kopf: Breite und Höhe stehen als 32-Bit-Zahlen ab Byte 16.
+        kopf = datei.read_bytes()[:24]
+        assert kopf[:8] == b"\x89PNG\r\n\x1a\n", name
+        breite = int.from_bytes(kopf[16:20], "big")
+        hoehe = int.from_bytes(kopf[20:24], "big")
+        assert (breite, hoehe) == (kante, kante), f"{name}: {breite}x{hoehe}"
+
+
 def test_beispiel_dashboard_ist_gueltiges_yaml():
     inhalt = yaml.safe_load((WURZEL / "dashboards" / "pv-system.yaml").read_text(encoding="utf-8"))
     karten = [
