@@ -145,10 +145,14 @@ CONF_PLANT_COUNT = "plant_count"
 def _zahl(
     minimum: float,
     maximum: float,
-    schritt: float,
+    schritt: float | str,
     einheit: str | None = None,
 ) -> selector.NumberSelector:
     """Zahlenfeld, Einheit optional.
+
+    ``schritt`` darf "any" sein - dann gibt die Oberfläche keine Rasterung vor.
+    Das ist bei Preisen die richtige Angabe: Home Assistant lässt als Zahl
+    kleinstens 0,001 zu, ein Arbeitspreis hat aber gern vier Nachkommastellen.
 
     Die Einheit wird weggelassen statt auf None gesetzt. Das ist kein
     Schönheitsfehler: Home Assistant prüft das Feld mit
@@ -328,8 +332,8 @@ def _felder_darstellung() -> dict[Any, Any]:
     return {
         vol.Required(CONF_ANIMATE): bool,
         vol.Required(CONF_SHOW_STRINGS): bool,
-        vol.Optional(CONF_CURRENCY_PRICE): _zahl(0, 10, 0.0001, "EUR/kWh"),
-        vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, 0.0001, "EUR/kWh"),
+        vol.Optional(CONF_CURRENCY_PRICE): _zahl(0, 10, "any", "EUR/kWh"),
+        vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, "any", "EUR/kWh"),
     }
 
 
