@@ -1,0 +1,68 @@
+# Beispiel-Dashboard für die PV-System-Integration.
+#
+# Einbauen: Dashboard öffnen → Stift → drei Punkte → "Raw-Konfigurationseditor"
+# und den Inhalt dort einfügen. Die Entity-IDs unten heißen bei dir anders -
+# sie richten sich nach dem Namen, den du dem Standort und den Anlagen gegeben
+# hast. Die Karte selbst braucht keine Entity-IDs, sie findet ihr System allein.
+
+views:
+  - title: Photovoltaik
+    path: pv
+    icon: mdi:solar-power-variant
+    cards:
+      # Das Flussdiagramm. Mehr als das ist nicht nötig.
+      - type: custom:pv-system-card
+
+      # Verlauf der Erzeugung gegen den Verbrauch.
+      - type: history-graph
+        hours_to_show: 24
+        title: Tagesverlauf
+        entities:
+          - entity: sensor.zuhause_pv_leistung
+          - entity: sensor.zuhause_hausverbrauch
+          - entity: sensor.zuhause_netzleistung
+
+      # Die Speicher im Blick.
+      - type: entities
+        title: Speicher
+        entities:
+          - entity: sensor.zuhause_batterieladestand
+          - entity: sensor.zuhause_batterieinhalt
+          - entity: sensor.zuhause_batterieleistung
+          - type: divider
+          - entity: sensor.dach_sud_batterietemperatur
+          - entity: sensor.dach_sud_restlaufzeit
+
+      # Was auf welcher Phase passiert - bei mehreren einphasigen
+      # Wechselrichtern die interessanteste Ansicht.
+      - type: entities
+        title: Phasen
+        entities:
+          - entity: sensor.zuhause_netz_l1
+          - entity: sensor.zuhause_netz_l2
+          - entity: sensor.zuhause_netz_l3
+          - type: divider
+          - entity: sensor.zuhause_erzeugung_l1
+          - entity: sensor.zuhause_erzeugung_l3
+
+      # Kennzahlen als Ringe.
+      - type: gauge
+        entity: sensor.zuhause_autarkie
+        name: Autarkie
+        min: 0
+        max: 100
+        severity:
+          green: 70
+          yellow: 40
+          red: 0
+
+      - type: gauge
+        entity: sensor.zuhause_pv_ausnutzung
+        name: Ausnutzung der Module
+        min: 0
+        max: 100
+
+      # Nur die Karte, ohne Kennzahlenleiste - etwa für eine schmale Spalte.
+      - type: custom:pv-system-card
+        compact: true
+        titel: Anlage

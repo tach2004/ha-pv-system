@@ -1,0 +1,22 @@
+{
+  "domain": "pv_system",
+  "name": "PV-System",
+  "after_dependencies": [
+    "lovelace",
+    "recorder"
+  ],
+  "codeowners": [
+    "@tach2004"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "frontend",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/tach2004/ha-pv-system",
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/tach2004/ha-pv-system/issues",
+  "version": "0.0.1"
+}

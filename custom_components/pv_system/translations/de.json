@@ -1,0 +1,529 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "name": "Name",
+          "phases": "Phasen",
+          "plant_count": "Anzahl Anlagen",
+          "power_entity": "Netzzähler (Gesamtleistung)",
+          "power_sign": "Vorzeichen der Leistung"
+        },
+        "data_description": {
+          "plant_count": "Eine Anlage ist alles, was an einem Wechselrichter hängt. Später jederzeit änderbar.",
+          "power_sign": "Wie der Zähler zählt. Falsch gewählt zeigt die Karte den Fluss verkehrt herum."
+        },
+        "description": "Ein Standort kann mehrere Anlagen enthalten. Module, Laderegler, Batterien und Wechselrichter werden anschließend unter „Konfigurieren“ eingetragen.",
+        "title": "PV-System einrichten"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_capacity": {
+        "name": "Batteriekapazität"
+      },
+      "battery_energy": {
+        "name": "Batterieinhalt"
+      },
+      "battery_power": {
+        "name": "Batterieleistung"
+      },
+      "battery_soc": {
+        "name": "Batterieladestand"
+      },
+      "grid_export_energy": {
+        "name": "Einspeisung gesamt"
+      },
+      "grid_export_power": {
+        "name": "Netzeinspeisung"
+      },
+      "grid_frequency": {
+        "name": "Netzfrequenz"
+      },
+      "grid_import_energy": {
+        "name": "Netzbezug gesamt"
+      },
+      "grid_import_power": {
+        "name": "Netzbezug"
+      },
+      "grid_power": {
+        "name": "Netzleistung"
+      },
+      "house_power": {
+        "name": "Hausverbrauch"
+      },
+      "inverter_load": {
+        "name": "Wechselrichterauslastung"
+      },
+      "inverter_power": {
+        "name": "Wechselrichterleistung"
+      },
+      "phase_power": {
+        "name": "Netz {phase}"
+      },
+      "phase_pv_power": {
+        "name": "Erzeugung {phase}"
+      },
+      "phase_voltage": {
+        "name": "Spannung {phase}"
+      },
+      "plant_battery_energy": {
+        "name": "Batterieinhalt"
+      },
+      "plant_battery_power": {
+        "name": "Batterieleistung"
+      },
+      "plant_battery_runtime": {
+        "name": "Restlaufzeit"
+      },
+      "plant_battery_soc": {
+        "name": "Batterieladestand"
+      },
+      "plant_battery_temperature": {
+        "name": "Batterietemperatur"
+      },
+      "plant_battery_voltage": {
+        "name": "Batteriespannung"
+      },
+      "plant_charger_input_voltage": {
+        "name": "Laderegler Eingangsspannung"
+      },
+      "plant_charger_output_voltage": {
+        "name": "Laderegler Ausgangsspannung"
+      },
+      "plant_charger_power": {
+        "name": "Ladereglerleistung"
+      },
+      "plant_charger_temperature": {
+        "name": "Ladereglertemperatur"
+      },
+      "plant_inverter_load": {
+        "name": "Auslastung"
+      },
+      "plant_inverter_power": {
+        "name": "Wechselrichterleistung"
+      },
+      "plant_inverter_temperature": {
+        "name": "Wechselrichtertemperatur"
+      },
+      "plant_pv_peak_power": {
+        "name": "Modulleistung"
+      },
+      "plant_pv_power": {
+        "name": "PV-Leistung"
+      },
+      "plant_pv_utilisation": {
+        "name": "Ausnutzung"
+      },
+      "plant_pv_voltage": {
+        "name": "PV-Spannung"
+      },
+      "plant_string_layout": {
+        "name": "Verschaltung"
+      },
+      "pv_energy": {
+        "name": "PV-Ertrag"
+      },
+      "pv_peak_power": {
+        "name": "PV-Spitzenleistung"
+      },
+      "pv_power": {
+        "name": "PV-Leistung"
+      },
+      "pv_utilisation": {
+        "name": "PV-Ausnutzung"
+      },
+      "self_consumption": {
+        "name": "Eigenverbrauch"
+      },
+      "self_sufficiency": {
+        "name": "Autarkie"
+      },
+      "status": {
+        "name": "Status",
+        "state": {
+          "charging": "Batterie lädt",
+          "discharging": "Batterie entlädt",
+          "exporting": "Einspeisung",
+          "idle": "Ruhe",
+          "importing": "Netzbezug"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "battery": {
+        "data": {
+          "capacity_kwh": "Kapazität",
+          "charged_energy_entity": "Geladene Energie",
+          "chemistry": "Zellchemie",
+          "current_entity": "Strom",
+          "cycles_entity": "Ladezyklen",
+          "discharged_energy_entity": "Entladene Energie",
+          "enabled": "Vorhanden",
+          "health_entity": "Zustand (SoH)",
+          "manufacturer": "Hersteller",
+          "min_soc": "Entladegrenze",
+          "model": "Modell",
+          "name": "Name",
+          "nominal_voltage": "Nennspannung",
+          "power_entity": "Leistung",
+          "power_sign": "Vorzeichen der Leistung",
+          "soc_entity": "Ladestand",
+          "temperature_entity": "Temperatur",
+          "voltage_entity": "Spannung"
+        },
+        "data_description": {
+          "min_soc": "Bis hierher wird entladen. Die Restlaufzeit rechnet mit dieser Grenze.",
+          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt.",
+          "power_sign": "Wie der Zähler zählt. Falsch gewählt zeigt die Karte den Fluss verkehrt herum."
+        },
+        "description": "Optional. Kapazität und Ladestand ergeben zusammen den Speicherinhalt.",
+        "title": "Batterie – {plant}"
+      },
+      "charger": {
+        "data": {
+          "enabled": "Vorhanden",
+          "input_current_entity": "Eingangsstrom (PV)",
+          "input_voltage_entity": "Eingangsspannung (PV)",
+          "manufacturer": "Hersteller",
+          "max_current": "Maximaler Ladestrom",
+          "model": "Modell",
+          "name": "Name",
+          "output_current_entity": "Ausgangsstrom (Batterie)",
+          "output_voltage_entity": "Ausgangsspannung (Batterie)",
+          "power_entity": "Leistung",
+          "state_entity": "Betriebszustand",
+          "system_voltage": "Systemspannung",
+          "temperature_entity": "Temperatur",
+          "yield_entity": "Ertragszähler"
+        },
+        "data_description": {
+          "input_voltage_entity": "Die Spannung, die von den Modulen kommt - bei einem MPPT oft dreistellig.",
+          "output_voltage_entity": "Die Spannung auf der Batterieseite, also 24 V, 48 V und so weiter.",
+          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt."
+        },
+        "description": "Optional. Ohne Laderegler gehen die Module direkt an den Wechselrichter.",
+        "title": "Laderegler – {plant}"
+      },
+      "display": {
+        "data": {
+          "animate": "Flusslinien animieren",
+          "feed_in_price": "Einspeisevergütung",
+          "price_per_kwh": "Arbeitspreis",
+          "show_strings": "Verschaltung zeichnen"
+        },
+        "title": "Darstellung"
+      },
+      "grid": {
+        "data": {
+          "export_energy_entity": "Einspeisezähler",
+          "export_power_entity": "Einspeiseleistung",
+          "frequency_entity": "Frequenz",
+          "import_energy_entity": "Bezugszähler",
+          "import_power_entity": "Bezugsleistung",
+          "l1_current_entity": "Strom L1",
+          "l1_power_entity": "Leistung L1",
+          "l1_voltage_entity": "Spannung L1",
+          "l2_current_entity": "Strom L2",
+          "l2_power_entity": "Leistung L2",
+          "l2_voltage_entity": "Spannung L2",
+          "l3_current_entity": "Strom L3",
+          "l3_power_entity": "Leistung L3",
+          "l3_voltage_entity": "Spannung L3",
+          "meter_model": "Zählermodell",
+          "name": "Name",
+          "phases": "Phasen",
+          "power_entity": "Gesamtleistung",
+          "power_sign": "Vorzeichen der Leistung"
+        },
+        "data_description": {
+          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt.",
+          "power_sign": "Wie der Zähler zählt. Falsch gewählt zeigt die Karte den Fluss verkehrt herum."
+        },
+        "description": "Der Summenzähler reicht. Sind die Phasen einzeln erfasst, zeichnet die Karte sie getrennt.",
+        "title": "Netz und Zähler"
+      },
+      "house": {
+        "data": {
+          "calculate": "Hausverbrauch rechnen",
+          "energy_entity": "Energiezähler",
+          "power_entity": "Leistung"
+        },
+        "data_description": {
+          "calculate": "Verbrauch = Wechselrichterleistung + Netzleistung. Ein gemessener Hausverbrauch hat Vorrang.",
+          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt."
+        },
+        "title": "Haus und Verbrauch"
+      },
+      "init": {
+        "description": "Änderungen werden erst übernommen, wenn du im Menü „Speichern und schließen“ wählst.",
+        "menu_options": {
+          "display": "Darstellung",
+          "grid": "Netz und Zähler",
+          "house": "Haus und Verbrauch",
+          "plants": "Anlagen",
+          "save": "Speichern und schließen"
+        },
+        "title": "PV-System"
+      },
+      "inverter": {
+        "data": {
+          "ac_current_entity": "AC-Strom",
+          "ac_voltage_entity": "AC-Spannung",
+          "dc_voltage_entity": "DC-Spannung",
+          "enabled": "Vorhanden",
+          "energy_entity": "Energiezähler",
+          "frequency_entity": "Frequenz",
+          "hybrid": "Hybrid-Wechselrichter",
+          "manufacturer": "Hersteller",
+          "mode_entity": "Betriebsart",
+          "model": "Modell",
+          "name": "Name",
+          "phase": "Phase",
+          "power_entity": "Leistung",
+          "rated_power_w": "Nennleistung",
+          "temperature_entity": "Temperatur"
+        },
+        "data_description": {
+          "phase": "Auf welcher Phase dieser einphasige Wechselrichter einspeist.",
+          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt."
+        },
+        "description": "Ausgelegt für einphasige Wechselrichter im Netzparallelbetrieb.",
+        "title": "Wechselrichter – {plant}"
+      },
+      "modules": {
+        "data": {
+          "azimuth": "Ausrichtung",
+          "count": "Anzahl Module",
+          "current_entity": "Strom",
+          "energy_entity": "Energiezähler",
+          "manufacturer": "Hersteller",
+          "model": "Modell",
+          "parallel": "Parallele Strings",
+          "peak_wp": "Leistung je Modul",
+          "power_entity": "Leistung",
+          "series": "Module in Reihe je String",
+          "tilt": "Neigung",
+          "voltage_entity": "Spannung"
+        },
+        "data_description": {
+          "count": "So viele Module hängen an dieser Anlage.",
+          "parallel": "Vier in Reihe und davon zwei Stränge parallel ergeben acht Module.",
+          "peak_wp": "Die Spitzenleistung eines einzelnen Moduls laut Typenschild.",
+          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt.",
+          "series": "Leer lassen, dann wird eine passende Aufteilung vorgeschlagen."
+        },
+        "description": "Aktuelle Auslegung: {peak}",
+        "title": "Module – {plant}"
+      },
+      "plant_delete": {
+        "data": {
+          "confirm": "Wirklich löschen"
+        },
+        "description": "„{plant}“ mit allen Sensoren entfernen?",
+        "title": "Anlage löschen"
+      },
+      "plant_menu": {
+        "description": "Änderungen werden erst übernommen, wenn du im Menü „Speichern und schließen“ wählst.",
+        "menu_options": {
+          "battery": "Batterie",
+          "charger": "Laderegler",
+          "inverter": "Wechselrichter",
+          "modules": "Module",
+          "plant_delete": "Anlage löschen",
+          "plant_name": "Name",
+          "plants": "Andere Anlage",
+          "save": "Speichern und schließen"
+        },
+        "title": "Anlage {plant}"
+      },
+      "plant_name": {
+        "data": {
+          "name": "Name"
+        },
+        "title": "Name der Anlage"
+      },
+      "plants": {
+        "data": {
+          "plant": "Anlage"
+        },
+        "description": "Eingerichtet sind {count} Anlagen. Welche möchtest du bearbeiten?",
+        "title": "Anlagen"
+      }
+    }
+  },
+  "selector": {
+    "battery_sign": {
+      "options": {
+        "positive_charge": "Positiv = laden",
+        "positive_discharge": "Positiv = entladen"
+      }
+    },
+    "chemistry": {
+      "options": {
+        "agm": "AGM",
+        "gel": "Gel",
+        "lead_acid": "Blei-Säure",
+        "li_ion": "Lithium-Ionen",
+        "lifepo4": "LiFePO₄",
+        "nmc": "NMC",
+        "other": "Andere"
+      }
+    },
+    "grid_sign": {
+      "options": {
+        "positive_export": "Positiv = Einspeisung",
+        "positive_import": "Positiv = Netzbezug"
+      }
+    },
+    "phase": {
+      "options": {
+        "l1": "L1",
+        "l2": "L2",
+        "l3": "L3"
+      }
+    },
+    "phase_count": {
+      "options": {
+        "1": "Einphasig",
+        "2": "Zweiphasig",
+        "3": "Dreiphasig"
+      }
+    },
+    "system_voltage": {
+      "options": {
+        "12": "12 V",
+        "24": "24 V",
+        "48": "48 V",
+        "96": "96 V",
+        "hv": "Hochvolt (> 100 V)"
+      }
+    }
+  },
+  "services": {
+    "add_plant": {
+      "description": "Eine weitere Anlage anlegen.",
+      "fields": {
+        "name": {
+          "description": "Name der neuen Anlage.",
+          "name": "Name"
+        }
+      },
+      "name": "Anlage hinzufügen"
+    },
+    "remove_plant": {
+      "description": "Eine Anlage mit allen Sensoren entfernen.",
+      "fields": {
+        "plant": {
+          "description": "Kennung oder Name der Anlage.",
+          "name": "Anlage"
+        }
+      },
+      "name": "Anlage entfernen"
+    },
+    "set_battery": {
+      "description": "Kapazität und Nennspannung einer Batterie ändern.",
+      "fields": {
+        "capacity_kwh": {
+          "description": "Kapazität",
+          "name": "Kapazität"
+        },
+        "enabled": {
+          "description": "Vorhanden",
+          "name": "Vorhanden"
+        },
+        "nominal_voltage": {
+          "description": "Nennspannung",
+          "name": "Nennspannung"
+        },
+        "plant": {
+          "description": "Anlage",
+          "name": "Anlage"
+        }
+      },
+      "name": "Batterie festlegen"
+    },
+    "set_charger": {
+      "description": "Systemspannung und Ladestrom eines Ladereglers ändern.",
+      "fields": {
+        "enabled": {
+          "description": "Vorhanden",
+          "name": "Vorhanden"
+        },
+        "max_current": {
+          "description": "Maximaler Ladestrom",
+          "name": "Maximaler Ladestrom"
+        },
+        "plant": {
+          "description": "Anlage",
+          "name": "Anlage"
+        },
+        "system_voltage": {
+          "description": "Systemspannung",
+          "name": "Systemspannung"
+        }
+      },
+      "name": "Laderegler festlegen"
+    },
+    "set_inverter": {
+      "description": "Nennleistung und Phase eines Wechselrichters ändern.",
+      "fields": {
+        "enabled": {
+          "description": "Vorhanden",
+          "name": "Vorhanden"
+        },
+        "phase": {
+          "description": "Auf welcher Phase dieser einphasige Wechselrichter einspeist.",
+          "name": "Phase"
+        },
+        "plant": {
+          "description": "Anlage",
+          "name": "Anlage"
+        },
+        "rated_power_w": {
+          "description": "Nennleistung",
+          "name": "Nennleistung"
+        }
+      },
+      "name": "Wechselrichter festlegen"
+    },
+    "set_modules": {
+      "description": "Anzahl, Leistung und Verschaltung der Module einer Anlage ändern.",
+      "fields": {
+        "count": {
+          "description": "So viele Module hängen an dieser Anlage.",
+          "name": "Anzahl Module"
+        },
+        "manufacturer": {
+          "description": "Hersteller",
+          "name": "Hersteller"
+        },
+        "model": {
+          "description": "Modell",
+          "name": "Modell"
+        },
+        "parallel": {
+          "description": "Vier in Reihe und davon zwei Stränge parallel ergeben acht Module.",
+          "name": "Parallele Strings"
+        },
+        "peak_wp": {
+          "description": "Die Spitzenleistung eines einzelnen Moduls laut Typenschild.",
+          "name": "Leistung je Modul"
+        },
+        "plant": {
+          "description": "Anlage",
+          "name": "Anlage"
+        },
+        "series": {
+          "description": "Leer lassen, dann wird eine passende Aufteilung vorgeschlagen.",
+          "name": "Module in Reihe je String"
+        }
+      },
+      "name": "Module festlegen"
+    }
+  },
+  "title": "PV-System"
+}

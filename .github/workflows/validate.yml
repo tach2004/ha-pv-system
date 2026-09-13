@@ -1,0 +1,103 @@
+name: Prüfen
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  schedule:
+    # Einmal die Woche: hassfest und HACS ändern ihre Regeln, ohne dass sich
+    # hier etwas ändert. Ein Fehlschlag soll auffallen, bevor jemand installiert.
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+jobs:
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # Die Marke liegt nicht in home-assistant/brands - für eine
+          # benutzerdefinierte Integration ist das der Normalfall.
+          ignore: brands
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install pyyaml ruff
+      - name: Rechnung, Struktur und Dateien
+        run: |
+          python3 tests/test_rechnung.py
+          python3 tests/test_topologie.py
+          python3 tests/test_dateien.py
+      - name: Übersetzungen sind aktuell
+        run: |
+          python3 scripts/uebersetzungen.py
+          git diff --exit-code -- custom_components/pv_system/strings.json \
+                                  custom_components/pv_system/translations
+      - name: Ruff
+        run: ruff check --select F,E9,B,I --target-version py312 custom_components tests scripts
+
+  importe:
+    name: Import gegen aktuelles Home Assistant
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          # Home Assistant 2026.9 verlangt >= 3.14.2.
+          python-version: "3.14"
+      - name: Home Assistant installieren
+        run: pip install --prefer-binary homeassistant
+      - name: Jedes Modul der Integration importieren
+        # Der Test, den die anderen Prüfungen nicht leisten: Er zieht das
+        # echte Home Assistant und führt die Importe aus. Wird ein Name in
+        # einer neuen Fassung umbenannt oder entfernt, fällt es hier auf -
+        # und nicht erst bei jemandem, der gerade aktualisiert hat.
+        run: |
+          python - <<'PY'
+          import importlib, pathlib, sys
+
+          sys.path.insert(0, str(pathlib.Path("custom_components").resolve()))
+          from homeassistant.const import __version__ as ha_version
+
+          print(f"Home Assistant {ha_version}")
+          for name in (
+              "pv_system",
+              "pv_system.const",
+              "pv_system.units",
+              "pv_system.topology",
+              "pv_system.coordinator",
+              "pv_system.config_flow",
+              "pv_system.sensor",
+              "pv_system.websocket",
+              "pv_system.recorder",
+          ):
+              importlib.import_module(name)
+              print(f"  ok  {name}")
+          PY
+
+  karte:
+    name: Karte
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Syntax der Lovelace-Karte
+        run: node --check custom_components/pv_system/frontend/pv-system-card.js

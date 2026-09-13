@@ -1,0 +1,78 @@
+{
+  "entity": {
+    "sensor": {
+      "pv_power": {
+        "default": "mdi:solar-power-variant"
+      },
+      "pv_energy": {
+        "default": "mdi:solar-power"
+      },
+      "inverter_power": {
+        "default": "mdi:current-ac"
+      },
+      "battery_power": {
+        "default": "mdi:battery-charging"
+      },
+      "battery_energy": {
+        "default": "mdi:battery-high"
+      },
+      "battery_capacity": {
+        "default": "mdi:battery-outline"
+      },
+      "grid_power": {
+        "default": "mdi:transmission-tower"
+      },
+      "grid_import_power": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "grid_export_power": {
+        "default": "mdi:transmission-tower-import"
+      },
+      "grid_import_energy": {
+        "default": "mdi:counter"
+      },
+      "grid_export_energy": {
+        "default": "mdi:counter"
+      },
+      "house_power": {
+        "default": "mdi:home-lightning-bolt-outline"
+      },
+      "plant_pv_power": {
+        "default": "mdi:solar-power-variant"
+      },
+      "plant_pv_voltage": {
+        "default": "mdi:flash-triangle-outline"
+      },
+      "plant_inverter_power": {
+        "default": "mdi:current-ac"
+      },
+      "plant_charger_power": {
+        "default": "mdi:car-battery"
+      },
+      "plant_charger_input_voltage": {
+        "default": "mdi:solar-panel"
+      },
+      "plant_charger_output_voltage": {
+        "default": "mdi:battery-plus-outline"
+      },
+      "plant_battery_power": {
+        "default": "mdi:battery-charging"
+      },
+      "plant_battery_energy": {
+        "default": "mdi:battery-high"
+      },
+      "plant_battery_voltage": {
+        "default": "mdi:flash-outline"
+      },
+      "phase_power": {
+        "default": "mdi:transmission-tower"
+      },
+      "phase_voltage": {
+        "default": "mdi:sine-wave"
+      },
+      "phase_pv_power": {
+        "default": "mdi:solar-power-variant-outline"
+      }
+    }
+  }
+}
