@@ -1,5 +1,9 @@
 # Installation und Einrichtung
 
+Vorausgesetzt wird **Home Assistant 2025.2 oder neuer** – erst ab dieser
+Fassung gibt es die Schnittstelle, über die die Integration ihre Karte
+einträgt.
+
 ## 1. Installieren
 
 ### Über HACS

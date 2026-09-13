@@ -391,6 +391,33 @@ def test_karte_wird_von_der_integration_ausgeliefert():
     assert "add_extra_js_url" not in benutzt
 
 
+def test_lovelace_feldname_wird_nicht_fest_verdrahtet():
+    """Das Feld heißt bis 2026.1 "mode" und ab 2026.2 "resource_mode".
+
+    Ein direkter Zugriff auf eines von beiden lässt die halbe Bandbreite der
+    unterstützten Home-Assistant-Fassungen mit einem AttributeError stehen -
+    und zwar genau beim Eintragen der Karte.
+    """
+    init = _quelltext("__init__.py")
+    benutzt = {
+        f"{knoten.value.id}.{knoten.attr}"
+        for knoten in ast.walk(_baum("__init__.py"))
+        if isinstance(knoten, ast.Attribute) and isinstance(knoten.value, ast.Name)
+    }
+    assert "lovelace.resource_mode" not in benutzt
+    assert "lovelace.mode" not in benutzt
+    assert "_ressourcen_modus" in init
+
+
+def test_mindestversion_ist_belegt():
+    """2025.2.0 ist die Fassung, in der LOVELACE_DATA eingeführt wurde.
+
+    Davor lag Lovelace als einfaches Dict unter hass.data["lovelace"], und der
+    Import in __init__.py schlüge fehl. Die Zahl ist also keine Schätzung.
+    """
+    assert _json(WURZEL / "hacs.json")["homeassistant"] == "2025.2.0"
+
+
 def test_beispiel_dashboard_ist_gueltiges_yaml():
     inhalt = yaml.safe_load((WURZEL / "dashboards" / "pv-system.yaml").read_text(encoding="utf-8"))
     karten = [

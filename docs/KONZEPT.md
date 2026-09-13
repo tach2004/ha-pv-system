@@ -157,6 +157,26 @@ Aus demselben Grund steht am Ende der Kartendatei ein
 „nicht angemeldet" melden, obwohl die Karte in der nativen Registry längst
 steht.
 
+### Warum die Mindestversion 2025.2 ist
+
+`LOVELACE_DATA` gibt es erst seit Home Assistant 2025.2. Davor lag Lovelace als
+einfaches Dict unter `hass.data["lovelace"]`; der Import in `__init__.py`
+schlüge dort fehl. Die Zahl in der `hacs.json` ist also keine Schätzung,
+sondern die Fassung, ab der die Integration überhaupt lädt.
+
+Ein zweiter Stolperstein liegt später: In 2026.2 wurde das Feld `mode` des
+Datensatzes in `resource_mode` umbenannt – seitdem können Dashboards und
+Ressourcen getrennt im Speicher oder in YAML liegen. Ein fester Zugriff auf
+einen der beiden Namen ließe die halbe Bandbreite der unterstützten Fassungen
+mit einem `AttributeError` stehen, und zwar genau beim Eintragen der Karte.
+`_ressourcen_modus()` fragt deshalb beide Namen ab.
+
+Beides ist nicht durch Lesen der Dokumentation entstanden, sondern durch einen
+Abgleich der Importe gegen den Quelltext von Home Assistant 2024.11 bis 2026.9.
+Damit so etwas nicht wieder unbemerkt bleibt, installiert die
+Prüfung *Import gegen aktuelles Home Assistant* das echte Home Assistant und
+führt die Importe aus.
+
 ### Woher die Karte ihre Struktur nimmt
 
 Aus den Attributen des Statussensors. Bewusst nicht über den Websocket:
