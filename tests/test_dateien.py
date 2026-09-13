@@ -391,6 +391,45 @@ def test_karte_wird_von_der_integration_ausgeliefert():
     assert "add_extra_js_url" not in benutzt
 
 
+def test_zahlenfeld_setzt_keine_leere_einheit():
+    """unit_of_measurement darf nie ausdrücklich None sein.
+
+    Home Assistant prüft das Feld mit vol.Optional(...): str. Ein None ist
+    keine Zeichenkette, der Selektor wirft beim Bauen des Formulars, und der
+    Konfigurationsdialog lässt sich gar nicht mehr öffnen - sichtbar nur als
+    "400: Bad Request". Genau so ist die erste Fassung ausgeliefert worden.
+    """
+    for knoten in ast.walk(_baum("config_flow.py")):
+        if not isinstance(knoten, ast.Call):
+            continue
+        if getattr(knoten.func, "attr", None) != "NumberSelectorConfig":
+            continue
+        for wort in knoten.keywords:
+            if wort.arg == "unit_of_measurement":
+                raise AssertionError(
+                    "unit_of_measurement gehört nur gesetzt, wenn es eine "
+                    "Einheit gibt - sonst den Schlüssel weglassen."
+                )
+
+
+def test_zahlenfeld_haelt_die_kleinste_schrittweite_ein():
+    """Home Assistant lässt als Schrittweite "any" oder mindestens 0,001 zu.
+
+    Darunter wirft der Selektor beim Bauen des Formulars - und der Dialog
+    lässt sich nicht mehr öffnen. Bei zwei Preisfeldern stand 0,0001.
+    """
+    for knoten in ast.walk(_baum("config_flow.py")):
+        if not isinstance(knoten, ast.Call) or getattr(knoten.func, "id", None) != "_zahl":
+            continue
+        if len(knoten.args) < 3 or not isinstance(knoten.args[2], ast.Constant):
+            continue
+        schritt = knoten.args[2].value
+        if isinstance(schritt, str):
+            assert schritt == "any", schritt
+        else:
+            assert schritt >= 0.001, f"Schrittweite {schritt} in Zeile {knoten.lineno}"
+
+
 def test_lovelace_feldname_wird_nicht_fest_verdrahtet():
     """Das Feld heißt bis 2026.1 "mode" und ab 2026.2 "resource_mode".
 
