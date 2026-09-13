@@ -38,8 +38,17 @@ zu tun ist dafür nichts.
 1. Ein Release mit einem Tag anlegen (`v0.0.1-beta.1` für die Beta). HACS
    sortiert Releases mit `-beta` als Vorabversion ein; sie erscheint nur, wenn
    jemand in HACS „Vorabversionen anzeigen" einschaltet.
-2. Für die Aufnahme in den HACS-Standardkatalog zusätzlich die Marke in
-   [home-assistant/brands](https://github.com/home-assistant/brands) eintragen –
-   die Dateien dafür liegen in [`brands/`](../brands/README.md) bereit.
-   Bis dahin wird die Integration über *Benutzerdefinierte Repositories*
-   hinzugefügt.
+2. Bis zur Aufnahme in den HACS-Standardkatalog wird die Integration über
+   *Benutzerdefinierte Repositories* hinzugefügt.
+
+## Das Symbol neben dem Eintrag
+
+Liegt bereits bei: `custom_components/pv_system/brand/icon.png` und
+`icon@2x.png`. Seit Home Assistant **2026.3** genügt dieser Ordner – Home
+Assistant erkennt daran, dass die Integration ein eigenes Logo mitbringt, und
+liefert es unter `/api/brands/integration/pv_system/icon.png` aus. HACS zeigt
+es dann statt des Puzzleteils.
+
+Auf älteren Fassungen bleibt das Puzzleteil; dort hilft nur ein Eintrag in
+[home-assistant/brands](https://github.com/home-assistant/brands). Nötig ist
+das nicht – Einzelheiten in [`brands/README.md`](../brands/README.md).

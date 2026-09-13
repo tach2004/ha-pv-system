@@ -26,9 +26,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # Die Marke liegt nicht in home-assistant/brands - für eine
-          # benutzerdefinierte Integration ist das der Normalfall.
-          ignore: brands
 
   tests:
     name: Tests
