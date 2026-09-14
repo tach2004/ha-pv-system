@@ -51,6 +51,19 @@ from .coordinator import PvSystemConfigEntry, PvSystemCoordinator
 
 CONF_NAME = "name"
 
+# Welche Sensoren von sich aus eingeschaltet sind.
+#
+# Grundsatz: Angelegt wird alles, abgeschaltet ist, was nur eine bereits
+# vorhandene Entität wiederholt. Eine PV-Anlage bringt Spannungen,
+# Temperaturen und Zählerstände ohnehin mit; die hier noch einmal
+# aufzuzeichnen kostet Platz in der Datenbank und bringt keine neue
+# Information. Wer sie braucht, schaltet sie in der Geräteansicht mit einem
+# Klick ein - die Entität existiert, sie zeichnet nur nichts auf.
+#
+# Eingeschaltet bleibt, was diese Integration ausrechnet: Summen über
+# mehrere Anlagen, Ausnutzung, Speicherinhalt, Hausverbrauch, Autarkie.
+SPIEGEL = "wiederholt nur einen eingestellten Sensor"
+
 WATT = UnitOfPower.WATT
 KWH = UnitOfEnergy.KILO_WATT_HOUR
 VOLT = UnitOfElectricPotential.VOLT
@@ -94,7 +107,9 @@ def _prozent(
     )
 
 
-def _energie(key: str, wert: Callable[[dict[str, Any]], Any]) -> PvSensorDescription:
+def _energie(
+    key: str, wert: Callable[[dict[str, Any]], Any], *, spiegel: bool = False
+) -> PvSensorDescription:
     return PvSensorDescription(
         key=key,
         translation_key=key,
@@ -106,6 +121,7 @@ def _energie(key: str, wert: Callable[[dict[str, Any]], Any]) -> PvSensorDescrip
         # deshalb weiterhin die Originalsensoren die bessere Wahl.
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
+        entity_registry_enabled_default=not spiegel,
         wert=wert,
     )
 
@@ -118,6 +134,8 @@ def _spannung(key: str, wert: Callable[[dict[str, Any]], Any]) -> PvSensorDescri
         native_unit_of_measurement=VOLT,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
+        # Ein reiner Spiegel des eingestellten Sensors - siehe SPIEGEL unten.
+        entity_registry_enabled_default=False,
         wert=wert,
     )
 
@@ -130,6 +148,7 @@ def _temperatur(key: str, wert: Callable[[dict[str, Any]], Any]) -> PvSensorDesc
         native_unit_of_measurement=GRAD,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
+        entity_registry_enabled_default=False,
         wert=wert,
     )
 
@@ -194,8 +213,8 @@ STANDORT: tuple[PvSensorDescription, ...] = (
     _leistung("grid_power", lambda d: d["totals"]["grid_power"]),
     _leistung("grid_import_power", lambda d: d["totals"]["grid_import"]),
     _leistung("grid_export_power", lambda d: d["totals"]["grid_export"]),
-    _energie("grid_import_energy", lambda d: d["grid"]["import_energy"]),
-    _energie("grid_export_energy", lambda d: d["grid"]["export_energy"]),
+    _energie("grid_import_energy", lambda d: d["grid"]["import_energy"], spiegel=True),
+    _energie("grid_export_energy", lambda d: d["grid"]["export_energy"], spiegel=True),
     PvSensorDescription(
         key="grid_frequency",
         translation_key="grid_frequency",
@@ -204,6 +223,7 @@ STANDORT: tuple[PvSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         wert=lambda d: d["grid"]["frequency"],
         wenn=lambda c: bool(c["grid"]["entities"]["frequency"]),
     ),
@@ -280,6 +300,7 @@ ANLAGE: tuple[PvSensorDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
+        entity_registry_enabled_default=False,
         wert=lambda p: p["battery"]["soc"],
     ),
     _leistung("plant_battery_power", lambda p: p["battery"]["power"]),
@@ -589,6 +610,8 @@ class PhasenSensor(PvBasis):
             self._attr_device_class = SensorDeviceClass.VOLTAGE
             self._attr_native_unit_of_measurement = VOLT
             self._attr_suggested_display_precision = 1
+            # Spiegel des Phasensensors - standardmäßig aus.
+            self._attr_entity_registry_enabled_default = False
         else:
             self._attr_device_class = SensorDeviceClass.POWER
             self._attr_native_unit_of_measurement = WATT

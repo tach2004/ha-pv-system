@@ -261,8 +261,219 @@ def _felder(schluessel: list[str], sprache) -> dict[str, str]:
     return {k: sprache(FELDER[k]) for k in schluessel}
 
 
-def _hinweise(schluessel: list[str], sprache) -> dict[str, str]:
-    return {k: sprache(HINWEISE[k]) for k in schluessel if k in HINWEISE}
+# Hinweise je Schritt. Nötig, weil derselbe Feldname in verschiedenen
+# Schritten etwas völlig anderes bedeutet: "Spannung" ist bei den Modulen die
+# Stringspannung, beim Laderegler die Batterieseite, bei der Batterie die
+# Klemmenspannung. Ein gemeinsamer Text wäre für zwei von drei Stellen falsch.
+#
+# Durchgängig gilt: Fast jedes Feld darf leer bleiben. Was nicht angegeben
+# ist, erscheint in der Karte einfach nicht - deshalb steht das in den Texten
+# auch dort, wo es nicht selbstverständlich ist.
+HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
+    "modules": {
+        "power_entity": (
+            "Was die Module gerade liefern - der DC-Sensor des Ladereglers oder "
+            "des Wechselrichters. Leer: Die Leistung kommt dann ersatzweise vom "
+            "Laderegler, sonst bleibt das Feld in der Karte leer.",
+            "What the modules currently deliver - the DC sensor of the charge "
+            "controller or inverter. Empty: the charge controller fills in, "
+            "otherwise the card leaves it blank.",
+        ),
+        "voltage_entity": (
+            "Die Spannung des Modulstrangs (DC), also z. B. 148 V bei vier "
+            "Modulen in Reihe - nicht die Batteriespannung. Leer lassen ist in "
+            "Ordnung.",
+            "Voltage of the module string (DC), e.g. 148 V for four modules in "
+            "series - not the battery voltage. May be left empty.",
+        ),
+        "current_entity": (
+            "Der Strangstrom (DC) auf der Modulseite. Leer lassen ist in Ordnung.",
+            "String current (DC) on the module side. May be left empty.",
+        ),
+        "energy_entity": (
+            "Ein Zählerstand in kWh für den Ertrag dieser Module, falls "
+            "vorhanden. Leer lassen ist in Ordnung.",
+            "A kWh meter for this array's yield, if you have one. May be left "
+            "empty.",
+        ),
+    },
+    "charger": {
+        "enabled": (
+            "Aus, wenn die Module direkt am Wechselrichter hängen. Dann wird "
+            "der ganze Block nicht gezeichnet.",
+            "Off when the modules go straight to the inverter. The whole block "
+            "is then omitted.",
+        ),
+        "power_entity": (
+            "Die Ladeleistung Richtung Batterie. Fehlt sie, wird sie aus "
+            "Ausgangsspannung × Ausgangsstrom gerechnet.",
+            "Charging power towards the battery. If absent it is computed from "
+            "output voltage × output current.",
+        ),
+        "voltage_entity": (
+            "Nicht benutzt - für den Laderegler zählen Ein- und "
+            "Ausgangsspannung weiter unten.",
+            "Not used - the charge controller uses input and output voltage "
+            "below.",
+        ),
+        "temperature_entity": (
+            "Temperatur des Ladereglers selbst, nicht die der Batterie.",
+            "Temperature of the controller itself, not of the battery.",
+        ),
+        "yield_entity": (
+            "Zählerstand in kWh, den viele MPPT-Regler mitbringen.",
+            "kWh meter that many MPPT controllers provide.",
+        ),
+        "state_entity": (
+            "Der Betriebszustand als Text, z. B. „Bulk“, „Absorption“, "
+            "„Float“.",
+            "Operating state as text, e.g. “Bulk”, “Absorption”, “Float”.",
+        ),
+        "max_current": (
+            "Nur zur Anzeige, z. B. 85 A beim MPPT 250/85.",
+            "Display only, e.g. 85 A on an MPPT 250/85.",
+        ),
+    },
+    "battery": {
+        "enabled": (
+            "Aus, wenn diese Anlage keinen Speicher hat. Der Block wird dann "
+            "nicht gezeichnet.",
+            "Off when this plant has no storage. The block is then omitted.",
+        ),
+        "capacity_kwh": (
+            "Nennkapazität laut Typenschild. Zusammen mit dem Ladestand ergibt "
+            "sie den Inhalt in kWh.",
+            "Nominal capacity from the label. Together with the state of charge "
+            "it gives the stored energy in kWh.",
+        ),
+        "soc_entity": (
+            "Der Ladestand in Prozent, meist vom BMS. Ohne ihn bleiben Inhalt "
+            "und Restlaufzeit leer.",
+            "State of charge in percent, usually from the BMS. Without it "
+            "stored energy and runtime stay empty.",
+        ),
+        "power_entity": (
+            "Lade- und Entladeleistung. Fehlt sie, wird Spannung × Strom "
+            "gerechnet.",
+            "Charge and discharge power. If absent, voltage × current is used.",
+        ),
+        "voltage_entity": (
+            "Die Klemmenspannung der Batterie (z. B. 51,8 V bei einem "
+            "48-V-System).",
+            "Terminal voltage of the battery (e.g. 51.8 V on a 48 V system).",
+        ),
+        "current_entity": (
+            "Batteriestrom. Positiv oder negativ - die Bedeutung legst du "
+            "unten beim Vorzeichen fest.",
+            "Battery current. Its sign's meaning is set below.",
+        ),
+        "temperature_entity": (
+            "Zelltemperatur aus dem BMS.",
+            "Cell temperature from the BMS.",
+        ),
+        "health_entity": (
+            "Zustand in Prozent (SoH), falls das BMS ihn meldet.",
+            "State of health in percent, if the BMS reports it.",
+        ),
+    },
+    "inverter": {
+        "enabled": (
+            "Aus, wenn diese Anlage keinen eigenen Wechselrichter hat.",
+            "Off when this plant has no inverter of its own.",
+        ),
+        "power_entity": (
+            "Die abgegebene AC-Leistung - der interne Sensor oder ein "
+            "Zwischenzähler wie ein Shelly. Aus dieser Zahl entsteht der "
+            "Hausverbrauch.",
+            "AC output power - the built-in sensor or an inline meter such as a "
+            "Shelly. House consumption is derived from this figure.",
+        ),
+        "voltage_entity": (
+            "Nicht benutzt - hier zählen AC- und DC-Spannung weiter unten.",
+            "Not used - AC and DC voltage below apply instead.",
+        ),
+        "ac_voltage_entity": (
+            "Netzspannung am Ausgang, üblicherweise um 230 V.",
+            "Grid voltage at the output, typically around 230 V.",
+        ),
+        "dc_voltage_entity": (
+            "Die Gleichspannung am Eingang - bei einem Batteriewechselrichter "
+            "die Batteriespannung.",
+            "DC voltage at the input - the battery voltage on a battery "
+            "inverter.",
+        ),
+        "rated_power_w": (
+            "Dauerleistung laut Typenschild. Daraus entsteht der "
+            "Auslastungsbalken.",
+            "Continuous rating from the label. The load bar is based on it.",
+        ),
+        "hybrid": (
+            "An, wenn das Gerät auch aus dem Netz laden kann (z. B. Victron "
+            "MultiPlus).",
+            "On when the device can also charge from the grid (e.g. Victron "
+            "MultiPlus).",
+        ),
+    },
+    "grid": {
+        "phases": (
+            "Phasen des Hausanschlusses. In Deutschland fast immer drei - nur "
+            "ändern, wenn du es sicher anders weißt.",
+            "Phases of the house connection. Almost always three - only change "
+            "it if you know otherwise.",
+        ),
+        "power_entity": (
+            "Die Summe über alle Phasen am Hausanschluss. Das ist das "
+            "wichtigste Feld hier.",
+            "The total across all phases at the house connection. The most "
+            "important field here.",
+        ),
+        "import_power_entity": (
+            "Nur nötig, wenn dein Zähler Bezug und Einspeisung getrennt meldet "
+            "statt als eine Zahl mit Vorzeichen.",
+            "Only needed if your meter reports import and export separately "
+            "instead of one signed figure.",
+        ),
+        "export_power_entity": (
+            "Gegenstück zur Bezugsleistung - ebenfalls nur bei getrennten "
+            "Zählern nötig.",
+            "Counterpart to import power - likewise only needed with separate "
+            "meters.",
+        ),
+        "l1_power_entity": (
+            "Leistung auf L1. Leer lassen, wenn du nur den Summenzähler hast - "
+            "dann zeichnet die Karte die Phasen nicht einzeln.",
+            "Power on L1. Leave empty if you only have the total meter - the "
+            "card then does not draw phases individually.",
+        ),
+        "meter_model": (
+            "Nur zur Anzeige, z. B. „Shelly Pro 3EM Gen2“.",
+            "Display only, e.g. “Shelly Pro 3EM Gen2”.",
+        ),
+    },
+    "house": {
+        "power_entity": (
+            "Ein gemessener Hausverbrauch, falls vorhanden. Er hat Vorrang vor "
+            "der Rechnung. Leer lassen ist der Normalfall.",
+            "A measured house consumption, if you have one. It takes precedence "
+            "over the calculation. Empty is the normal case.",
+        ),
+        "energy_entity": (
+            "Zählerstand des Hausverbrauchs in kWh, falls vorhanden.",
+            "kWh meter of house consumption, if available.",
+        ),
+    },
+}
+
+
+def _hinweise(schluessel: list[str], sprache, schritt: str | None = None) -> dict[str, str]:
+    """Hinweistexte eines Schritts.
+
+    Der schrittbezogene Text gewinnt gegen den allgemeinen: So bekommt
+    "Spannung" bei den Modulen eine andere Erklärung als bei der Batterie.
+    """
+    texte = dict(HINWEISE)
+    texte.update(HINWEISE_JE_SCHRITT.get(schritt or "", {}))
+    return {k: sprache(texte[k]) for k in schluessel if k in texte}
 
 
 MODULFELDER = [
@@ -298,6 +509,8 @@ NETZFELDER = [
 HAUSFELDER = ["calculate", "power_entity", "energy_entity"]
 ANZEIGEFELDER = ["animate", "show_strings", "price_per_kwh", "feed_in_price"]
 
+OPTIONAL: T = ('\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.', '\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.')
+
 SPEICHERHINWEIS: T = (
     "Änderungen werden erst übernommen, wenn du im Menü „Speichern und "
     "schließen“ wählst.",
@@ -324,7 +537,7 @@ def baum(sprache) -> dict:
                         )
                     ),
                     "data": _felder(
-                        ["name", "plant_count", "phases", "power_entity", "power_sign"], s
+                        ["name", "plant_count", "power_entity", "power_sign"], s
                     )
                     | {"power_entity": s(("Netzzähler (Gesamtleistung)", "Grid meter (total power)"))},
                     "data_description": {
@@ -366,8 +579,19 @@ def baum(sprache) -> dict:
                     "data": _felder(["plant"], s),
                 },
                 "plant_menu": {
-                    "title": s(("Anlage {plant}", "Plant {plant}")),
-                    "description": s(SPEICHERHINWEIS),
+                    # Achtung: Ein Menütitel darf KEINEN Platzhalter enthalten.
+                    # Das Frontend übersetzt ihn ohne Werte (renderMenuHeader in
+                    # show-dialog-options-flow.ts), nur die Beschreibung bekommt
+                    # sie. Der Anlagenname steht deshalb unten.
+                    "title": s(("Anlage", "Plant")),
+                    "description": s(
+                        (
+                            "**{plant}**\n\nÄnderungen werden erst übernommen, "
+                            "wenn du im Menü „Speichern und schließen“ wählst.",
+                            "**{plant}**\n\nChanges are only applied once you "
+                            "pick “Save and close” in the menu.",
+                        )
+                    ),
                     "menu_options": {
                         "plant_name": s(("Name", "Name")),
                         "modules": s(("Module", "Modules")),
@@ -397,70 +621,74 @@ def baum(sprache) -> dict:
                     "title": s(("Module – {plant}", "Modules – {plant}")),
                     "description": s(
                         (
-                            "Aktuelle Auslegung: {peak}",
-                            "Current layout: {peak}",
+                            "Aktuelle Auslegung: {peak}" + OPTIONAL[0],
+                            "Current layout: {peak}" + OPTIONAL[1],
                         )
                     ),
                     "data": _felder(MODULFELDER, s),
-                    "data_description": _hinweise(MODULFELDER, s),
+                    "data_description": _hinweise(MODULFELDER, s, "modules"),
                 },
                 "charger": {
                     "title": s(("Laderegler – {plant}", "Charge controller – {plant}")),
                     "description": s(
                         (
-                            "Optional. Ohne Laderegler gehen die Module direkt an "
-                            "den Wechselrichter.",
-                            "Optional. Without one the modules go straight to the "
-                            "inverter.",
+                            "Ohne Laderegler gehen die Module direkt an den "
+                            "Wechselrichter - dann den Schalter oben aus lassen."
+                            + OPTIONAL[0],
+                            "Without a charge controller the modules go straight "
+                            "to the inverter - leave the switch above off."
+                            + OPTIONAL[1],
                         )
                     ),
                     "data": _felder(LADEREGLERFELDER, s),
-                    "data_description": _hinweise(LADEREGLERFELDER, s),
+                    "data_description": _hinweise(LADEREGLERFELDER, s, "charger"),
                 },
                 "battery": {
                     "title": s(("Batterie – {plant}", "Battery – {plant}")),
                     "description": s(
                         (
-                            "Optional. Kapazität und Ladestand ergeben zusammen den "
-                            "Speicherinhalt.",
-                            "Optional. Capacity and state of charge together give the "
-                            "stored energy.",
+                            "Kapazität und Ladestand ergeben zusammen den "
+                            "Speicherinhalt." + OPTIONAL[0],
+                            "Capacity and state of charge together give the "
+                            "stored energy." + OPTIONAL[1],
                         )
                     ),
                     "data": _felder(BATTERIEFELDER, s),
-                    "data_description": _hinweise(BATTERIEFELDER, s),
+                    "data_description": _hinweise(BATTERIEFELDER, s, "battery"),
                 },
                 "inverter": {
                     "title": s(("Wechselrichter – {plant}", "Inverter – {plant}")),
                     "description": s(
                         (
                             "Ausgelegt für einphasige Wechselrichter im "
-                            "Netzparallelbetrieb.",
-                            "Designed for single-phase inverters running in parallel "
-                            "with the grid.",
+                            "Netzparallelbetrieb." + OPTIONAL[0],
+                            "Designed for single-phase inverters running in "
+                            "parallel with the grid." + OPTIONAL[1],
                         )
                     ),
                     "data": _felder(WRFELDER, s),
-                    "data_description": _hinweise(WRFELDER, s),
+                    "data_description": _hinweise(WRFELDER, s, "inverter"),
                 },
                 "grid": {
                     "title": s(("Netz und Zähler", "Grid and meter")),
                     "description": s(
                         (
                             "Der Summenzähler reicht. Sind die Phasen einzeln "
-                            "erfasst, zeichnet die Karte sie getrennt.",
+                            "erfasst, zeichnet die Karte sie getrennt."
+                            + OPTIONAL[0],
                             "The total meter is enough. If phases are measured "
-                            "individually the card draws them separately.",
+                            "individually the card draws them separately."
+                            + OPTIONAL[1],
                         )
                     ),
                     "data": _felder(NETZFELDER, s)
                     | {"power_entity": s(("Gesamtleistung", "Total power"))},
-                    "data_description": _hinweise(NETZFELDER, s),
+                    "data_description": _hinweise(NETZFELDER, s, "grid"),
                 },
                 "house": {
                     "title": s(("Haus und Verbrauch", "House and consumption")),
                     "data": _felder(HAUSFELDER, s),
-                    "data_description": _hinweise(HAUSFELDER, s),
+                    "data_description": _hinweise(HAUSFELDER, s, "house"),
                 },
                 "display": {
                     "title": s(("Darstellung", "Appearance")),
