@@ -50,6 +50,7 @@ SENSOREN: dict[str, T] = {
     "grid_export_energy": ("Einspeisung gesamt", "Grid export energy"),
     "grid_frequency": ("Netzfrequenz", "Grid frequency"),
     "house_power": ("Hausverbrauch", "House consumption"),
+    "house_energy": ("Hausverbrauch Energie", "House consumption energy"),
     "self_sufficiency": ("Autarkie", "Self-sufficiency"),
     "self_consumption": ("Eigenverbrauch", "Self-consumption"),
     "status": ("Status", "Status"),
@@ -83,7 +84,44 @@ SENSOREN: dict[str, T] = {
     "phase_power": ("Netz {phase}", "Grid {phase}"),
     "phase_voltage": ("Spannung {phase}", "Voltage {phase}"),
     "phase_pv_power": ("Erzeugung {phase}", "Production {phase}"),
+    "plant_battery_time_to_full": ("Ladezeit", "Time to full"),
 }
+
+# --------------------------------------------------------------- Kosten
+#
+# Je Zeitraum fünf Beträge. Die Namen entstehen aus Muster und Zeitraum, damit
+# Sensor und Übersetzung nicht auseinanderlaufen können.
+
+ZEITRAEUME: dict[str, T] = {
+    "day": ("heute", "today"),
+    "month": ("diesen Monat", "this month"),
+    "year": ("dieses Jahr", "this year"),
+    "total": ("gesamt", "total"),
+}
+
+GELDGROESSEN: dict[str, T] = {
+    "grid_cost_{period}": ("Bezugskosten", "Grid cost"),
+    "feed_in_revenue_{period}": ("Einspeiseerlös", "Feed-in revenue"),
+    "savings_{period}": ("Ersparnis", "Savings"),
+    "yield_{period}": ("Ertrag", "Yield"),
+    "balance_{period}": ("Bilanz", "Balance"),
+}
+
+KOSTENSENSOREN: dict[str, T] = {
+    "cost_rate": ("Kosten je Stunde", "Cost per hour"),
+    "yield_rate": ("Ertrag je Stunde", "Yield per hour"),
+    "payback_progress": ("Amortisation", "Payback progress"),
+    "payback_years": ("Restliche Amortisationszeit", "Remaining payback time"),
+} | {
+    muster.format(period=zeitraum): (
+        f"{groesse[0]} {name[0]}",
+        f"{groesse[1]} {name[1]}",
+    )
+    for zeitraum, name in ZEITRAEUME.items()
+    for muster, groesse in GELDGROESSEN.items()
+}
+
+SENSOREN |= KOSTENSENSOREN
 
 STATUS_ZUSTAENDE: dict[str, T] = {
     "charging": ("Batterie lädt", "Battery charging"),
@@ -205,6 +243,9 @@ FELDER: dict[str, T] = {
     "show_strings": ("Verschaltung zeichnen", "Draw string layout"),
     "price_per_kwh": ("Arbeitspreis", "Energy price"),
     "feed_in_price": ("Einspeisevergütung", "Feed-in tariff"),
+    "base_price": ("Grundpreis je Monat", "Monthly base fee"),
+    "investment": ("Investitionskosten", "Investment cost"),
+    "currency": ("Währung", "Currency"),
 }
 
 HINWEISE: dict[str, T] = {
@@ -254,11 +295,89 @@ HINWEISE: dict[str, T] = {
         "Die Spannung auf der Batterieseite, also 24 V, 48 V und so weiter.",
         "The voltage on the battery side, i.e. 24 V, 48 V and so on.",
     ),
+    "name": (
+        "Frei wählbar. Er erscheint in der Karte und in den Sensornamen.",
+        "Freely chosen. It appears on the card and in the sensor names.",
+    ),
+    "manufacturer": (
+        "Nur zur Anzeige - die Karte schreibt Hersteller und Modell untereinander.",
+        "Display only - the card shows manufacturer and model together.",
+    ),
+    "model": (
+        "Nur zur Anzeige, z. B. die Typenbezeichnung vom Aufkleber.",
+        "Display only, e.g. the type designation from the label.",
+    ),
+    "temperature_entity": (
+        "Temperatur in °C oder °F - umgerechnet wird automatisch. Leer lassen "
+        "ist in Ordnung.",
+        "Temperature in °C or °F - conversion is automatic. May be left empty.",
+    ),
+    "energy_entity": (
+        "Ein Zählerstand in kWh, der immer weiter steigt. Aus ihm entstehen "
+        "die Tages-, Monats- und Jahreswerte der Kostenrechnung.",
+        "A kWh meter that keeps counting up. The daily, monthly and yearly "
+        "figures of the cost calculation are derived from it.",
+    ),
+    "current_entity": (
+        "Der zugehörige Strom in A. Leer lassen ist in Ordnung.",
+        "The matching current in A. May be left empty.",
+    ),
 }
 
 
-def _felder(schluessel: list[str], sprache) -> dict[str, str]:
-    return {k: sprache(FELDER[k]) for k in schluessel}
+# Feldnamen je Schritt.
+#
+# "Leistung" allein sagt nicht, welche Seite gemeint ist. Beim Laderegler hängt
+# vorne das Dach und hinten die Batterie, beim Wechselrichter vorne die
+# Batterie und hinten das Hausnetz - und genau dort werden die Felder sonst
+# verwechselt. Deshalb steht die Seite im Namen, nicht nur im Hinweistext.
+FELDNAMEN_JE_SCHRITT: dict[str, dict[str, T]] = {
+    "modules": {
+        "power_entity": ("Modulleistung (DC)", "Module power (DC)"),
+        "voltage_entity": ("Strangspannung (DC)", "String voltage (DC)"),
+        "current_entity": ("Strangstrom (DC)", "String current (DC)"),
+        "energy_entity": ("Ertragszähler (DC)", "Yield meter (DC)"),
+    },
+    "charger": {
+        "power_entity": ("Ladeleistung (Ausgang)", "Charging power (output)"),
+        "temperature_entity": (
+            "Temperatur des Ladereglers",
+            "Charge controller temperature",
+        ),
+    },
+    "battery": {
+        # Punkt 14: Das ist die direkte Batterieleistung. Das Vorzeichen legt
+        # das Feld darunter fest.
+        "power_entity": ("Batterieleistung (+/−)", "Battery power (+/−)"),
+        "voltage_entity": ("Batteriespannung", "Battery voltage"),
+        "current_entity": ("Batteriestrom (+/−)", "Battery current (+/−)"),
+        "temperature_entity": ("Zelltemperatur", "Cell temperature"),
+    },
+    "inverter": {
+        "power_entity": ("Ausgangsleistung (AC)", "Output power (AC)"),
+        "ac_voltage_entity": ("Ausgangsspannung (AC)", "Output voltage (AC)"),
+        "ac_current_entity": ("Ausgangsstrom (AC)", "Output current (AC)"),
+        "dc_voltage_entity": ("Eingangsspannung (DC)", "Input voltage (DC)"),
+        "energy_entity": ("Ertragszähler (AC)", "Yield meter (AC)"),
+        "temperature_entity": (
+            "Temperatur des Wechselrichters",
+            "Inverter temperature",
+        ),
+    },
+    "grid": {
+        "power_entity": ("Gesamtleistung (alle Phasen)", "Total power (all phases)"),
+    },
+    "house": {
+        "power_entity": ("Gemessener Hausverbrauch", "Measured house consumption"),
+        "energy_entity": ("Verbrauchszähler", "Consumption meter"),
+    },
+}
+
+
+def _felder(schluessel: list[str], sprache, schritt: str | None = None) -> dict[str, str]:
+    namen = dict(FELDER)
+    namen.update(FELDNAMEN_JE_SCHRITT.get(schritt or "", {}))
+    return {k: sprache(namen[k]) for k in schluessel}
 
 
 # Hinweise je Schritt. Nötig, weil derselbe Feldname in verschiedenen
@@ -271,6 +390,24 @@ def _felder(schluessel: list[str], sprache) -> dict[str, str]:
 # auch dort, wo es nicht selbstverständlich ist.
 HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
     "modules": {
+        "manufacturer": (
+            "Der Modulhersteller, z. B. \u201eTrina\u201c. Nur zur Anzeige.",
+            "The module manufacturer, e.g. \u201cTrina\u201d. Display only.",
+        ),
+        "model": (
+            "Die Modulbezeichnung, z. B. \u201eVertex S 405\u201c. Nur zur Anzeige.",
+            "The module type, e.g. \u201cVertex S 405\u201d. Display only.",
+        ),
+        "tilt": (
+            "Dachneigung in Grad: 0\u00b0 flach, 90\u00b0 senkrecht. Nur zur Anzeige.",
+            "Roof pitch in degrees: 0\u00b0 flat, 90\u00b0 vertical. Display only.",
+        ),
+        "azimuth": (
+            "Himmelsrichtung in Grad: 180\u00b0 S\u00fcd, 90\u00b0 Ost, 270\u00b0 West. "
+            "Nur zur Anzeige.",
+            "Compass direction in degrees: 180\u00b0 south, 90\u00b0 east, 270\u00b0 west. "
+            "Display only.",
+        ),
         "power_entity": (
             "Was die Module gerade liefern - der DC-Sensor des Ladereglers oder "
             "des Wechselrichters. Leer: Die Leistung kommt dann ersatzweise vom "
@@ -298,6 +435,28 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
     },
     "charger": {
+        "name": (
+            "Name dieses Ladereglers, z. B. \u201eMPPT Dach Ost\u201c.",
+            "Name of this controller, e.g. \u201cMPPT roof east\u201d.",
+        ),
+        "system_voltage": (
+            "Die Spannungsebene der Batterie dahinter - 24 V oder 48 V sind "
+            "\u00fcblich. Steht als Marke im Kasten der Karte.",
+            "Voltage level of the battery behind it - 24 V or 48 V are common. "
+            "Shown as a badge on the card.",
+        ),
+        "input_current_entity": (
+            "Der Strangstrom von den Modulen. Zusammen mit der "
+            "Eingangsspannung ergibt er die Modulleistung.",
+            "String current coming from the modules. Together with input "
+            "voltage it gives the module power.",
+        ),
+        "output_current_entity": (
+            "Der Ladestrom Richtung Batterie. Ohne Leistungssensor wird daraus "
+            "die Ladeleistung gerechnet.",
+            "Charging current towards the battery. Without a power sensor the "
+            "charging power is computed from it.",
+        ),
         "enabled": (
             "Aus, wenn die Module direkt am Wechselrichter hängen. Dann wird "
             "der ganze Block nicht gezeichnet.",
@@ -335,6 +494,42 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
     },
     "battery": {
+        "name": (
+            "Name dieses Speichers, z. B. \u201eAkku 48 V Keller\u201c.",
+            "Name of this storage, e.g. \u201cBattery 48 V cellar\u201d.",
+        ),
+        "nominal_voltage": (
+            "Die Spannungsebene des Speichers - 24 V oder 48 V sind \u00fcblich. "
+            "Nur zur Anzeige.",
+            "Voltage level of the storage - 24 V or 48 V are common. Display "
+            "only.",
+        ),
+        "chemistry": (
+            "Zelltyp. Nur zur Anzeige, gerechnet wird damit nichts.",
+            "Cell type. Display only, nothing is calculated from it.",
+        ),
+        "power_sign": (
+            "Das hier ist die direkte Batterieleistung. Welches Vorzeichen "
+            "Laden bedeutet, legst du selbst fest: \u201e+ = laden\u201c ist der "
+            "Normalfall, manche BMS z\u00e4hlen umgekehrt. Falsch gew\u00e4hlt "
+            "zeigt die Karte Laden und Entladen vertauscht.",
+            "This is the direct battery power. You decide which sign means "
+            "charging: \u201c+ = charging\u201d is the usual case, some BMS count "
+            "the other way round. Chosen wrongly the card swaps charging and "
+            "discharging.",
+        ),
+        "cycles_entity": (
+            "Zahl der Ladezyklen aus dem BMS, falls vorhanden.",
+            "Number of charge cycles from the BMS, if available.",
+        ),
+        "charged_energy_entity": (
+            "Z\u00e4hlerstand in kWh, der die insgesamt geladene Energie f\u00fchrt.",
+            "kWh meter holding the total energy charged into the battery.",
+        ),
+        "discharged_energy_entity": (
+            "Gegenst\u00fcck dazu: die insgesamt entnommene Energie in kWh.",
+            "The counterpart: total energy taken out, in kWh.",
+        ),
         "enabled": (
             "Aus, wenn diese Anlage keinen Speicher hat. Der Block wird dann "
             "nicht gezeichnet.",
@@ -377,6 +572,35 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
     },
     "inverter": {
+        "name": (
+            "Name dieses Wechselrichters, z. B. \u201eGTN1000 L3\u201c.",
+            "Name of this inverter, e.g. \u201cGTN1000 L3\u201d.",
+        ),
+        "ac_current_entity": (
+            "Der abgegebene Strom auf der Netzseite in A.",
+            "Output current on the grid side, in A.",
+        ),
+        "frequency_entity": (
+            "Die Netzfrequenz, die dieses Ger\u00e4t misst - um 50 Hz.",
+            "Grid frequency as measured by this device - around 50 Hz.",
+        ),
+        "temperature_entity": (
+            "Temperatur des Wechselrichters selbst.",
+            "Temperature of the inverter itself.",
+        ),
+        "energy_entity": (
+            "Z\u00e4hlerstand in kWh f\u00fcr das, was dieses Ger\u00e4t insgesamt "
+            "abgegeben hat. Die Kostenrechnung nimmt ihn als Erzeugung - "
+            "nur was der Wechselrichter abgibt, kann ins Netz gehen.",
+            "kWh meter for what this device has delivered in total. The cost "
+            "calculation uses it as generation - only what the inverter "
+            "delivers can go to the grid.",
+        ),
+        "mode_entity": (
+            "Die Betriebsart als Text, z. B. \u201eNetzparallel\u201c oder "
+            "\u201eInselbetrieb\u201c.",
+            "Operating mode as text, e.g. \u201cgrid-tied\u201d or \u201coff-grid\u201d.",
+        ),
         "enabled": (
             "Aus, wenn diese Anlage keinen eigenen Wechselrichter hat.",
             "Off when this plant has no inverter of its own.",
@@ -415,6 +639,64 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
     },
     "grid": {
+        "name": (
+            "Name des Netzanschlusses. Er steht \u00fcber dem Kasten in der Karte.",
+            "Name of the grid connection. It sits above the box on the card.",
+        ),
+        "import_energy_entity": (
+            "Der Bezugsz\u00e4hler in kWh. Aus ihm entstehen die Bezugskosten f\u00fcr "
+            "Tag, Monat und Jahr - ohne ihn bleibt die Kostenrechnung leer.",
+            "The import meter in kWh. Daily, monthly and yearly grid costs are "
+            "derived from it - without it the cost figures stay empty.",
+        ),
+        "export_energy_entity": (
+            "Der Einspeisez\u00e4hler in kWh. Grundlage f\u00fcr den Einspeiseerl\u00f6s.",
+            "The export meter in kWh. Basis for the feed-in revenue.",
+        ),
+        "frequency_entity": (
+            "Ein Feld gen\u00fcgt: Im Verbundnetz haben alle drei Phasen dieselbe "
+            "Frequenz - sie sind starr miteinander gekoppelt. Ein Wert je "
+            "Phase w\u00e4re dreimal dieselbe Zahl.",
+            "One field is enough: in a synchronous grid all three phases share "
+            "the same frequency - they are rigidly locked together. One value "
+            "per phase would be the same number three times.",
+        ),
+        "l2_power_entity": (
+            "Leistung auf L2 - wie L1 nur n\u00f6tig, wenn dein Z\u00e4hler die Phasen "
+            "einzeln meldet.",
+            "Power on L2 - like L1 only needed if your meter reports phases "
+            "individually.",
+        ),
+        "l3_power_entity": (
+            "Leistung auf L3 - wie L1 nur n\u00f6tig, wenn dein Z\u00e4hler die Phasen "
+            "einzeln meldet.",
+            "Power on L3 - like L1 only needed if your meter reports phases "
+            "individually.",
+        ),
+        "l1_voltage_entity": (
+            "Spannung auf L1, um 230 V. Rein informativ.",
+            "Voltage on L1, around 230 V. Purely informative.",
+        ),
+        "l2_voltage_entity": (
+            "Spannung auf L2, um 230 V. Rein informativ.",
+            "Voltage on L2, around 230 V. Purely informative.",
+        ),
+        "l3_voltage_entity": (
+            "Spannung auf L3, um 230 V. Rein informativ.",
+            "Voltage on L3, around 230 V. Purely informative.",
+        ),
+        "l1_current_entity": (
+            "Strom auf L1 in A. Rein informativ.",
+            "Current on L1, in A. Purely informative.",
+        ),
+        "l2_current_entity": (
+            "Strom auf L2 in A. Rein informativ.",
+            "Current on L2, in A. Purely informative.",
+        ),
+        "l3_current_entity": (
+            "Strom auf L3 in A. Rein informativ.",
+            "Current on L3, in A. Purely informative.",
+        ),
         "phases": (
             "Phasen des Hausanschlusses. In Deutschland fast immer drei - nur "
             "ändern, wenn du es sicher anders weißt.",
@@ -458,8 +740,60 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "over the calculation. Empty is the normal case.",
         ),
         "energy_entity": (
-            "Zählerstand des Hausverbrauchs in kWh, falls vorhanden.",
-            "kWh meter of house consumption, if available.",
+            "Zählerstand des Hausverbrauchs in kWh, falls vorhanden. Er ist "
+            "der zweite Weg zum Eigenverbrauch, wenn kein Ertragszähler da ist.",
+            "kWh meter of house consumption, if available. It is the second "
+            "route to self-consumption when no yield meter exists.",
+        ),
+    },
+    "display": {
+        "animate": (
+            "Die Punkte auf den Leitungen laufen mit der Leistung mit. Aus, "
+            "wenn das Dashboard auf einem alten Tablet ruckelt.",
+            "The dots on the lines move with the power. Off if the dashboard "
+            "stutters on an old tablet.",
+        ),
+        "show_strings": (
+            "Zeichnet die Module einzeln, in Reihe und parallel. Aus ergibt "
+            "eine schmalere Karte.",
+            "Draws the modules individually, in series and parallel. Off gives "
+            "a narrower card.",
+        ),
+    },
+    "costs": {
+        "price_per_kwh": (
+            "Was eine Kilowattstunde aus dem Netz kostet, z. B. 0,34. Ohne "
+            "diesen Preis rechnet die Integration keine Kosten und legt auch "
+            "keine Geldsensoren an.",
+            "What one kilowatt hour from the grid costs, e.g. 0.34. Without "
+            "this price no costs are calculated and no money sensors are "
+            "created.",
+        ),
+        "feed_in_price": (
+            "Was du je eingespeister Kilowattstunde vergütet bekommst, z. B. "
+            "0,08. Leer lassen, wenn du nicht einspeist.",
+            "What you are paid per kilowatt hour fed into the grid, e.g. 0.08. "
+            "Leave empty if you do not export.",
+        ),
+        "base_price": (
+            "Der monatliche Grundpreis deines Stromvertrags. Er wird anteilig "
+            "auf Tag, Monat und Jahr verteilt. Leer oder 0, wenn er dich hier "
+            "nicht interessiert.",
+            "The monthly base fee of your electricity contract. It is spread "
+            "proportionally across day, month and year. Empty or 0 if you do "
+            "not want it counted here.",
+        ),
+        "investment": (
+            "Was die Anlage insgesamt gekostet hat. Daraus entstehen "
+            "Amortisationsfortschritt und die geschätzte Restzeit.",
+            "What the system cost in total. Payback progress and the estimated "
+            "remaining time are derived from it.",
+        ),
+        "currency": (
+            "Das Währungskürzel, z. B. EUR oder CHF. Es wird als Einheit an "
+            "den Geldsensoren geführt.",
+            "The currency code, e.g. EUR or CHF. It is used as the unit of the "
+            "money sensors.",
         ),
     },
 }
@@ -507,7 +841,10 @@ NETZFELDER = [
     "l3_power_entity", "l3_voltage_entity", "l3_current_entity",
 ]
 HAUSFELDER = ["calculate", "power_entity", "energy_entity"]
-ANZEIGEFELDER = ["animate", "show_strings", "price_per_kwh", "feed_in_price"]
+ANZEIGEFELDER = ["animate", "show_strings"]
+KOSTENFELDER = [
+    "price_per_kwh", "feed_in_price", "base_price", "investment", "currency",
+]
 
 OPTIONAL: T = ('\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.', '\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.')
 
@@ -563,6 +900,7 @@ def baum(sprache) -> dict:
                         "plants": s(("Anlagen", "Plants")),
                         "grid": s(("Netz und Zähler", "Grid and meter")),
                         "house": s(("Haus und Verbrauch", "House and consumption")),
+                        "costs": s(("Kosten und Ertrag", "Costs and yield")),
                         "display": s(("Darstellung", "Appearance")),
                         "save": s(("Speichern und schließen", "Save and close")),
                     },
@@ -625,7 +963,7 @@ def baum(sprache) -> dict:
                             "Current layout: {peak}" + OPTIONAL[1],
                         )
                     ),
-                    "data": _felder(MODULFELDER, s),
+                    "data": _felder(MODULFELDER, s, "modules"),
                     "data_description": _hinweise(MODULFELDER, s, "modules"),
                 },
                 "charger": {
@@ -640,7 +978,7 @@ def baum(sprache) -> dict:
                             + OPTIONAL[1],
                         )
                     ),
-                    "data": _felder(LADEREGLERFELDER, s),
+                    "data": _felder(LADEREGLERFELDER, s, "charger"),
                     "data_description": _hinweise(LADEREGLERFELDER, s, "charger"),
                 },
                 "battery": {
@@ -653,7 +991,7 @@ def baum(sprache) -> dict:
                             "stored energy." + OPTIONAL[1],
                         )
                     ),
-                    "data": _felder(BATTERIEFELDER, s),
+                    "data": _felder(BATTERIEFELDER, s, "battery"),
                     "data_description": _hinweise(BATTERIEFELDER, s, "battery"),
                 },
                 "inverter": {
@@ -666,7 +1004,7 @@ def baum(sprache) -> dict:
                             "parallel with the grid." + OPTIONAL[1],
                         )
                     ),
-                    "data": _felder(WRFELDER, s),
+                    "data": _felder(WRFELDER, s, "inverter"),
                     "data_description": _hinweise(WRFELDER, s, "inverter"),
                 },
                 "grid": {
@@ -681,18 +1019,38 @@ def baum(sprache) -> dict:
                             + OPTIONAL[1],
                         )
                     ),
-                    "data": _felder(NETZFELDER, s)
-                    | {"power_entity": s(("Gesamtleistung", "Total power"))},
+                    "data": _felder(NETZFELDER, s, "grid"),
                     "data_description": _hinweise(NETZFELDER, s, "grid"),
                 },
                 "house": {
                     "title": s(("Haus und Verbrauch", "House and consumption")),
-                    "data": _felder(HAUSFELDER, s),
+                    "data": _felder(HAUSFELDER, s, "house"),
                     "data_description": _hinweise(HAUSFELDER, s, "house"),
+                },
+                "costs": {
+                    "title": s(("Kosten und Ertrag", "Costs and yield")),
+                    "description": s(
+                        (
+                            "Gerechnet wird aus den Zählerständen, die du unter "
+                            "„Netz und Zähler“ eingetragen hast - nicht aus "
+                            "hochgerechneten Leistungen. Tag, Monat und Jahr "
+                            "laufen ab dem Zeitpunkt mit, an dem du hier einen "
+                            "Preis einträgst; rückwirkend lässt sich nichts "
+                            "berechnen." + OPTIONAL[0],
+                            "Everything is derived from the meter readings you "
+                            "entered under “Grid and meter” - not from "
+                            "extrapolated power. Day, month and year start "
+                            "counting the moment you enter a price here; nothing "
+                            "can be computed retroactively." + OPTIONAL[1],
+                        )
+                    ),
+                    "data": _felder(KOSTENFELDER, s),
+                    "data_description": _hinweise(KOSTENFELDER, s, "costs"),
                 },
                 "display": {
                     "title": s(("Darstellung", "Appearance")),
                     "data": _felder(ANZEIGEFELDER, s),
+                    "data_description": _hinweise(ANZEIGEFELDER, s, "display"),
                 },
             }
         },

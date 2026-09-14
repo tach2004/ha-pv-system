@@ -20,6 +20,7 @@ from .const import (
     CHEMISTRIES,
     CONF_ANIMATE,
     CONF_AZIMUTH,
+    CONF_BASE_PRICE,
     CONF_BATTERY,
     CONF_BATTERY_CHARGED,
     CONF_BATTERY_CURRENT,
@@ -49,6 +50,8 @@ from .const import (
     CONF_CHARGER_TEMPERATURE,
     CONF_CHARGER_YIELD,
     CONF_CHEMISTRY,
+    CONF_COSTS,
+    CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
     CONF_DISPLAY,
     CONF_ENABLED,
@@ -79,6 +82,7 @@ from .const import (
     CONF_INVERTER_NAME,
     CONF_INVERTER_POWER,
     CONF_INVERTER_TEMPERATURE,
+    CONF_INVESTMENT,
     CONF_METER_MODEL,
     CONF_MODULE_COUNT,
     CONF_MODULE_MANUFACTURER,
@@ -104,6 +108,7 @@ from .const import (
     CONF_SYSTEM_VOLTAGE,
     CONF_TILT,
     DEFAULT_CAPACITY,
+    DEFAULT_CURRENCY,
     DEFAULT_MIN_SOC,
     DEFAULT_MODULE_COUNT,
     DEFAULT_MODULE_PEAK,
@@ -369,8 +374,30 @@ def darstellung_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
     return {
         CONF_ANIMATE: bool(roh.get(CONF_ANIMATE, True)),
         CONF_SHOW_STRINGS: bool(roh.get(CONF_SHOW_STRINGS, True)),
-        CONF_CURRENCY_PRICE: _zahl(roh.get(CONF_CURRENCY_PRICE), None),
-        CONF_FEED_IN_PRICE: _zahl(roh.get(CONF_FEED_IN_PRICE), None),
+    }
+
+
+def kosten_normalisieren(
+    roh: dict[str, Any] | None, alt: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Preise und Investition.
+
+    ``alt`` ist der fruehere Darstellungs-Block: Bis 0.0.3 standen Arbeitspreis
+    und Einspeiseverguetung dort. Wer sie schon eingetragen hat, soll sie nach
+    dem Update wiederfinden, ohne sie neu zu tippen.
+    """
+    roh = dict(roh or {})
+    frueher = dict(alt or {})
+    return {
+        CONF_CURRENCY_PRICE: _zahl(
+            roh.get(CONF_CURRENCY_PRICE, frueher.get(CONF_CURRENCY_PRICE)), None
+        ),
+        CONF_FEED_IN_PRICE: _zahl(
+            roh.get(CONF_FEED_IN_PRICE, frueher.get(CONF_FEED_IN_PRICE)), None
+        ),
+        CONF_BASE_PRICE: _zahl(roh.get(CONF_BASE_PRICE), None),
+        CONF_INVESTMENT: _zahl(roh.get(CONF_INVESTMENT), None),
+        CONF_CURRENCY: str(roh.get(CONF_CURRENCY) or DEFAULT_CURRENCY),
     }
 
 
@@ -386,6 +413,9 @@ def normalisieren(optionen: dict[str, Any] | None) -> dict[str, Any]:
         CONF_GRID: netz_normalisieren(optionen.get(CONF_GRID)),
         CONF_HOUSE: haus_normalisieren(optionen.get(CONF_HOUSE)),
         CONF_DISPLAY: darstellung_normalisieren(optionen.get(CONF_DISPLAY)),
+        CONF_COSTS: kosten_normalisieren(
+            optionen.get(CONF_COSTS), optionen.get(CONF_DISPLAY)
+        ),
     }
 
 

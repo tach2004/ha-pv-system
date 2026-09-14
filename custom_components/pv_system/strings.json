@@ -19,6 +19,18 @@
   },
   "entity": {
     "sensor": {
+      "balance_day": {
+        "name": "Balance today"
+      },
+      "balance_month": {
+        "name": "Balance this month"
+      },
+      "balance_total": {
+        "name": "Balance total"
+      },
+      "balance_year": {
+        "name": "Balance this year"
+      },
       "battery_capacity": {
         "name": "Battery capacity"
       },
@@ -30,6 +42,33 @@
       },
       "battery_soc": {
         "name": "Battery level"
+      },
+      "cost_rate": {
+        "name": "Cost per hour"
+      },
+      "feed_in_revenue_day": {
+        "name": "Feed-in revenue today"
+      },
+      "feed_in_revenue_month": {
+        "name": "Feed-in revenue this month"
+      },
+      "feed_in_revenue_total": {
+        "name": "Feed-in revenue total"
+      },
+      "feed_in_revenue_year": {
+        "name": "Feed-in revenue this year"
+      },
+      "grid_cost_day": {
+        "name": "Grid cost today"
+      },
+      "grid_cost_month": {
+        "name": "Grid cost this month"
+      },
+      "grid_cost_total": {
+        "name": "Grid cost total"
+      },
+      "grid_cost_year": {
+        "name": "Grid cost this year"
       },
       "grid_export_energy": {
         "name": "Grid export energy"
@@ -49,6 +88,9 @@
       "grid_power": {
         "name": "Grid power"
       },
+      "house_energy": {
+        "name": "House consumption energy"
+      },
       "house_power": {
         "name": "House consumption"
       },
@@ -57,6 +99,12 @@
       },
       "inverter_power": {
         "name": "Inverter power"
+      },
+      "payback_progress": {
+        "name": "Payback progress"
+      },
+      "payback_years": {
+        "name": "Remaining payback time"
       },
       "phase_power": {
         "name": "Grid {phase}"
@@ -81,6 +129,9 @@
       },
       "plant_battery_temperature": {
         "name": "Battery temperature"
+      },
+      "plant_battery_time_to_full": {
+        "name": "Time to full"
       },
       "plant_battery_voltage": {
         "name": "Battery voltage"
@@ -133,6 +184,18 @@
       "pv_utilisation": {
         "name": "PV utilisation"
       },
+      "savings_day": {
+        "name": "Savings today"
+      },
+      "savings_month": {
+        "name": "Savings this month"
+      },
+      "savings_total": {
+        "name": "Savings total"
+      },
+      "savings_year": {
+        "name": "Savings this year"
+      },
       "self_consumption": {
         "name": "Self-consumption"
       },
@@ -148,6 +211,21 @@
           "idle": "Idle",
           "importing": "Importing"
         }
+      },
+      "yield_day": {
+        "name": "Yield today"
+      },
+      "yield_month": {
+        "name": "Yield this month"
+      },
+      "yield_rate": {
+        "name": "Yield per hour"
+      },
+      "yield_total": {
+        "name": "Yield total"
+      },
+      "yield_year": {
+        "name": "Yield this year"
       }
     }
   },
@@ -158,7 +236,7 @@
           "capacity_kwh": "Capacity",
           "charged_energy_entity": "Charged energy",
           "chemistry": "Cell chemistry",
-          "current_entity": "Current",
+          "current_entity": "Battery current (+/−)",
           "cycles_entity": "Charge cycles",
           "discharged_energy_entity": "Discharged energy",
           "enabled": "Present",
@@ -168,20 +246,28 @@
           "model": "Model",
           "name": "Name",
           "nominal_voltage": "Nominal voltage",
-          "power_entity": "Power",
+          "power_entity": "Battery power (+/−)",
           "power_sign": "Power sign",
           "soc_entity": "State of charge",
-          "temperature_entity": "Temperature",
-          "voltage_entity": "Voltage"
+          "temperature_entity": "Cell temperature",
+          "voltage_entity": "Battery voltage"
         },
         "data_description": {
           "capacity_kwh": "Nominal capacity from the label. Together with the state of charge it gives the stored energy in kWh.",
+          "charged_energy_entity": "kWh meter holding the total energy charged into the battery.",
+          "chemistry": "Cell type. Display only, nothing is calculated from it.",
           "current_entity": "Battery current. Its sign's meaning is set below.",
+          "cycles_entity": "Number of charge cycles from the BMS, if available.",
+          "discharged_energy_entity": "The counterpart: total energy taken out, in kWh.",
           "enabled": "Off when this plant has no storage. The block is then omitted.",
           "health_entity": "State of health in percent, if the BMS reports it.",
+          "manufacturer": "Display only - the card shows manufacturer and model together.",
           "min_soc": "Discharge stops here. Remaining runtime is calculated against this limit.",
+          "model": "Display only, e.g. the type designation from the label.",
+          "name": "Name of this storage, e.g. “Battery 48 V cellar”.",
+          "nominal_voltage": "Voltage level of the storage - 24 V or 48 V are common. Display only.",
           "power_entity": "Charge and discharge power. If absent, voltage × current is used.",
-          "power_sign": "How the meter counts. Chosen wrongly the card shows the flow reversed.",
+          "power_sign": "This is the direct battery power. You decide which sign means charging: “+ = charging” is the usual case, some BMS count the other way round. Chosen wrongly the card swaps charging and discharging.",
           "soc_entity": "State of charge in percent, usually from the BMS. Without it stored energy and runtime stay empty.",
           "temperature_entity": "Cell temperature from the BMS.",
           "voltage_entity": "Terminal voltage of the battery (e.g. 51.8 V on a 48 V system)."
@@ -200,31 +286,57 @@
           "name": "Name",
           "output_current_entity": "Output current (battery)",
           "output_voltage_entity": "Output voltage (battery)",
-          "power_entity": "Power",
+          "power_entity": "Charging power (output)",
           "state_entity": "Operating state",
           "system_voltage": "System voltage",
-          "temperature_entity": "Temperature",
+          "temperature_entity": "Charge controller temperature",
           "yield_entity": "Yield meter"
         },
         "data_description": {
           "enabled": "Off when the modules go straight to the inverter. The whole block is then omitted.",
+          "input_current_entity": "String current coming from the modules. Together with input voltage it gives the module power.",
           "input_voltage_entity": "The voltage coming from the modules - often three digits on an MPPT.",
+          "manufacturer": "Display only - the card shows manufacturer and model together.",
           "max_current": "Display only, e.g. 85 A on an MPPT 250/85.",
+          "model": "Display only, e.g. the type designation from the label.",
+          "name": "Name of this controller, e.g. “MPPT roof east”.",
+          "output_current_entity": "Charging current towards the battery. Without a power sensor the charging power is computed from it.",
           "output_voltage_entity": "The voltage on the battery side, i.e. 24 V, 48 V and so on.",
           "power_entity": "Charging power towards the battery. If absent it is computed from output voltage × output current.",
           "state_entity": "Operating state as text, e.g. “Bulk”, “Absorption”, “Float”.",
+          "system_voltage": "Voltage level of the battery behind it - 24 V or 48 V are common. Shown as a badge on the card.",
           "temperature_entity": "Temperature of the controller itself, not of the battery.",
           "yield_entity": "kWh meter that many MPPT controllers provide."
         },
         "description": "Without a charge controller the modules go straight to the inverter - leave the switch above off.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Charge controller – {plant}"
       },
+      "costs": {
+        "data": {
+          "base_price": "Monthly base fee",
+          "currency": "Currency",
+          "feed_in_price": "Feed-in tariff",
+          "investment": "Investment cost",
+          "price_per_kwh": "Energy price"
+        },
+        "data_description": {
+          "base_price": "The monthly base fee of your electricity contract. It is spread proportionally across day, month and year. Empty or 0 if you do not want it counted here.",
+          "currency": "The currency code, e.g. EUR or CHF. It is used as the unit of the money sensors.",
+          "feed_in_price": "What you are paid per kilowatt hour fed into the grid, e.g. 0.08. Leave empty if you do not export.",
+          "investment": "What the system cost in total. Payback progress and the estimated remaining time are derived from it.",
+          "price_per_kwh": "What one kilowatt hour from the grid costs, e.g. 0.34. Without this price no costs are calculated and no money sensors are created."
+        },
+        "description": "Everything is derived from the meter readings you entered under “Grid and meter” - not from extrapolated power. Day, month and year start counting the moment you enter a price here; nothing can be computed retroactively.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
+        "title": "Costs and yield"
+      },
       "display": {
         "data": {
           "animate": "Animate flow lines",
-          "feed_in_price": "Feed-in tariff",
-          "price_per_kwh": "Energy price",
           "show_strings": "Draw string layout"
+        },
+        "data_description": {
+          "animate": "The dots on the lines move with the power. Off if the dashboard stutters on an old tablet.",
+          "show_strings": "Draws the modules individually, in series and parallel. Off gives a narrower card."
         },
         "title": "Appearance"
       },
@@ -247,14 +359,26 @@
           "meter_model": "Meter model",
           "name": "Name",
           "phases": "Phases",
-          "power_entity": "Total power",
+          "power_entity": "Total power (all phases)",
           "power_sign": "Power sign"
         },
         "data_description": {
+          "export_energy_entity": "The export meter in kWh. Basis for the feed-in revenue.",
           "export_power_entity": "Counterpart to import power - likewise only needed with separate meters.",
+          "frequency_entity": "One field is enough: in a synchronous grid all three phases share the same frequency - they are rigidly locked together. One value per phase would be the same number three times.",
+          "import_energy_entity": "The import meter in kWh. Daily, monthly and yearly grid costs are derived from it - without it the cost figures stay empty.",
           "import_power_entity": "Only needed if your meter reports import and export separately instead of one signed figure.",
+          "l1_current_entity": "Current on L1, in A. Purely informative.",
           "l1_power_entity": "Power on L1. Leave empty if you only have the total meter - the card then does not draw phases individually.",
+          "l1_voltage_entity": "Voltage on L1, around 230 V. Purely informative.",
+          "l2_current_entity": "Current on L2, in A. Purely informative.",
+          "l2_power_entity": "Power on L2 - like L1 only needed if your meter reports phases individually.",
+          "l2_voltage_entity": "Voltage on L2, around 230 V. Purely informative.",
+          "l3_current_entity": "Current on L3, in A. Purely informative.",
+          "l3_power_entity": "Power on L3 - like L1 only needed if your meter reports phases individually.",
+          "l3_voltage_entity": "Voltage on L3, around 230 V. Purely informative.",
           "meter_model": "Display only, e.g. “Shelly Pro 3EM Gen2”.",
+          "name": "Name of the grid connection. It sits above the box on the card.",
           "phases": "Phases of the house connection. Almost always three - only change it if you know otherwise.",
           "power_entity": "The total across all phases at the house connection. The most important field here.",
           "power_sign": "How the meter counts. Chosen wrongly the card shows the flow reversed."
@@ -265,12 +389,12 @@
       "house": {
         "data": {
           "calculate": "Calculate house consumption",
-          "energy_entity": "Energy meter",
-          "power_entity": "Power"
+          "energy_entity": "Consumption meter",
+          "power_entity": "Measured house consumption"
         },
         "data_description": {
           "calculate": "Consumption = inverter power + grid power. A measured value takes precedence.",
-          "energy_entity": "kWh meter of house consumption, if available.",
+          "energy_entity": "kWh meter of house consumption, if available. It is the second route to self-consumption when no yield meter exists.",
           "power_entity": "A measured house consumption, if you have one. It takes precedence over the calculation. Empty is the normal case."
         },
         "title": "House and consumption"
@@ -278,6 +402,7 @@
       "init": {
         "description": "Changes are only applied once you pick “Save and close” in the menu.",
         "menu_options": {
+          "costs": "Costs and yield",
           "display": "Appearance",
           "grid": "Grid and meter",
           "house": "House and consumption",
@@ -288,11 +413,11 @@
       },
       "inverter": {
         "data": {
-          "ac_current_entity": "AC current",
-          "ac_voltage_entity": "AC voltage",
-          "dc_voltage_entity": "DC voltage",
+          "ac_current_entity": "Output current (AC)",
+          "ac_voltage_entity": "Output voltage (AC)",
+          "dc_voltage_entity": "Input voltage (DC)",
           "enabled": "Present",
-          "energy_entity": "Energy meter",
+          "energy_entity": "Yield meter (AC)",
           "frequency_entity": "Frequency",
           "hybrid": "Hybrid inverter",
           "manufacturer": "Manufacturer",
@@ -300,18 +425,26 @@
           "model": "Model",
           "name": "Name",
           "phase": "Phase",
-          "power_entity": "Power",
+          "power_entity": "Output power (AC)",
           "rated_power_w": "Rated power",
-          "temperature_entity": "Temperature"
+          "temperature_entity": "Inverter temperature"
         },
         "data_description": {
+          "ac_current_entity": "Output current on the grid side, in A.",
           "ac_voltage_entity": "Grid voltage at the output, typically around 230 V.",
           "dc_voltage_entity": "DC voltage at the input - the battery voltage on a battery inverter.",
           "enabled": "Off when this plant has no inverter of its own.",
+          "energy_entity": "kWh meter for what this device has delivered in total. The cost calculation uses it as generation - only what the inverter delivers can go to the grid.",
+          "frequency_entity": "Grid frequency as measured by this device - around 50 Hz.",
           "hybrid": "On when the device can also charge from the grid (e.g. Victron MultiPlus).",
+          "manufacturer": "Display only - the card shows manufacturer and model together.",
+          "mode_entity": "Operating mode as text, e.g. “grid-tied” or “off-grid”.",
+          "model": "Display only, e.g. the type designation from the label.",
+          "name": "Name of this inverter, e.g. “GTN1000 L3”.",
           "phase": "Which phase this single-phase inverter feeds into.",
           "power_entity": "AC output power - the built-in sensor or an inline meter such as a Shelly. House consumption is derived from this figure.",
-          "rated_power_w": "Continuous rating from the label. The load bar is based on it."
+          "rated_power_w": "Continuous rating from the label. The load bar is based on it.",
+          "temperature_entity": "Temperature of the inverter itself."
         },
         "description": "Designed for single-phase inverters running in parallel with the grid.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Inverter – {plant}"
@@ -320,25 +453,29 @@
         "data": {
           "azimuth": "Azimuth",
           "count": "Number of modules",
-          "current_entity": "Current",
-          "energy_entity": "Energy meter",
+          "current_entity": "String current (DC)",
+          "energy_entity": "Yield meter (DC)",
           "manufacturer": "Manufacturer",
           "model": "Model",
           "parallel": "Parallel strings",
           "peak_wp": "Power per module",
-          "power_entity": "Power",
+          "power_entity": "Module power (DC)",
           "series": "Modules in series per string",
           "tilt": "Tilt",
-          "voltage_entity": "Voltage"
+          "voltage_entity": "String voltage (DC)"
         },
         "data_description": {
+          "azimuth": "Compass direction in degrees: 180° south, 90° east, 270° west. Display only.",
           "count": "How many modules belong to this plant.",
           "current_entity": "String current (DC) on the module side. May be left empty.",
           "energy_entity": "A kWh meter for this array's yield, if you have one. May be left empty.",
+          "manufacturer": "The module manufacturer, e.g. “Trina”. Display only.",
+          "model": "The module type, e.g. “Vertex S 405”. Display only.",
           "parallel": "Four in series, two such strings in parallel makes eight modules.",
           "peak_wp": "Peak power of a single module as printed on its label.",
           "power_entity": "What the modules currently deliver - the DC sensor of the charge controller or inverter. Empty: the charge controller fills in, otherwise the card leaves it blank.",
           "series": "Leave empty to get a matching layout suggested.",
+          "tilt": "Roof pitch in degrees: 0° flat, 90° vertical. Display only.",
           "voltage_entity": "Voltage of the module string (DC), e.g. 148 V for four modules in series - not the battery voltage. May be left empty."
         },
         "description": "Current layout: {peak}\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
@@ -523,11 +660,11 @@
           "name": "Number of modules"
         },
         "manufacturer": {
-          "description": "Manufacturer",
+          "description": "Display only - the card shows manufacturer and model together.",
           "name": "Manufacturer"
         },
         "model": {
-          "description": "Model",
+          "description": "Display only, e.g. the type designation from the label.",
           "name": "Model"
         },
         "parallel": {

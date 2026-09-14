@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -38,6 +39,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     ATTR_KEY,
@@ -45,6 +47,16 @@ from .const import (
     ATTR_SYSTEM_ID,
     CONF_ID,
     DOMAIN,
+    KEY_BALANCE,
+    KEY_COST_RATE,
+    KEY_FEED_IN_REVENUE,
+    KEY_GRID_COST,
+    KEY_PAYBACK_PROGRESS,
+    KEY_PAYBACK_YEARS,
+    KEY_SAVINGS,
+    KEY_YIELD,
+    KEY_YIELD_RATE,
+    PERIODS,
     PHASES,
 )
 from .coordinator import PvSystemConfigEntry, PvSystemCoordinator
@@ -237,11 +249,128 @@ STANDORT: tuple[PvSensorDescription, ...] = (
         wert=lambda d: d["house"]["house_power"],
         extra=lambda d: {"source": d["house"]["house_source"]},
     ),
+    PvSensorDescription(
+        key="house_energy",
+        translation_key="house_energy",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=KWH,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        wert=lambda d: d["house"]["house_energy"],
+        # Nur anlegen, wenn eine Energie-Entität hinterlegt ist. Ohne sie gäbe
+        # es einen Zähler, der dauerhaft unbekannt bleibt.
+        wenn=lambda c: bool(c["house"]["entities"]["energy"]),
+    ),
     _prozent(
         "self_sufficiency", lambda d: d["house"]["self_sufficiency"], "mdi:home-lightning-bolt"
     ),
     _prozent(
         "self_consumption", lambda d: d["house"]["self_consumption"], "mdi:home-percent"
+    ),
+)
+
+# --------------------------------------------------------------- Kosten
+
+# Geldsensoren entstehen nur, wenn ein Preis hinterlegt ist. Ohne Preis gäbe es
+# eine Reihe von Entitäten, die dauerhaft "unbekannt" blieben - und in der
+# Energieübersicht von Home Assistant wären sie dann sogar störend.
+#
+# Je Zeitraum vier Größen und die Bilanz:
+#
+#   Bezugskosten   bezogene kWh × Arbeitspreis (+ anteiliger Grundpreis)
+#   Einspeiseerlös eingespeiste kWh × Vergütung
+#   Ersparnis      selbst genutzte kWh × Arbeitspreis
+#   Ertrag         Ersparnis + Einspeiseerlös - was die Anlage einbringt
+#   Bilanz         Ertrag - Bezugskosten - was unterm Strich bleibt
+#
+# Die Zeiträume laufen mit: Tag, Monat und Jahr setzen sich zur Ortszeit
+# zurück, "gesamt" läuft seit der Einrichtung durch und trägt die Amortisation.
+
+
+def _hat_preis(conf: dict[str, Any]) -> bool:
+    return conf["costs"]["price"] is not None
+
+
+def _hat_verguetung(conf: dict[str, Any]) -> bool:
+    return conf["costs"]["feed_in"] is not None
+
+
+def _geld(
+    key: str, periode: str, feld: str, icon: str,
+    wenn: Callable[[dict[str, Any]], bool],
+) -> PvSensorDescription:
+    """Ein Geldbetrag über einen Zeitraum.
+
+    ``TOTAL`` statt ``TOTAL_INCREASING``: Der Wert springt am Monatsersten auf
+    null zurück, und nur mit ``last_reset`` weiß die Statistik, dass das kein
+    Zählerwechsel war.
+    """
+    return PvSensorDescription(
+        key=key,
+        translation_key=key,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        icon=icon,
+        wert=lambda d: d["costs"]["periods"][periode][feld],
+        wenn=wenn,
+    )
+
+
+def _kostensensoren() -> tuple[PvSensorDescription, ...]:
+    werte = (
+        (KEY_GRID_COST, "cost", "mdi:cash-minus", _hat_preis),
+        (KEY_FEED_IN_REVENUE, "revenue", "mdi:cash-plus", _hat_verguetung),
+        (KEY_SAVINGS, "savings", "mdi:piggy-bank-outline", _hat_preis),
+        (KEY_YIELD, "yield", "mdi:hand-coin-outline", _hat_preis),
+        (KEY_BALANCE, "balance", "mdi:scale-balance", _hat_preis),
+    )
+    return tuple(
+        _geld(muster.format(period=periode), periode, feld, icon, wenn)
+        for periode in PERIODS
+        for muster, feld, icon, wenn in werte
+    )
+
+
+KOSTEN: tuple[PvSensorDescription, ...] = (
+    PvSensorDescription(
+        key=KEY_COST_RATE,
+        translation_key=KEY_COST_RATE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=3,
+        icon="mdi:cash-clock",
+        wert=lambda d: d["costs"]["cost_rate"],
+        wenn=_hat_preis,
+    ),
+    PvSensorDescription(
+        key=KEY_YIELD_RATE,
+        translation_key=KEY_YIELD_RATE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=3,
+        icon="mdi:cash-fast",
+        wert=lambda d: d["costs"]["yield_rate"],
+        wenn=_hat_preis,
+    ),
+    *_kostensensoren(),
+    PvSensorDescription(
+        key=KEY_PAYBACK_PROGRESS,
+        translation_key=KEY_PAYBACK_PROGRESS,
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        icon="mdi:progress-check",
+        wert=lambda d: d["costs"]["payback_progress"],
+        wenn=lambda c: bool(c["costs"]["investment"]),
+    ),
+    PvSensorDescription(
+        key=KEY_PAYBACK_YEARS,
+        translation_key=KEY_PAYBACK_YEARS,
+        native_unit_of_measurement=UnitOfTime.YEARS,
+        suggested_display_precision=1,
+        icon="mdi:calendar-clock",
+        wert=lambda d: d["costs"]["payback_years"],
+        extra=lambda d: {"yield_per_year": d["costs"]["yield_year"]},
+        wenn=lambda c: bool(c["costs"]["investment"]),
     ),
 )
 
@@ -324,6 +453,17 @@ ANLAGE: tuple[PvSensorDescription, ...] = (
         icon="mdi:battery-clock",
         wert=lambda p: p["battery"]["runtime"],
     ),
+    PvSensorDescription(
+        key="plant_battery_time_to_full",
+        translation_key="plant_battery_time_to_full",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        suggested_display_precision=1,
+        icon="mdi:battery-charging-high",
+        # Das Gegenstück zur Restlaufzeit: Die eine ist beim Entladen bekannt,
+        # die andere beim Laden. Zusammen steht immer eine der beiden da.
+        wert=lambda p: p["battery"]["time_to_full"],
+    ),
 )
 
 # Welche Anlagensensoren an einer Anlage überhaupt Sinn ergeben.
@@ -335,6 +475,7 @@ NUR_MIT_BATTERIE = frozenset(
         "plant_battery_voltage",
         "plant_battery_temperature",
         "plant_battery_runtime",
+        "plant_battery_time_to_full",
     }
 )
 NUR_MIT_LADEREGLER = frozenset(
@@ -376,6 +517,7 @@ def _anlage_passt(beschreibung: PvSensorDescription, anlage: dict[str, Any]) -> 
         "plant_battery_soc": anlage["battery"]["entities"]["soc"],
         "plant_battery_energy": anlage["battery"]["entities"]["soc"],
         "plant_battery_runtime": anlage["battery"]["entities"]["soc"],
+        "plant_battery_time_to_full": anlage["battery"]["entities"]["soc"],
     }
     if key in quellen:
         return bool(quellen[key])
@@ -397,6 +539,11 @@ async def async_setup_entry(
         if beschreibung.wenn is None or beschreibung.wenn(daten)
     ]
     sensoren.append(StatusSensor(coordinator))
+    sensoren.extend(
+        KostenSensor(coordinator, beschreibung)
+        for beschreibung in KOSTEN
+        if beschreibung.wenn is None or beschreibung.wenn(daten)
+    )
 
     for nummer, anlage in enumerate(daten.get("plants", [])):
         sensoren.extend(
@@ -469,6 +616,46 @@ class StandortSensor(PvBasis):
         return attribute
 
 
+class KostenSensor(StandortSensor):
+    """Ein Geldbetrag - mit der eingestellten Währung und dem Periodenanfang.
+
+    Zwei Dinge lassen sich nicht in die Beschreibung schreiben, weil sie aus
+    der Konfiguration kommen und sich ändern dürfen:
+
+    * die Währung. Home Assistant braucht sie als Einheit, sonst ordnet es den
+      Wert keiner Währungsstatistik zu.
+    * ``last_reset``. Ohne diese Marke hielte die Statistik den Rücksprung am
+      Monatsersten für einen Zählerwechsel und zählte den Monat doppelt.
+    """
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        if self.entity_description.device_class is not SensorDeviceClass.MONETARY:
+            # Die beiden Momentanwerte sind keine Währung, sondern eine Rate.
+            if self.entity_description.key in (KEY_COST_RATE, KEY_YIELD_RATE):
+                return f"{self._waehrung}/h"
+            return self.entity_description.native_unit_of_measurement
+        return self._waehrung
+
+    @property
+    def _waehrung(self) -> str:
+        daten = self.coordinator.data or {}
+        return daten.get("costs", {}).get("currency") or "EUR"
+
+    @property
+    def last_reset(self) -> datetime | None:
+        if self.entity_description.state_class is not SensorStateClass.TOTAL:
+            return None
+        return self._periodenbeginn
+
+    @property
+    def _periodenbeginn(self) -> datetime | None:
+        daten = self.coordinator.data or {}
+        periode = self.entity_description.key.rsplit("_", 1)[-1]
+        zeitraum = daten.get("costs", {}).get("periods", {}).get(periode, {})
+        return dt_util.parse_datetime(zeitraum.get("start") or "")
+
+
 class StatusSensor(PvBasis):
     """Richtung des Energieflusses - und der Anker für die Karte.
 
@@ -519,8 +706,27 @@ class StatusSensor(PvBasis):
             "grid": daten.get("grid", {}),
             "totals": daten.get("totals", {}),
             "house": daten.get("house", {}),
+            "costs": daten.get("costs", {}),
             "display": self.coordinator.config.get("display", {}),
         }
+
+
+def _anlagenmodell(anlage: dict[str, Any]) -> str:
+    """Eine Zeile, die sagt, was diese Anlage ist.
+
+    In der Geräteliste steht unter dem Namen genau eine Zeile. Die Auslegung
+    ist dort die nützlichste Angabe - sie unterscheidet die Anlagen
+    voneinander, was bei "PV-Anlage" dreimal untereinander nicht der Fall wäre.
+    """
+    module = anlage["modules"]
+    anzahl = module["count"] or 0
+    spitze = module["peak_total"]
+    if not anzahl or not spitze:
+        return "PV-Anlage"
+    teile = [f"{anzahl} Module", f"{spitze / 1000:.2f} kWp".replace(".", ",")]
+    if anlage["battery"]["enabled"] and anlage["battery"]["capacity"]:
+        teile.append(f"{anlage['battery']['capacity']:.2f} kWh".replace(".", ","))
+    return " · ".join(teile)
 
 
 class AnlagenSensor(PvBasis):
@@ -540,11 +746,17 @@ class AnlagenSensor(PvBasis):
         anlage = coordinator.data["plants"][nummer]
         self._plant_id = anlage[CONF_ID]
         self._attr_unique_id = f"{self._entry_id}_{self._plant_id}_{beschreibung.key}"
+        # Das Gerät ist die ganze Anlage, nicht ihr Dach. Stünde hier der
+        # Modulhersteller, läse sich die Geräteliste als "Anlage Soyo, Modell
+        # Vertex S 405" - und der Laderegler, die Batterie und der
+        # Wechselrichter, die am selben Gerät hängen, wären damit falsch
+        # beschriftet. Modul, Regler und Wechselrichter stehen mit Hersteller
+        # und Modell in ihren eigenen Sensorattributen und auf der Karte.
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{self._entry_id}:{self._plant_id}")},
             name=anlage[CONF_NAME],
-            manufacturer=anlage["modules"]["manufacturer"] or "PV-System",
-            model=anlage["modules"]["model"] or "PV-Anlage",
+            manufacturer="PV-System",
+            model=_anlagenmodell(anlage),
             via_device=(DOMAIN, self._entry_id),
         )
 

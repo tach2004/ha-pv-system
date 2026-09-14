@@ -19,6 +19,18 @@
   },
   "entity": {
     "sensor": {
+      "balance_day": {
+        "name": "Bilanz heute"
+      },
+      "balance_month": {
+        "name": "Bilanz diesen Monat"
+      },
+      "balance_total": {
+        "name": "Bilanz gesamt"
+      },
+      "balance_year": {
+        "name": "Bilanz dieses Jahr"
+      },
       "battery_capacity": {
         "name": "Batteriekapazität"
       },
@@ -30,6 +42,33 @@
       },
       "battery_soc": {
         "name": "Batterieladestand"
+      },
+      "cost_rate": {
+        "name": "Kosten je Stunde"
+      },
+      "feed_in_revenue_day": {
+        "name": "Einspeiseerlös heute"
+      },
+      "feed_in_revenue_month": {
+        "name": "Einspeiseerlös diesen Monat"
+      },
+      "feed_in_revenue_total": {
+        "name": "Einspeiseerlös gesamt"
+      },
+      "feed_in_revenue_year": {
+        "name": "Einspeiseerlös dieses Jahr"
+      },
+      "grid_cost_day": {
+        "name": "Bezugskosten heute"
+      },
+      "grid_cost_month": {
+        "name": "Bezugskosten diesen Monat"
+      },
+      "grid_cost_total": {
+        "name": "Bezugskosten gesamt"
+      },
+      "grid_cost_year": {
+        "name": "Bezugskosten dieses Jahr"
       },
       "grid_export_energy": {
         "name": "Einspeisung gesamt"
@@ -49,6 +88,9 @@
       "grid_power": {
         "name": "Netzleistung"
       },
+      "house_energy": {
+        "name": "Hausverbrauch Energie"
+      },
       "house_power": {
         "name": "Hausverbrauch"
       },
@@ -57,6 +99,12 @@
       },
       "inverter_power": {
         "name": "Wechselrichterleistung"
+      },
+      "payback_progress": {
+        "name": "Amortisation"
+      },
+      "payback_years": {
+        "name": "Restliche Amortisationszeit"
       },
       "phase_power": {
         "name": "Netz {phase}"
@@ -81,6 +129,9 @@
       },
       "plant_battery_temperature": {
         "name": "Batterietemperatur"
+      },
+      "plant_battery_time_to_full": {
+        "name": "Ladezeit"
       },
       "plant_battery_voltage": {
         "name": "Batteriespannung"
@@ -133,6 +184,18 @@
       "pv_utilisation": {
         "name": "PV-Ausnutzung"
       },
+      "savings_day": {
+        "name": "Ersparnis heute"
+      },
+      "savings_month": {
+        "name": "Ersparnis diesen Monat"
+      },
+      "savings_total": {
+        "name": "Ersparnis gesamt"
+      },
+      "savings_year": {
+        "name": "Ersparnis dieses Jahr"
+      },
       "self_consumption": {
         "name": "Eigenverbrauch"
       },
@@ -148,6 +211,21 @@
           "idle": "Ruhe",
           "importing": "Netzbezug"
         }
+      },
+      "yield_day": {
+        "name": "Ertrag heute"
+      },
+      "yield_month": {
+        "name": "Ertrag diesen Monat"
+      },
+      "yield_rate": {
+        "name": "Ertrag je Stunde"
+      },
+      "yield_total": {
+        "name": "Ertrag gesamt"
+      },
+      "yield_year": {
+        "name": "Ertrag dieses Jahr"
       }
     }
   },
@@ -158,7 +236,7 @@
           "capacity_kwh": "Kapazität",
           "charged_energy_entity": "Geladene Energie",
           "chemistry": "Zellchemie",
-          "current_entity": "Strom",
+          "current_entity": "Batteriestrom (+/−)",
           "cycles_entity": "Ladezyklen",
           "discharged_energy_entity": "Entladene Energie",
           "enabled": "Vorhanden",
@@ -168,20 +246,28 @@
           "model": "Modell",
           "name": "Name",
           "nominal_voltage": "Nennspannung",
-          "power_entity": "Leistung",
+          "power_entity": "Batterieleistung (+/−)",
           "power_sign": "Vorzeichen der Leistung",
           "soc_entity": "Ladestand",
-          "temperature_entity": "Temperatur",
-          "voltage_entity": "Spannung"
+          "temperature_entity": "Zelltemperatur",
+          "voltage_entity": "Batteriespannung"
         },
         "data_description": {
           "capacity_kwh": "Nennkapazität laut Typenschild. Zusammen mit dem Ladestand ergibt sie den Inhalt in kWh.",
+          "charged_energy_entity": "Zählerstand in kWh, der die insgesamt geladene Energie führt.",
+          "chemistry": "Zelltyp. Nur zur Anzeige, gerechnet wird damit nichts.",
           "current_entity": "Batteriestrom. Positiv oder negativ - die Bedeutung legst du unten beim Vorzeichen fest.",
+          "cycles_entity": "Zahl der Ladezyklen aus dem BMS, falls vorhanden.",
+          "discharged_energy_entity": "Gegenstück dazu: die insgesamt entnommene Energie in kWh.",
           "enabled": "Aus, wenn diese Anlage keinen Speicher hat. Der Block wird dann nicht gezeichnet.",
           "health_entity": "Zustand in Prozent (SoH), falls das BMS ihn meldet.",
+          "manufacturer": "Nur zur Anzeige - die Karte schreibt Hersteller und Modell untereinander.",
           "min_soc": "Bis hierher wird entladen. Die Restlaufzeit rechnet mit dieser Grenze.",
+          "model": "Nur zur Anzeige, z. B. die Typenbezeichnung vom Aufkleber.",
+          "name": "Name dieses Speichers, z. B. „Akku 48 V Keller“.",
+          "nominal_voltage": "Die Spannungsebene des Speichers - 24 V oder 48 V sind üblich. Nur zur Anzeige.",
           "power_entity": "Lade- und Entladeleistung. Fehlt sie, wird Spannung × Strom gerechnet.",
-          "power_sign": "Wie der Zähler zählt. Falsch gewählt zeigt die Karte den Fluss verkehrt herum.",
+          "power_sign": "Das hier ist die direkte Batterieleistung. Welches Vorzeichen Laden bedeutet, legst du selbst fest: „+ = laden“ ist der Normalfall, manche BMS zählen umgekehrt. Falsch gewählt zeigt die Karte Laden und Entladen vertauscht.",
           "soc_entity": "Der Ladestand in Prozent, meist vom BMS. Ohne ihn bleiben Inhalt und Restlaufzeit leer.",
           "temperature_entity": "Zelltemperatur aus dem BMS.",
           "voltage_entity": "Die Klemmenspannung der Batterie (z. B. 51,8 V bei einem 48-V-System)."
@@ -200,31 +286,57 @@
           "name": "Name",
           "output_current_entity": "Ausgangsstrom (Batterie)",
           "output_voltage_entity": "Ausgangsspannung (Batterie)",
-          "power_entity": "Leistung",
+          "power_entity": "Ladeleistung (Ausgang)",
           "state_entity": "Betriebszustand",
           "system_voltage": "Systemspannung",
-          "temperature_entity": "Temperatur",
+          "temperature_entity": "Temperatur des Ladereglers",
           "yield_entity": "Ertragszähler"
         },
         "data_description": {
           "enabled": "Aus, wenn die Module direkt am Wechselrichter hängen. Dann wird der ganze Block nicht gezeichnet.",
+          "input_current_entity": "Der Strangstrom von den Modulen. Zusammen mit der Eingangsspannung ergibt er die Modulleistung.",
           "input_voltage_entity": "Die Spannung, die von den Modulen kommt - bei einem MPPT oft dreistellig.",
+          "manufacturer": "Nur zur Anzeige - die Karte schreibt Hersteller und Modell untereinander.",
           "max_current": "Nur zur Anzeige, z. B. 85 A beim MPPT 250/85.",
+          "model": "Nur zur Anzeige, z. B. die Typenbezeichnung vom Aufkleber.",
+          "name": "Name dieses Ladereglers, z. B. „MPPT Dach Ost“.",
+          "output_current_entity": "Der Ladestrom Richtung Batterie. Ohne Leistungssensor wird daraus die Ladeleistung gerechnet.",
           "output_voltage_entity": "Die Spannung auf der Batterieseite, also 24 V, 48 V und so weiter.",
           "power_entity": "Die Ladeleistung Richtung Batterie. Fehlt sie, wird sie aus Ausgangsspannung × Ausgangsstrom gerechnet.",
           "state_entity": "Der Betriebszustand als Text, z. B. „Bulk“, „Absorption“, „Float“.",
+          "system_voltage": "Die Spannungsebene der Batterie dahinter - 24 V oder 48 V sind üblich. Steht als Marke im Kasten der Karte.",
           "temperature_entity": "Temperatur des Ladereglers selbst, nicht die der Batterie.",
           "yield_entity": "Zählerstand in kWh, den viele MPPT-Regler mitbringen."
         },
         "description": "Ohne Laderegler gehen die Module direkt an den Wechselrichter - dann den Schalter oben aus lassen.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
         "title": "Laderegler – {plant}"
       },
+      "costs": {
+        "data": {
+          "base_price": "Grundpreis je Monat",
+          "currency": "Währung",
+          "feed_in_price": "Einspeisevergütung",
+          "investment": "Investitionskosten",
+          "price_per_kwh": "Arbeitspreis"
+        },
+        "data_description": {
+          "base_price": "Der monatliche Grundpreis deines Stromvertrags. Er wird anteilig auf Tag, Monat und Jahr verteilt. Leer oder 0, wenn er dich hier nicht interessiert.",
+          "currency": "Das Währungskürzel, z. B. EUR oder CHF. Es wird als Einheit an den Geldsensoren geführt.",
+          "feed_in_price": "Was du je eingespeister Kilowattstunde vergütet bekommst, z. B. 0,08. Leer lassen, wenn du nicht einspeist.",
+          "investment": "Was die Anlage insgesamt gekostet hat. Daraus entstehen Amortisationsfortschritt und die geschätzte Restzeit.",
+          "price_per_kwh": "Was eine Kilowattstunde aus dem Netz kostet, z. B. 0,34. Ohne diesen Preis rechnet die Integration keine Kosten und legt auch keine Geldsensoren an."
+        },
+        "description": "Gerechnet wird aus den Zählerständen, die du unter „Netz und Zähler“ eingetragen hast - nicht aus hochgerechneten Leistungen. Tag, Monat und Jahr laufen ab dem Zeitpunkt mit, an dem du hier einen Preis einträgst; rückwirkend lässt sich nichts berechnen.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
+        "title": "Kosten und Ertrag"
+      },
       "display": {
         "data": {
           "animate": "Flusslinien animieren",
-          "feed_in_price": "Einspeisevergütung",
-          "price_per_kwh": "Arbeitspreis",
           "show_strings": "Verschaltung zeichnen"
+        },
+        "data_description": {
+          "animate": "Die Punkte auf den Leitungen laufen mit der Leistung mit. Aus, wenn das Dashboard auf einem alten Tablet ruckelt.",
+          "show_strings": "Zeichnet die Module einzeln, in Reihe und parallel. Aus ergibt eine schmalere Karte."
         },
         "title": "Darstellung"
       },
@@ -247,14 +359,26 @@
           "meter_model": "Zählermodell",
           "name": "Name",
           "phases": "Phasen",
-          "power_entity": "Gesamtleistung",
+          "power_entity": "Gesamtleistung (alle Phasen)",
           "power_sign": "Vorzeichen der Leistung"
         },
         "data_description": {
+          "export_energy_entity": "Der Einspeisezähler in kWh. Grundlage für den Einspeiseerlös.",
           "export_power_entity": "Gegenstück zur Bezugsleistung - ebenfalls nur bei getrennten Zählern nötig.",
+          "frequency_entity": "Ein Feld genügt: Im Verbundnetz haben alle drei Phasen dieselbe Frequenz - sie sind starr miteinander gekoppelt. Ein Wert je Phase wäre dreimal dieselbe Zahl.",
+          "import_energy_entity": "Der Bezugszähler in kWh. Aus ihm entstehen die Bezugskosten für Tag, Monat und Jahr - ohne ihn bleibt die Kostenrechnung leer.",
           "import_power_entity": "Nur nötig, wenn dein Zähler Bezug und Einspeisung getrennt meldet statt als eine Zahl mit Vorzeichen.",
+          "l1_current_entity": "Strom auf L1 in A. Rein informativ.",
           "l1_power_entity": "Leistung auf L1. Leer lassen, wenn du nur den Summenzähler hast - dann zeichnet die Karte die Phasen nicht einzeln.",
+          "l1_voltage_entity": "Spannung auf L1, um 230 V. Rein informativ.",
+          "l2_current_entity": "Strom auf L2 in A. Rein informativ.",
+          "l2_power_entity": "Leistung auf L2 - wie L1 nur nötig, wenn dein Zähler die Phasen einzeln meldet.",
+          "l2_voltage_entity": "Spannung auf L2, um 230 V. Rein informativ.",
+          "l3_current_entity": "Strom auf L3 in A. Rein informativ.",
+          "l3_power_entity": "Leistung auf L3 - wie L1 nur nötig, wenn dein Zähler die Phasen einzeln meldet.",
+          "l3_voltage_entity": "Spannung auf L3, um 230 V. Rein informativ.",
           "meter_model": "Nur zur Anzeige, z. B. „Shelly Pro 3EM Gen2“.",
+          "name": "Name des Netzanschlusses. Er steht über dem Kasten in der Karte.",
           "phases": "Phasen des Hausanschlusses. In Deutschland fast immer drei - nur ändern, wenn du es sicher anders weißt.",
           "power_entity": "Die Summe über alle Phasen am Hausanschluss. Das ist das wichtigste Feld hier.",
           "power_sign": "Wie der Zähler zählt. Falsch gewählt zeigt die Karte den Fluss verkehrt herum."
@@ -265,12 +389,12 @@
       "house": {
         "data": {
           "calculate": "Hausverbrauch rechnen",
-          "energy_entity": "Energiezähler",
-          "power_entity": "Leistung"
+          "energy_entity": "Verbrauchszähler",
+          "power_entity": "Gemessener Hausverbrauch"
         },
         "data_description": {
           "calculate": "Verbrauch = Wechselrichterleistung + Netzleistung. Ein gemessener Hausverbrauch hat Vorrang.",
-          "energy_entity": "Zählerstand des Hausverbrauchs in kWh, falls vorhanden.",
+          "energy_entity": "Zählerstand des Hausverbrauchs in kWh, falls vorhanden. Er ist der zweite Weg zum Eigenverbrauch, wenn kein Ertragszähler da ist.",
           "power_entity": "Ein gemessener Hausverbrauch, falls vorhanden. Er hat Vorrang vor der Rechnung. Leer lassen ist der Normalfall."
         },
         "title": "Haus und Verbrauch"
@@ -278,6 +402,7 @@
       "init": {
         "description": "Änderungen werden erst übernommen, wenn du im Menü „Speichern und schließen“ wählst.",
         "menu_options": {
+          "costs": "Kosten und Ertrag",
           "display": "Darstellung",
           "grid": "Netz und Zähler",
           "house": "Haus und Verbrauch",
@@ -288,11 +413,11 @@
       },
       "inverter": {
         "data": {
-          "ac_current_entity": "AC-Strom",
-          "ac_voltage_entity": "AC-Spannung",
-          "dc_voltage_entity": "DC-Spannung",
+          "ac_current_entity": "Ausgangsstrom (AC)",
+          "ac_voltage_entity": "Ausgangsspannung (AC)",
+          "dc_voltage_entity": "Eingangsspannung (DC)",
           "enabled": "Vorhanden",
-          "energy_entity": "Energiezähler",
+          "energy_entity": "Ertragszähler (AC)",
           "frequency_entity": "Frequenz",
           "hybrid": "Hybrid-Wechselrichter",
           "manufacturer": "Hersteller",
@@ -300,18 +425,26 @@
           "model": "Modell",
           "name": "Name",
           "phase": "Phase",
-          "power_entity": "Leistung",
+          "power_entity": "Ausgangsleistung (AC)",
           "rated_power_w": "Nennleistung",
-          "temperature_entity": "Temperatur"
+          "temperature_entity": "Temperatur des Wechselrichters"
         },
         "data_description": {
+          "ac_current_entity": "Der abgegebene Strom auf der Netzseite in A.",
           "ac_voltage_entity": "Netzspannung am Ausgang, üblicherweise um 230 V.",
           "dc_voltage_entity": "Die Gleichspannung am Eingang - bei einem Batteriewechselrichter die Batteriespannung.",
           "enabled": "Aus, wenn diese Anlage keinen eigenen Wechselrichter hat.",
+          "energy_entity": "Zählerstand in kWh für das, was dieses Gerät insgesamt abgegeben hat. Die Kostenrechnung nimmt ihn als Erzeugung - nur was der Wechselrichter abgibt, kann ins Netz gehen.",
+          "frequency_entity": "Die Netzfrequenz, die dieses Gerät misst - um 50 Hz.",
           "hybrid": "An, wenn das Gerät auch aus dem Netz laden kann (z. B. Victron MultiPlus).",
+          "manufacturer": "Nur zur Anzeige - die Karte schreibt Hersteller und Modell untereinander.",
+          "mode_entity": "Die Betriebsart als Text, z. B. „Netzparallel“ oder „Inselbetrieb“.",
+          "model": "Nur zur Anzeige, z. B. die Typenbezeichnung vom Aufkleber.",
+          "name": "Name dieses Wechselrichters, z. B. „GTN1000 L3“.",
           "phase": "Auf welcher Phase dieser einphasige Wechselrichter einspeist.",
           "power_entity": "Die abgegebene AC-Leistung - der interne Sensor oder ein Zwischenzähler wie ein Shelly. Aus dieser Zahl entsteht der Hausverbrauch.",
-          "rated_power_w": "Dauerleistung laut Typenschild. Daraus entsteht der Auslastungsbalken."
+          "rated_power_w": "Dauerleistung laut Typenschild. Daraus entsteht der Auslastungsbalken.",
+          "temperature_entity": "Temperatur des Wechselrichters selbst."
         },
         "description": "Ausgelegt für einphasige Wechselrichter im Netzparallelbetrieb.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
         "title": "Wechselrichter – {plant}"
@@ -320,25 +453,29 @@
         "data": {
           "azimuth": "Ausrichtung",
           "count": "Anzahl Module",
-          "current_entity": "Strom",
-          "energy_entity": "Energiezähler",
+          "current_entity": "Strangstrom (DC)",
+          "energy_entity": "Ertragszähler (DC)",
           "manufacturer": "Hersteller",
           "model": "Modell",
           "parallel": "Parallele Strings",
           "peak_wp": "Leistung je Modul",
-          "power_entity": "Leistung",
+          "power_entity": "Modulleistung (DC)",
           "series": "Module in Reihe je String",
           "tilt": "Neigung",
-          "voltage_entity": "Spannung"
+          "voltage_entity": "Strangspannung (DC)"
         },
         "data_description": {
+          "azimuth": "Himmelsrichtung in Grad: 180° Süd, 90° Ost, 270° West. Nur zur Anzeige.",
           "count": "So viele Module hängen an dieser Anlage.",
           "current_entity": "Der Strangstrom (DC) auf der Modulseite. Leer lassen ist in Ordnung.",
           "energy_entity": "Ein Zählerstand in kWh für den Ertrag dieser Module, falls vorhanden. Leer lassen ist in Ordnung.",
+          "manufacturer": "Der Modulhersteller, z. B. „Trina“. Nur zur Anzeige.",
+          "model": "Die Modulbezeichnung, z. B. „Vertex S 405“. Nur zur Anzeige.",
           "parallel": "Vier in Reihe und davon zwei Stränge parallel ergeben acht Module.",
           "peak_wp": "Die Spitzenleistung eines einzelnen Moduls laut Typenschild.",
           "power_entity": "Was die Module gerade liefern - der DC-Sensor des Ladereglers oder des Wechselrichters. Leer: Die Leistung kommt dann ersatzweise vom Laderegler, sonst bleibt das Feld in der Karte leer.",
           "series": "Leer lassen, dann wird eine passende Aufteilung vorgeschlagen.",
+          "tilt": "Dachneigung in Grad: 0° flach, 90° senkrecht. Nur zur Anzeige.",
           "voltage_entity": "Die Spannung des Modulstrangs (DC), also z. B. 148 V bei vier Modulen in Reihe - nicht die Batteriespannung. Leer lassen ist in Ordnung."
         },
         "description": "Aktuelle Auslegung: {peak}\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
@@ -523,11 +660,11 @@
           "name": "Anzahl Module"
         },
         "manufacturer": {
-          "description": "Hersteller",
+          "description": "Nur zur Anzeige - die Karte schreibt Hersteller und Modell untereinander.",
           "name": "Hersteller"
         },
         "model": {
-          "description": "Modell",
+          "description": "Nur zur Anzeige, z. B. die Typenbezeichnung vom Aufkleber.",
           "name": "Modell"
         },
         "parallel": {

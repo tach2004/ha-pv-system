@@ -36,7 +36,8 @@ const M = {
   luecke: 28,       // Abstand zwischen zwei Spalten
   rand: 16,
   trunk: 74,        // x-Versatz des senkrechten Hauptstrangs in der Spalte
-  modulOben: 42,    // Platz über den Modulen für die zwei Kopfzeilen
+  spaltenkopf: 20,  // Zeile über der Spalte für den Namen der Anlage
+  modulOben: 58,    // Platz über den Modulen: zwei Kopfzeilen und der Balken
   modulH: 22,       // Höhe eines gezeichneten Moduls
   modulB: 30,
   modulLuecke: 5,
@@ -50,6 +51,12 @@ const M = {
 // Mehr als das wird nicht einzeln gezeichnet, sonst wird ein String zur Tapete.
 const MAX_REIHE = 10;
 const MAX_PARALLEL = 4;
+
+// Breite der Balken im Modul- und im Wechselrichterkasten. Rechts daneben
+// bleibt Platz für die Prozentzahl.
+const MODULBALKEN = M.spalte - 10 - 24 - 46;
+const BATTERIE_B = 132;   // Breite des Batteriekastens
+const WRBALKEN = M.spalte - 54;
 
 /* --------------------------------------------------------------- Helfer */
 
@@ -85,6 +92,44 @@ function einheit(wert, suffix, stellen = 1, sprache = "de") {
 
 function prozent(wert, sprache) {
   return einheit(wert, "%", 0, sprache);
+}
+
+/** Ein Geldbetrag in der eingestellten Währung. */
+function geld(wert, waehrung, sprache) {
+  const n = zahl(wert);
+  if (n === null) return "–";
+  return `${n.toLocaleString(sprache, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} ${waehrung || "EUR"}`;
+}
+
+/** Ein gespeicherter Zeitstempel als Datum. */
+function datum(wert, sprache) {
+  if (!wert) return "–";
+  const d = new Date(wert);
+  return Number.isNaN(d.getTime()) ? "–" : d.toLocaleDateString(sprache);
+}
+
+/** Eine Zahl ohne Einheit - für Angaben wie "1,59 von 2,56 kWh". */
+function zahlText(wert, stellen, sprache) {
+  const n = zahl(wert);
+  if (n === null) return "–";
+  return n.toLocaleString(sprache, {
+    minimumFractionDigits: stellen,
+    maximumFractionDigits: stellen,
+  });
+}
+
+/** Stunden als Zeitspanne: 1,58 h liest sich als "1 h 35 min" schneller. */
+function dauer(stunden, sprache) {
+  const n = zahl(stunden);
+  if (n === null) return "–";
+  if (n >= 48) return `${Math.round(n / 24).toLocaleString(sprache)} d`;
+  const ganze = Math.floor(n);
+  const minuten = Math.round((n - ganze) * 60);
+  if (ganze === 0) return `${minuten} min`;
+  return minuten ? `${ganze} h ${minuten} min` : `${ganze} h`;
 }
 
 /** Wie stark ein Fluss ist, 0..1 – für Linienstärke und Tempo. */
@@ -218,6 +263,7 @@ class PvSystemCard extends HTMLElement {
       grid: a.grid || {},
       totals: a.totals || {},
       house: a.house || {},
+      costs: a.costs || {},
       display: a.display || {},
     };
   }
@@ -228,6 +274,10 @@ class PvSystemCard extends HTMLElement {
       d.system_id,
       d.display.show_strings,
       d.grid.phases_count,
+      // Die beiden Geldkacheln gibt es nur mit hinterlegtem Preis. Ohne diese
+      // Zeile bliebe die Karte nach dem Eintragen unverändert, bis jemand das
+      // Dashboard neu lädt.
+      d.costs ? d.costs.configured : false,
       d.plants.map((p) => [
         p.id,
         p.name,
@@ -300,7 +350,10 @@ class PvSystemCard extends HTMLElement {
     const stil = document.createElement("style");
     stil.textContent = `
       :host { display: block; }
-      .inhalt { padding: 0 12px 12px; }
+      /* Die Textfarbe einmal für alles: Die Karte hängt sonst an der Farbe,
+         die das Dashboard gerade vererbt - und die ist in einem dunklen Thema
+         eine andere als im hellen. */
+      .inhalt { padding: 0 12px 12px; color: var(--primary-text-color, #212121); }
       .buehne { width: 100%; overflow-x: auto; }
       svg { display: block; width: 100%; height: auto; }
 
@@ -357,6 +410,21 @@ class PvSystemCard extends HTMLElement {
       .f-bezug { stroke: var(--pv-bezug, #e05c4b); }
       .f-haus  { stroke: var(--pv-haus, #9b6ad4); }
 
+      .symbol {
+        fill: none;
+        stroke: var(--secondary-text-color, #727272);
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: .42;
+      }
+
+      .spaltenname {
+        font-size: 12px; font-weight: 700;
+        fill: var(--secondary-text-color, #727272);
+        letter-spacing: .02em;
+      }
+
       .kennzahlen {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
@@ -412,7 +480,13 @@ class PvSystemCard extends HTMLElement {
         color: var(--secondary-text-color, #727272);
       }
       .fuss .punkt { display: inline-flex; align-items: center; gap: 4px; }
-      .fuss .punkt i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+      .fuss .punkt i { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+      .fusskopf { font-weight: 600; }
+      .kennzahl.block { cursor: pointer; }
+      .kennzahl.block:hover, .kennzahl.block.aktiv {
+        outline: 2px solid var(--primary-color, #03a9f4);
+        outline-offset: -2px;
+      }
     `;
     return stil;
   }
@@ -436,6 +510,8 @@ class PvSystemCard extends HTMLElement {
     const modulH = Math.max(64, ...modulHoehen);
 
     let y = M.rand;
+    const ySpaltenkopf = y;
+    y += M.spaltenkopf;
     const yModul = y;
     y += modulH + M.zeileLuecke;
     const yLaderegler = hatLaderegler ? y : null;
@@ -458,7 +534,8 @@ class PvSystemCard extends HTMLElement {
     const hoehe = y;
 
     this._geo = {
-      yModul, yLaderegler, yBatterie, yWr, yBus, yUnten, modulH, phasen, breite, hoehe,
+      ySpaltenkopf, yModul, yLaderegler, yBatterie, yWr, yBus, yUnten,
+      modulH, phasen, breite, hoehe,
     };
 
     const svg = e("svg", {
@@ -509,6 +586,16 @@ class PvSystemCard extends HTMLElement {
     const trunk = x + M.trunk;
     const id = anlage.id;
 
+    /* --- Spaltenkopf: der Name dieser Anlage --------------------------- */
+    bloecke.appendChild(
+      e("text", {
+        class: "spaltenname",
+        x: x + 2,
+        y: g.ySpaltenkopf + 13,
+        text: anlage.name,
+      })
+    );
+
     /* --- Module ------------------------------------------------------- */
     const modulBox = e("g", {
       class: "block",
@@ -526,8 +613,16 @@ class PvSystemCard extends HTMLElement {
         rx: 12,
       })
     );
+    // Im Kasten steht, was dort hängt: Hersteller und Modell der Module. Der
+    // Name der Anlage gehört über die ganze Spalte - er meint ja auch
+    // Laderegler, Batterie und Wechselrichter mit, nicht nur das Dach.
     modulBox.appendChild(
-      e("text", { class: "titel", x: x + 12, y: g.yModul + 16, text: anlage.name })
+      e("text", {
+        class: "titel",
+        x: x + 12,
+        y: g.yModul + 16,
+        text: this._modulTitel(anlage),
+      })
     );
     this._ref(
       modulBox,
@@ -545,6 +640,27 @@ class PvSystemCard extends HTMLElement {
       modulBox,
       `${id}:modules:aufbau`,
       e("text", { class: "mini", x: x + 12, y: g.yModul + 31 })
+    );
+    // Auslastungsbalken: aktuelle Leistung gegen die Spitzenleistung. Bei
+    // 405 W von 810 Wp ist er halb voll, mehr als voll wird er nie.
+    modulBox.appendChild(
+      e("rect", {
+        x: x + 12, y: g.yModul + 38, width: MODULBALKEN, height: 6, rx: 3,
+        fill: "var(--divider-color, #cfd8dc)",
+      })
+    );
+    this._ref(
+      modulBox,
+      `${id}:modules:balken`,
+      e("rect", {
+        x: x + 12, y: g.yModul + 38, width: 0, height: 6, rx: 3,
+        fill: "var(--pv-solar, #f5a623)",
+      })
+    );
+    this._ref(
+      modulBox,
+      `${id}:modules:quote`,
+      e("text", { class: "mini rechts", x: x + M.spalte - 22, y: g.yModul + 44 })
     );
     if (zeigeStrings) {
       const reihen = Math.max(1, Math.min(MAX_PARALLEL, anlage.modules.parallel || 1));
@@ -586,6 +702,18 @@ class PvSystemCard extends HTMLElement {
           `${id}:charger:ein`,
           e("text", { class: "mini", x: x + 22, y: g.yLaderegler + 32 })
         );
+        // Betriebszustand (Bulk, Absorption, Float ...) rechts neben der
+        // Eingangsspannung. Die Zeile ist dort frei, und der Zustand ist die
+        // Angabe, für die man sonst die Detailtabelle öffnen müsste.
+        this._ref(
+          box,
+          `${id}:charger:zustand`,
+          e("text", {
+            class: "klein rechts",
+            x: x + M.spalte - 32,
+            y: g.yLaderegler + 32,
+          })
+        );
         this._ref(
           box,
           `${id}:charger:aus`,
@@ -614,20 +742,34 @@ class PvSystemCard extends HTMLElement {
     /* --- Batterie ------------------------------------------------------ */
     if (g.yBatterie !== null) {
       const mitte = g.yBatterie + M.kasten / 2;
-      this._leitung(leitungen, trunk, oben, trunk, g.yBatterie + M.kasten, `${id}:dc2`, "f-solar");
       if (anlage.battery.enabled) {
-        const bx = x + M.spalte - 116;
+        // Der Strang wird an der Abzweigung getrennt. Oben fließt, was vom
+        // Dach kommt; unten nur das, was der Wechselrichter tatsächlich
+        // abnimmt. Vorher lief die Linie beim Laden bis zum Wechselrichter
+        // durch, obwohl der aus war.
+        this._leitung(leitungen, trunk, oben, trunk, mitte, `${id}:dc2`, "f-solar");
+        this._leitung(
+          leitungen, trunk, mitte, trunk, g.yBatterie + M.kasten, `${id}:dc2b`, "f-solar"
+        );
+        const bx = x + M.spalte - BATTERIE_B - 10;
         // Waagerechter Abgang zum Speicher – er fließt in beide Richtungen.
         this._leitung(leitungen, trunk, mitte, bx, mitte, `${id}:akku`, "f-akku");
-        const box = this._kasten(bloecke, `battery:${id}`, bx, g.yBatterie, 106, M.kasten);
+        const box = this._kasten(
+          bloecke, `battery:${id}`, bx, g.yBatterie, BATTERIE_B, M.kasten
+        );
+        this._pole(box, bx, g.yBatterie);
         box.appendChild(
           e("text", { class: "titel", x: bx + 10, y: g.yBatterie + 15, text: "Batterie" })
         );
         this._ref(
           box,
           `${id}:battery:soc`,
-          e("text", { class: "wert rechts", x: bx + 96, y: g.yBatterie + 16 })
+          e("text", {
+            class: "wert rechts", x: bx + BATTERIE_B - 10, y: g.yBatterie + 16,
+          })
         );
+        // Zeile 2: die direkte Batterieleistung mit Vorzeichen, rechts
+        // daneben die Rest- oder die Ladezeit.
         this._ref(
           box,
           `${id}:battery:power`,
@@ -635,13 +777,28 @@ class PvSystemCard extends HTMLElement {
         );
         this._ref(
           box,
+          `${id}:battery:zeit`,
+          e("text", {
+            class: "mini rechts", x: bx + BATTERIE_B - 10, y: g.yBatterie + 31,
+          })
+        );
+        // Zeile 3: wie viel gerade drin ist, gemessen an dem, was hineinpasst.
+        this._ref(
+          box,
           `${id}:battery:info`,
           e("text", { class: "mini", x: bx + 10, y: g.yBatterie + 44 })
+        );
+        this._ref(
+          box,
+          `${id}:battery:temp`,
+          e("text", {
+            class: "mini rechts", x: bx + BATTERIE_B - 10, y: g.yBatterie + 44,
+          })
         );
         // Füllstandsbalken – die Zahl allein liest sich auf einem Handy schlecht.
         box.appendChild(
           e("rect", {
-            x: bx + 10, y: g.yBatterie + 48, width: 86, height: 5, rx: 2.5,
+            x: bx + 10, y: g.yBatterie + 48, width: BATTERIE_B - 20, height: 5, rx: 2.5,
             fill: "var(--divider-color, #cfd8dc)",
           })
         );
@@ -652,6 +809,10 @@ class PvSystemCard extends HTMLElement {
             x: bx + 10, y: g.yBatterie + 48, width: 0, height: 5, rx: 2.5,
             fill: "var(--pv-akku, #3ec26a)",
           })
+        );
+      } else {
+        this._leitung(
+          leitungen, trunk, oben, trunk, g.yBatterie + M.kasten, `${id}:dc2`, "f-solar"
         );
       }
       oben = g.yBatterie + M.kasten;
@@ -724,6 +885,32 @@ class PvSystemCard extends HTMLElement {
     leitungen.appendChild(
       e("circle", { cx: trunk, cy: yPhase, r: 3.4, fill: "var(--pv-netz, #4a8fd4)" })
     );
+  }
+
+  /**
+   * Die zwei Pole oben auf dem Batteriekasten.
+   *
+   * Reine Formsache, aber sie machen aus einem Rechteck auf einen Blick eine
+   * Batterie - und sagen nebenbei, wo Plus und Minus sitzen.
+   */
+  _pole(gruppe, bx, y) {
+    const pole = [
+      { x: bx + 18, zeichen: "+" },
+      { x: bx + BATTERIE_B - 32, zeichen: "−" },
+    ];
+    for (const { x, zeichen } of pole) {
+      gruppe.appendChild(
+        e("rect", {
+          x, y: y - 5, width: 14, height: 6, rx: 2,
+          fill: "var(--divider-color, #cfd8dc)",
+        })
+      );
+      gruppe.appendChild(
+        e("text", {
+          class: "mini mittig", x: x + 7, y: y - 8, text: zeichen,
+        })
+      );
+    }
   }
 
   /** Die Module als Bild, mit Reihen- und Parallelschaltung. */
@@ -846,28 +1033,49 @@ class PvSystemCard extends HTMLElement {
     const netzX = startX;
     const hausX = breite - M.rand - 6 - 150;
 
-    // Zähler und Haus hängen an allen Phasen. Die Steigleitung läuft deshalb
-    // von der obersten Schiene nach unten und bekommt an jeder Kreuzung einen
-    // Knotenpunkt - sonst sähe es aus, als wäre nur L1 angeschlossen.
-    this._leitung(
-      leitungen, netzX + 34, g.yBus, netzX + 34, g.yUnten, "netz", "f-netz"
-    );
-    this._leitung(
-      leitungen, hausX + 40, g.yBus, hausX + 40, g.yUnten, "haus", "f-haus"
-    );
+    // Jede Phase bekommt ihre eigene Leitung nach unten. Eine einzige
+    // Steigleitung mit Knotenpunkten an den Kreuzungen sah aus, als wären die
+    // drei Phasen gebrückt - genau das sind sie nicht.
+    //
+    // Am Zähler laufen sie senkrecht nebeneinander in den Kasten; jede führt
+    // ihren eigenen Fluss, sobald der Zähler die Phasen einzeln meldet.
     for (let i = 0; i < g.phasen; i++) {
       const y = g.yBus + i * M.busAbstand;
-      for (const x of [netzX + 34, hausX + 40]) {
-        leitungen.appendChild(
-          e("circle", { cx: x, cy: y, r: 3.4, fill: "var(--divider-color, #b0bec5)" })
-        );
-      }
+      const x = netzX + 30 + i * 16;
+      this._leitung(leitungen, x, y, x, g.yUnten, `netz:${i}`, "f-netz");
+      leitungen.appendChild(
+        e("circle", { cx: x, cy: y, r: 3.4, fill: "var(--pv-netz, #4a8fd4)" })
+      );
     }
+
+    // Beim Haus laufen die drei Phasen auf einer Sammelschiene zusammen und
+    // gehen von dort als eine Leitung hinein - so herum liest sich sofort,
+    // dass der Hausverbrauch die Summe über alle drei ist.
+    const sammel = g.yUnten - 14;
+    for (let i = 0; i < g.phasen; i++) {
+      const y = g.yBus + i * M.busAbstand;
+      const x = hausX + 30 + i * 16;
+      this._leitung(leitungen, x, y, x, sammel, `haus:${i}`, "f-haus");
+      leitungen.appendChild(
+        e("circle", { cx: x, cy: y, r: 3.4, fill: "var(--pv-haus, #9b6ad4)" })
+      );
+    }
+    const mitteX = hausX + 30 + ((g.phasen - 1) * 16) / 2;
+    if (g.phasen > 1) {
+      leitungen.appendChild(
+        e("path", {
+          class: "leitung",
+          d: `M ${hausX + 30} ${sammel} H ${hausX + 30 + (g.phasen - 1) * 16}`,
+        })
+      );
+    }
+    this._leitung(leitungen, mitteX, sammel, mitteX, g.yUnten, "haus", "f-haus");
 
     const netz = this._kasten(bloecke, "grid:", netzX, g.yUnten, 150, M.unten - 10);
     netz.appendChild(
       e("text", { class: "titel", x: netzX + 12, y: g.yUnten + 17, text: "Netz" })
     );
+    netz.appendChild(this._mast(netzX + 112, g.yUnten + 12));
     this._ref(
       netz, "grid:power",
       e("text", { class: "wert", x: netzX + 12, y: g.yUnten + 37 })
@@ -885,6 +1093,7 @@ class PvSystemCard extends HTMLElement {
     haus.appendChild(
       e("text", { class: "titel", x: hausX + 12, y: g.yUnten + 17, text: "Haus" })
     );
+    haus.appendChild(this._hausSymbol(hausX + 112, g.yUnten + 16));
     this._ref(
       haus, "house:power",
       e("text", { class: "wert", x: hausX + 12, y: g.yUnten + 37 })
@@ -897,6 +1106,41 @@ class PvSystemCard extends HTMLElement {
       haus, "house:quelle",
       e("text", { class: "mini", x: hausX + 12, y: g.yUnten + 62 })
     );
+  }
+
+  /* -------------------------------------------------------------- Symbole */
+
+  /**
+   * Ein Strommast, gezeichnet statt geladen.
+   *
+   * Ein Symbol aus einer Schriftart wäre kürzer, hinge aber davon ab, dass die
+   * Schrift da ist. Vier Striche tun es auch und skalieren mit dem SVG.
+   */
+  _mast(x, y) {
+    const g = e("g", { class: "symbol" });
+    for (const d of [
+      `M ${x + 15} ${y + 4} V ${y + 38}`,
+      `M ${x + 5} ${y + 38} L ${x + 15} ${y + 4} L ${x + 25} ${y + 38}`,
+      `M ${x + 3} ${y + 14} H ${x + 27}`,
+      `M ${x + 1} ${y + 24} H ${x + 29}`,
+    ]) {
+      g.appendChild(e("path", { d }));
+    }
+    return g;
+  }
+
+  /** Ein Haus: Dach und Wände, mehr braucht es nicht. */
+  _hausSymbol(x, y) {
+    const g = e("g", { class: "symbol" });
+    g.appendChild(
+      e("path", { d: `M ${x + 1} ${y + 15} L ${x + 15} ${y + 3} L ${x + 29} ${y + 15}` })
+    );
+    g.appendChild(
+      e("path", {
+        d: `M ${x + 5} ${y + 14} V ${y + 30} H ${x + 25} V ${y + 14}`,
+      })
+    );
+    return g;
   }
 
   /* ----------------------------------------------------------- Bausteine */
@@ -980,8 +1224,21 @@ class PvSystemCard extends HTMLElement {
       ["autarkie", "Autarkie"],
       ["peak", "Installiert"],
     ];
+    // Die beiden Geldkacheln nur, wenn ein Preis hinterlegt ist - sonst
+    // stünden dort zwei Striche ohne Aussicht, je etwas anzuzeigen.
+    const kosten = (this._daten && this._daten.costs) || {};
+    if (kosten.configured) {
+      felder.push(["ertrag", "Ertrag heute"], ["kosten", "Kosten heute"]);
+    }
     for (const [schluessel, beschriftung] of felder) {
-      const z = e("div", { class: "kennzahl" });
+      const geldkachel = schluessel === "ertrag" || schluessel === "kosten";
+      const z = e("div", {
+        class: geldkachel ? "kennzahl block" : "kennzahl",
+        // Über die Geldkacheln geht es in die vollständige Kostenübersicht.
+        "data-ziel": geldkachel ? "costs:" : null,
+        tabindex: geldkachel ? "0" : null,
+        role: geldkachel ? "button" : null,
+      });
       z.appendChild(e("div", { class: "k", text: beschriftung }));
       const wert = e("div", { class: "v", text: "–" });
       z.appendChild(wert);
@@ -991,19 +1248,30 @@ class PvSystemCard extends HTMLElement {
     return box;
   }
 
+  /**
+   * Die Zeile unter der Karte erklärt die Farben der Flusslinien.
+   *
+   * Ohne die Überschrift las sie sich wie eine Liste von Messwerten, deren
+   * Zahlen fehlen - deshalb steht jetzt davor, worum es geht, und jeder
+   * Eintrag trägt seine Erklärung als Tooltip.
+   */
   _fuss() {
     const box = e("div", { class: "fuss" });
+    box.appendChild(e("span", { class: "fusskopf", text: "Flusslinien:" }));
     const punkte = [
-      ["var(--pv-solar, #f5a623)", "Erzeugung"],
-      ["var(--pv-akku, #3ec26a)", "Speicher"],
-      ["var(--pv-netz, #4a8fd4)", "Einspeisung"],
-      ["var(--pv-bezug, #e05c4b)", "Netzbezug"],
-      ["var(--pv-haus, #9b6ad4)", "Verbrauch"],
+      ["var(--pv-solar, #f5a623)", "Erzeugung", "Gleichstrom vom Dach über Laderegler und Batterie bis zum Wechselrichter"],
+      ["var(--pv-akku, #3ec26a)", "Speicher", "Laden und Entladen der Batterie"],
+      ["var(--pv-netz, #4a8fd4)", "Einspeisung", "Überschuss, der ins Netz geht"],
+      ["var(--pv-bezug, #e05c4b)", "Netzbezug", "Was aus dem Netz geholt wird"],
+      ["var(--pv-haus, #9b6ad4)", "Verbrauch", "Was im Haus bleibt"],
     ];
-    for (const [farbe, name] of punkte) {
+    for (const [farbe, name, erklaerung] of punkte) {
       const p = e("span", { class: "punkt" });
+      p.title = erklaerung;
       const strich = e("i");
-      strich.style.background = farbe;
+      // Gestrichelt wie die Linien im Bild - ein durchgezogener Balken sah aus
+      // wie eine Farbprobe, nicht wie eine Leitung.
+      strich.style.background = `repeating-linear-gradient(90deg, ${farbe} 0 5px, transparent 5px 8px)`;
       p.appendChild(strich);
       p.appendChild(e("span", { text: name }));
       box.appendChild(p);
@@ -1029,45 +1297,75 @@ class PvSystemCard extends HTMLElement {
         m.peak_total ? `max ${watt(m.peak_total, l)}` : "–"
       );
       this._setzen(`${id}:modules:aufbau`, this._aufbauText(m));
+      const quote = Math.max(0, Math.min(100, zahl(m.utilisation) || 0));
+      this._attr(`${id}:modules:balken`, "width", (MODULBALKEN * quote) / 100);
+      this._setzen(
+        `${id}:modules:quote`,
+        m.utilisation === null || m.utilisation === undefined
+          ? ""
+          : prozent(m.utilisation, l)
+      );
       this._fluss(`${id}:dc1`, m.power, bezug);
       this._fluss(`${id}:dc1b`, m.power, bezug);
 
       if (anlage.charger.enabled) {
         const c = anlage.charger;
         this._setzen(`${id}:charger:power`, watt(c.power, l));
+        // Ein- und Ausgangsseite je auf einer Zeile, mit Spannung UND Strom.
+        // Was das Gerät nicht meldet, rechnet der Rechenkern aus den beiden
+        // anderen Größen - deshalb steht hier meist alles.
         this._setzen(
           `${id}:charger:ein`,
-          `PV ${einheit(c.input_voltage, "V", 1, l)}`
+          `PV ${einheit(c.input_voltage, "V", 1, l)}${
+            c.input_current !== null && c.input_current !== undefined
+              ? ` · ${einheit(c.input_current, "A", 1, l)}`
+              : ""
+          }`
         );
         this._setzen(
           `${id}:charger:aus`,
-          `Batt ${einheit(c.output_voltage, "V", 2, l)}`
+          `Batt ${einheit(c.output_voltage, "V", 2, l)}${
+            c.output_current !== null && c.output_current !== undefined
+              ? ` · ${einheit(c.output_current, "A", 1, l)}`
+              : ""
+          }`
         );
         this._setzen(
           `${id}:charger:system`,
           c.system_voltage === "hv" ? "HV" : `${c.system_voltage} V`
         );
+        this._setzen(`${id}:charger:zustand`, c.state || "");
       }
 
       if (anlage.battery.enabled) {
         const b = anlage.battery;
         this._setzen(`${id}:battery:soc`, prozent(b.soc, l));
-        this._setzen(`${id}:battery:power`, this._akkuText(b, l));
+        this._setzen(`${id}:battery:power`, this._akkuText(b, l, true));
+        this._setzen(`${id}:battery:zeit`, this._akkuZeit(b, l));
+        // Was drin ist, gemessen an dem, was hineinpasst.
         this._setzen(
           `${id}:battery:info`,
-          `${einheit(b.capacity, "kWh", 2, l)}${
-            b.temperature !== null && b.temperature !== undefined
-              ? ` · ${einheit(b.temperature, "°C", 1, l)}`
-              : ""
-          }`
+          b.energy !== null && b.energy !== undefined
+            ? `${zahlText(b.energy, 2, l)} von ${einheit(b.capacity, "kWh", 2, l)}`
+            : einheit(b.capacity, "kWh", 2, l)
+        );
+        this._setzen(
+          `${id}:battery:temp`,
+          b.temperature !== null && b.temperature !== undefined
+            ? einheit(b.temperature, "°C", 1, l)
+            : ""
         );
         const anteil = Math.max(0, Math.min(100, zahl(b.soc) || 0));
-        this._attr(`${id}:battery:balken`, "width", (86 * anteil) / 100);
+        this._attr(
+          `${id}:battery:balken`, "width", ((BATTERIE_B - 20) * anteil) / 100
+        );
         // Laden fließt zum Speicher, Entladen von ihm weg.
         this._fluss(`${id}:akku`, b.power, 3000, (zahl(b.power) || 0) < 0);
       }
 
       this._fluss(`${id}:dc2`, m.power, bezug);
+      // Unterhalb der Abzweigung zählt nur, was der Wechselrichter zieht.
+      this._fluss(`${id}:dc2b`, anlage.inverter.power, bezug);
       this._fluss(`${id}:dc3`, anlage.inverter.power, bezug);
 
       if (anlage.inverter.enabled) {
@@ -1078,7 +1376,7 @@ class PvSystemCard extends HTMLElement {
           [w.manufacturer, w.model || w.name].filter(Boolean).join(" ")
         );
         const last = Math.max(0, Math.min(100, zahl(w.load) || 0));
-        this._attr(`${id}:inverter:balken`, "width", ((M.spalte - 54) * last) / 100);
+        this._attr(`${id}:inverter:balken`, "width", (WRBALKEN * last) / 100);
         this._setzen(
           `${id}:inverter:last`,
           !w.rated_power
@@ -1095,8 +1393,15 @@ class PvSystemCard extends HTMLElement {
     // Erzeugung je Phase
     const phasen = (d.grid && d.grid.phases) || {};
     ["l1", "l2", "l3"].forEach((p, i) => {
-      const wert = phasen[p] && phasen[p].pv_power;
-      this._setzen(`phase:${i}`, wert ? `↑ ${watt(wert, l)}` : "");
+      const wert = zahl(phasen[p] && phasen[p].pv_power);
+      // Ein Wechselrichter im Standby meldet ein paar Watt in die andere
+      // Richtung. Ein Aufwärtspfeil davor wäre schlicht falsch.
+      this._setzen(
+        `phase:${i}`,
+        wert === null || Math.abs(wert) < 10
+          ? ""
+          : `${wert > 0 ? "↑" : "↓"} ${watt(Math.abs(wert), l)}`
+      );
     });
 
     // Netz: Vorzeichen entscheidet über Farbe und Richtung.
@@ -1114,12 +1419,30 @@ class PvSystemCard extends HTMLElement {
         : "ausgeglichen"
     );
     this._setzen("grid:zaehler", d.grid.meter_model || "");
-    const netzFluss = this._flows.get("netz");
-    if (netzFluss) {
-      netzFluss.classList.toggle("f-bezug", bezugAktiv);
-      netzFluss.classList.toggle("f-netz", !bezugAktiv);
+
+    // Richtung: Die Leitungen sind von der Schiene nach unten zum Kasten
+    // gezeichnet. Einspeisung läuft also vorwärts - in den Kasten hinein, zum
+    // Netz. Bezug läuft rückwärts, vom Netz herauf ins Haus. Vorher lief
+    // beides nach unten, und der Bezug zeigte in die falsche Richtung.
+    for (let i = 0; i < this._geo.phasen; i++) {
+      const phase = phasen[["l1", "l2", "l3"][i]] || {};
+      // Je Phase die eigene Leistung, sonst der Gesamtwert gleichmäßig
+      // verteilt - sonst stünden zwei der drei Leitungen still.
+      const wert =
+        phase.power !== null && phase.power !== undefined
+          ? zahl(phase.power)
+          : netzleistung === null
+          ? null
+          : netzleistung / this._geo.phasen;
+      const bezugHier = (wert || 0) > 0;
+      const strich = this._flows.get(`netz:${i}`);
+      if (strich) {
+        strich.classList.toggle("f-bezug", bezugHier);
+        strich.classList.toggle("f-netz", !bezugHier);
+      }
+      this._fluss(`netz:${i}`, wert, 5000, bezugHier);
+      this._fluss(`haus:${i}`, (zahl(d.house.house_power) || 0) / this._geo.phasen, 2000);
     }
-    this._fluss("netz", netzleistung, 5000, !bezugAktiv);
 
     // Haus
     this._setzen("house:power", watt(d.house.house_power, l));
@@ -1151,7 +1474,7 @@ class PvSystemCard extends HTMLElement {
         ? `${prozent(t.battery_soc, l)}${
             akkuP === null || Math.abs(akkuP) <= 10
               ? ""
-              : ` · ${akkuP > 0 ? "lädt" : "entlädt"} ${watt(Math.abs(akkuP), l)}`
+              : ` · ${akkuP > 0 ? "+" : "−"}${watt(Math.abs(akkuP), l)}`
           }`
         : "–"
     );
@@ -1166,7 +1489,20 @@ class PvSystemCard extends HTMLElement {
         : "–"
     );
 
+    const k = d.costs || {};
+    if (k.configured) {
+      const heute = (k.periods && k.periods.day) || {};
+      this._setzen("kpi:ertrag", geld(heute.yield, k.currency, l));
+      this._setzen("kpi:kosten", geld(heute.cost, k.currency, l));
+    }
+
     this._detailWerte();
+  }
+
+  /** Was im Modulkasten oben links steht. */
+  _modulTitel(anlage) {
+    const m = anlage.modules;
+    return [m.manufacturer, m.model].filter(Boolean).join(" ") || "Module";
   }
 
   _aufbauText(m) {
@@ -1180,12 +1516,35 @@ class PvSystemCard extends HTMLElement {
     return teile.join(" · ");
   }
 
-  _akkuText(b, l) {
+  /**
+   * Die direkte Batterieleistung mit Vorzeichen.
+   *
+   * Plus heißt hinein, Minus heraus - und zwar unabhängig davon, wie der
+   * eigene Sensor zählt: Welches Vorzeichen Laden bedeutet, steht in der
+   * Konfiguration, und der Rechenkern dreht es vorher zurecht.
+   */
+  _akkuText(b, l, kurz = false) {
     const p = zahl(b.power);
     if (p === null) return "–";
-    if (p > 10) return `lädt ${watt(p, l)}`;
-    if (p < -10) return `gibt ab ${watt(Math.abs(p), l)}`;
-    return "im Ruhezustand";
+    if (p > 10) return kurz ? `+${watt(p, l)}` : `+${watt(p, l)} lädt`;
+    if (p < -10) {
+      const wert = watt(Math.abs(p), l);
+      return kurz ? `−${wert}` : `−${wert} gibt ab`;
+    }
+    return kurz ? "Ruhe" : "im Ruhezustand";
+  }
+
+  /**
+   * Restlaufzeit beim Entladen, Ladezeit beim Laden - je nachdem.
+   *
+   * Im Kasten bleibt nur eine Zeile neben der Leistung; dort steht die Zeit
+   * deshalb in Zehntelstunden. Auf die Minute genau steht sie in der
+   * Detailtabelle.
+   */
+  _akkuZeit(b, l) {
+    if (b.time_to_full) return `voll in ${einheit(b.time_to_full, "h", 1, l)}`;
+    if (b.runtime) return `noch ${einheit(b.runtime, "h", 1, l)}`;
+    return "";
   }
 
   /* -------------------------------------------------------------- Details */
@@ -1260,6 +1619,7 @@ class PvSystemCard extends HTMLElement {
       inverter: "Wechselrichter",
       grid: "Netzanschluss",
       house: "Hausverbrauch",
+      costs: "Kosten und Ertrag",
     };
     const basis = namen[art] || art;
     return anlage ? `${basis} – ${anlage.name}` : basis;
@@ -1315,7 +1675,8 @@ class PvSystemCard extends HTMLElement {
         ["Leistung", this._akkuText(b, l), b.entities.power],
         ["Inhalt", einheit(b.energy, "kWh", 2, l)],
         ["Kapazität", einheit(b.capacity, "kWh", 2, l)],
-        ["Restlaufzeit", b.runtime ? einheit(b.runtime, "h", 1, l) : "–"],
+        ["Restlaufzeit", b.runtime ? dauer(b.runtime, l) : "–"],
+        ["Voll in", b.time_to_full ? dauer(b.time_to_full, l) : "–"],
         ["Spannung", einheit(b.voltage, "V", 2, l), b.entities.voltage],
         ["Strom", einheit(b.current, "A", 2, l), b.entities.current],
         ["Temperatur", einheit(b.temperature, "°C", 1, l), b.entities.temperature],
@@ -1376,8 +1737,9 @@ class PvSystemCard extends HTMLElement {
       const h = this._daten.house;
       const t = this._daten.totals;
       zeilen = [
-        ["Verbrauch", watt(h.house_power, l)],
+        ["Verbrauch", watt(h.house_power, l), h.entities.power],
         ["Ermittelt", h.house_source === "sensor" ? "gemessen" : "gerechnet"],
+        ["Energiezähler", einheit(h.house_energy, "kWh", 2, l), h.entities.energy],
         ["Autarkie", prozent(h.self_sufficiency, l)],
         ["Eigenverbrauch", prozent(h.self_consumption, l)],
         ["Erzeugung AC", watt(t.inverter_power, l)],
@@ -1385,6 +1747,8 @@ class PvSystemCard extends HTMLElement {
         ["Module gesamt", String(t.module_count || 0)],
         ["Anlagen", String(t.plant_count || 0)],
       ];
+    } else if (art === "costs") {
+      zeilen = this._kostenZeilen(l);
     }
 
     const box = this._detailZeilen;
@@ -1398,6 +1762,64 @@ class PvSystemCard extends HTMLElement {
       box.appendChild(k);
       box.appendChild(e("div", { class: "v", text: wert }));
     }
+  }
+
+  /**
+   * Die Kostenübersicht als Tabelle.
+   *
+   * Gerechnet wird aus den Zählerständen: Der Stand zu Beginn des Tages, des
+   * Monats und des Jahres ist gemerkt, die Differenz mal Preis ergibt den
+   * Betrag. Deshalb stehen hier am ersten Tag kleine Zahlen - rückwirkend
+   * lässt sich nichts ausrechnen, was vorher niemand gezählt hat.
+   */
+  _kostenZeilen(l) {
+    const k = this._daten.costs || {};
+    const w = k.currency;
+    const zeit = k.periods || {};
+    const zeilen = [
+      ["Arbeitspreis", k.price === null ? "–" : `${einheit(k.price, "", 3, l)}${w}/kWh`],
+      [
+        "Einspeisevergütung",
+        k.feed_in === null ? "–" : `${einheit(k.feed_in, "", 3, l)}${w}/kWh`,
+      ],
+      ["Netzkosten jetzt", k.cost_rate === null ? "–" : `${einheit(k.cost_rate, "", 3, l)}${w}/h`],
+      ["Ertrag jetzt", k.yield_rate === null ? "–" : `${einheit(k.yield_rate, "", 3, l)}${w}/h`],
+    ];
+
+    const zeitraeume = [
+      ["day", "heute"],
+      ["month", "Monat"],
+      ["year", "Jahr"],
+    ];
+    for (const [name, wort] of zeitraeume) {
+      const z = zeit[name] || {};
+      zeilen.push(
+        [`Bezug ${wort}`, `${einheit(z.import_kwh, "kWh", 2, l)} · ${geld(z.cost, w, l)}`],
+        [
+          `Einspeisung ${wort}`,
+          `${einheit(z.export_kwh, "kWh", 2, l)} · ${geld(z.revenue, w, l)}`,
+        ],
+        [`Ersparnis ${wort}`, geld(z.savings, w, l)],
+        [`Ertrag ${wort}`, geld(z.yield, w, l)],
+        [`Bilanz ${wort}`, geld(z.balance, w, l)]
+      );
+    }
+
+    const gesamt = zeit.total || {};
+    zeilen.push(
+      ["Ertrag gesamt", geld(gesamt.yield, w, l)],
+      ["Bilanz gesamt", geld(gesamt.balance, w, l)],
+      ["Investition", k.investment === null ? "–" : geld(k.investment, w, l)],
+      ["Amortisation", einheit(k.payback_progress, "%", 1, l)],
+      [
+        "Noch",
+        k.payback_years === null || k.payback_years === undefined
+          ? "–"
+          : `${einheit(k.payback_years, "", 1, l)}Jahre`,
+      ],
+      ["Gezählt seit", datum(gesamt.start, l)]
+    );
+    return zeilen;
   }
 
   _mehrInfo(entityId) {

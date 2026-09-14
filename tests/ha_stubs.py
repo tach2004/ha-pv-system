@@ -17,6 +17,7 @@ import importlib
 import sys
 import types
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -144,6 +145,51 @@ class DataUpdateCoordinator:
         return cls
 
 
+class Store:
+    """Ein Speicher, der nur im Arbeitsspeicher lebt.
+
+    Für die Rechnung genügt das: Geprüft wird, ob die Periodenmarken richtig
+    gesetzt und fortgeschrieben werden - nicht, ob Home Assistant Dateien
+    schreiben kann.
+    """
+
+    def __init__(self, hass, version, schluessel) -> None:
+        self.schluessel = schluessel
+        self.inhalt: Any = None
+
+    async def async_load(self) -> Any:
+        return self.inhalt
+
+    async def async_save(self, daten) -> None:
+        self.inhalt = daten
+
+    def async_delay_save(self, daten_funktion, verzug) -> None:
+        self.inhalt = daten_funktion()
+
+
+class _DatumZeit:
+    """Die Handvoll Funktionen aus homeassistant.util.dt, die gebraucht wird."""
+
+    @staticmethod
+    def utcnow() -> datetime:
+        return datetime.now(timezone.utc)
+
+    @staticmethod
+    def as_local(wert: datetime) -> datetime:
+        return wert.astimezone()
+
+    @staticmethod
+    def parse_datetime(wert: str) -> datetime | None:
+        try:
+            return datetime.fromisoformat(wert)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def utc_from_timestamp(wert: float) -> datetime:
+        return datetime.fromtimestamp(wert, timezone.utc)
+
+
 def installieren() -> None:
     """Die Stubs unter den echten Modulnamen in sys.modules hängen."""
     if "homeassistant" in sys.modules:
@@ -187,6 +233,13 @@ def installieren() -> None:
         "homeassistant.helpers.update_coordinator",
         DataUpdateCoordinator=DataUpdateCoordinator,
     )
+    modul("homeassistant.helpers.storage", Store=Store)
+    modul("homeassistant.util")
+    modul("homeassistant.util.dt", **{
+        name: getattr(_DatumZeit, name)
+        for name in ("utcnow", "as_local", "parse_datetime", "utc_from_timestamp")
+    })
+    sys.modules["homeassistant.util"].dt = sys.modules["homeassistant.util.dt"]
 
 
 PAKET = "pv_system_test"

@@ -31,6 +31,7 @@ from .const import (
     CHEMISTRIES,
     CONF_ANIMATE,
     CONF_AZIMUTH,
+    CONF_BASE_PRICE,
     CONF_BATTERY,
     CONF_BATTERY_CHARGED,
     CONF_BATTERY_CURRENT,
@@ -60,6 +61,8 @@ from .const import (
     CONF_CHARGER_TEMPERATURE,
     CONF_CHARGER_YIELD,
     CONF_CHEMISTRY,
+    CONF_COSTS,
+    CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
     CONF_DISPLAY,
     CONF_ENABLED,
@@ -90,6 +93,7 @@ from .const import (
     CONF_INVERTER_NAME,
     CONF_INVERTER_POWER,
     CONF_INVERTER_TEMPERATURE,
+    CONF_INVESTMENT,
     CONF_METER_MODEL,
     CONF_MODULE_COUNT,
     CONF_MODULE_MANUFACTURER,
@@ -126,6 +130,7 @@ from .topology import (
     batterie_normalisieren,
     darstellung_normalisieren,
     haus_normalisieren,
+    kosten_normalisieren,
     laderegler_normalisieren,
     module_normalisieren,
     netz_normalisieren,
@@ -332,8 +337,24 @@ def _felder_darstellung() -> dict[Any, Any]:
     return {
         vol.Optional(CONF_ANIMATE): bool,
         vol.Optional(CONF_SHOW_STRINGS): bool,
-        vol.Optional(CONF_CURRENCY_PRICE): _zahl(0, 10, "any", "EUR/kWh"),
-        vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, "any", "EUR/kWh"),
+    }
+
+
+def _felder_kosten() -> dict[Any, Any]:
+    """Preise, Grundgebuehr und Investition.
+
+    Alles darf leer bleiben: Ohne Arbeitspreis rechnet die Integration keine
+    Kosten und legt auch keine Geldsensoren an.
+    """
+    # Bewusst ohne Einheit an den Feldern: Die Waehrung ist einstellbar, ein
+    # fest eingetragenes "EUR" waere fuer jede andere schlicht falsch. Was
+    # gemeint ist, steht im Hinweis unter dem Feld.
+    return {
+        vol.Optional(CONF_CURRENCY_PRICE): _zahl(0, 10, "any"),
+        vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, "any"),
+        vol.Optional(CONF_BASE_PRICE): _zahl(0, 1000, "any"),
+        vol.Optional(CONF_INVESTMENT): _zahl(0, 1000000, 1),
+        vol.Optional(CONF_CURRENCY): _text(),
     }
 
 
@@ -449,7 +470,7 @@ class PvSystemOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["plants", "grid", "house", "display", "save"],
+            menu_options=["plants", "grid", "house", "costs", "display", "save"],
         )
 
     async def async_step_save(
@@ -660,6 +681,21 @@ class PvSystemOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="house",
             data_schema=_mit_vorschlag(felder, self._daten[CONF_HOUSE]),
+        )
+
+    # ----------------------------------------------------------- Kosten
+
+    async def async_step_costs(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._daten[CONF_COSTS] = kosten_normalisieren(user_input)
+            return await self.async_step_init()
+
+        felder = _felder_kosten()
+        return self.async_show_form(
+            step_id="costs",
+            data_schema=_mit_vorschlag(felder, self._daten[CONF_COSTS]),
         )
 
     # ----------------------------------------------------------- Darstellung

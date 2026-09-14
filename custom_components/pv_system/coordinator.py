@@ -24,6 +24,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from . import units
 from .const import (
     CONF_AZIMUTH,
+    CONF_BASE_PRICE,
     CONF_BATTERY,
     CONF_BATTERY_CHARGED,
     CONF_BATTERY_CURRENT,
@@ -53,7 +54,11 @@ from .const import (
     CONF_CHARGER_TEMPERATURE,
     CONF_CHARGER_YIELD,
     CONF_CHEMISTRY,
+    CONF_COSTS,
+    CONF_CURRENCY,
+    CONF_CURRENCY_PRICE,
     CONF_ENABLED,
+    CONF_FEED_IN_PRICE,
     CONF_GRID,
     CONF_GRID_EXPORT_ENERGY,
     CONF_GRID_EXPORT_POWER,
@@ -79,6 +84,7 @@ from .const import (
     CONF_INVERTER_NAME,
     CONF_INVERTER_POWER,
     CONF_INVERTER_TEMPERATURE,
+    CONF_INVESTMENT,
     CONF_METER_MODEL,
     CONF_MODULE_COUNT,
     CONF_MODULE_MANUFACTURER,
@@ -106,6 +112,7 @@ from .const import (
     SIGN_POSITIVE_DISCHARGE,
     SIGN_POSITIVE_EXPORT,
 )
+from .kosten import Kostenrechner, eigenverbrauch_kwh
 from .topology import normalisieren, quellen
 
 _LOGGER = logging.getLogger(__name__)
@@ -138,6 +145,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.entry = entry
         self.config = normalisieren(dict(entry.options))
+        self.kosten = Kostenrechner(hass, entry.entry_id)
         self._abmelden: list[Any] = []
         self._sammler = Debouncer(
             hass,
@@ -210,28 +218,84 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         anlagen = [self._anlage(anlage) for anlage in self.config.get(CONF_PLANTS, [])]
         netz = self._netz(anlagen)
         summen = self._summen(anlagen, netz)
-        haus = self._haus(summen, netz)
+        haus = self._haus(anlagen, summen, netz)
         summen.update(haus)
         return {
             "plants": anlagen,
             "grid": netz,
             "totals": summen,
             "house": haus,
+            "costs": self._kosten(summen, netz, haus),
         }
+
+    # ------------------------------------------------------------- Kosten
+
+    def _kosten(
+        self, summen: dict[str, Any], netz: dict[str, Any], haus: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Zaehlerstaende und Momentanleistungen an den Kostenrechner geben.
+
+        Der Eigenverbrauch hat zwei Wege: aus Ertrag minus Einspeisung, sonst
+        aus Hausverbrauch minus Netzbezug. Welcher greift, haengt davon ab,
+        welche Zaehler eingetragen sind - siehe kosten.eigenverbrauch_kwh.
+        """
+        conf = self.config[CONF_COSTS]
+        erzeugung = units.first(summen["inverter_energy"], summen["pv_energy"])
+        zaehler = {
+            "import": netz["import_energy"],
+            "export": netz["export_energy"],
+            "own": eigenverbrauch_kwh(
+                erzeugung,
+                netz["export_energy"],
+                haus["house_energy"],
+                netz["import_energy"],
+            ),
+        }
+
+        # Momentan selbst genutzt: was erzeugt wird und nicht ins Netz geht.
+        erzeugt_jetzt = units.first(
+            summen["pv_power"], self._ac_erzeugung(summen["inverter_power"])
+        )
+        eigen_jetzt = None
+        if erzeugt_jetzt is not None:
+            eigen_jetzt = max(0.0, erzeugt_jetzt - (netz["export_power"] or 0.0))
+
+        return self.kosten.rechnen(
+            zaehler,
+            {
+                "price": conf[CONF_CURRENCY_PRICE],
+                "feed_in": conf[CONF_FEED_IN_PRICE],
+                "base": conf[CONF_BASE_PRICE],
+                "investment": conf[CONF_INVESTMENT],
+                "currency": conf[CONF_CURRENCY],
+            },
+            {
+                "import": netz["import_power"],
+                "export": netz["export_power"],
+                "own": eigen_jetzt,
+            },
+        )
 
     # ------------------------------------------------------------- Anlage
 
     def _anlage(self, anlage: dict[str, Any]) -> dict[str, Any]:
         module = self._module(anlage[CONF_MODULES])
-        laderegler = self._laderegler(anlage[CONF_CHARGER])
+        laderegler = self._laderegler(anlage[CONF_CHARGER], module["power"])
         batterie = self._batterie(anlage[CONF_BATTERY])
         wechselrichter = self._wechselrichter(anlage[CONF_INVERTER])
 
         # Ohne eigenen PV-Sensor darf der Laderegler einspringen: Bei einem
         # Victron MPPT ist dessen Eingangsleistung genau die Modulleistung.
-        if module["power"] is None and laderegler["power"] is not None:
-            module["power"] = laderegler["power"]
+        # Die Eingangsseite ist hier die richtige - die Ausgangsseite hat den
+        # Wirkungsgrad schon abgezogen.
+        if module["power"] is None and laderegler["input_power"] is not None:
+            module["power"] = laderegler["input_power"]
             module["power_source"] = "charger"
+            # Strangspannung und -strom kommen dann von derselben Quelle.
+            if module["voltage"] is None:
+                module["voltage"] = laderegler["input_voltage"]
+            if module["current"] is None:
+                module["current"] = laderegler["input_current"]
 
         spitze = module["peak_total"]
         if spitze and module["power"] is not None and spitze > 0:
@@ -274,14 +338,67 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             },
         }
 
-    def _laderegler(self, conf: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _dreieck(
+        leistung: float | None, spannung: float | None, strom: float | None
+    ) -> tuple[float | None, float | None, float | None]:
+        """P = U · I in alle drei Richtungen ergänzen.
+
+        Wer zwei der drei Größen misst, hat auch die dritte. Ein MPPT meldet
+        gern Spannung und Strom, ein Shelly nur die Leistung, ein BMS nur den
+        Strom - statt in der Karte Striche zu zeigen, wird gerechnet.
+
+        Division nur bei einer Spannung über 1 V: Ein Gerät im Standby meldet
+        null, und 0 W / 0 V ist keine Zahl, sondern ein Absturz.
+        """
+        if leistung is None and spannung is not None and strom is not None:
+            leistung = spannung * strom
+        elif strom is None and leistung is not None and spannung and abs(spannung) > 1:
+            strom = leistung / spannung
+        elif spannung is None and leistung is not None and strom and abs(strom) > 0.05:
+            spannung = leistung / strom
+        return leistung, spannung, strom
+
+    def _laderegler(
+        self, conf: dict[str, Any], modulleistung: float | None
+    ) -> dict[str, Any]:
+        """Der Laderegler, mit beiden Seiten getrennt.
+
+        Eingangsseite ist das Dach (hohe Spannung, kleiner Strom),
+        Ausgangsseite die Batterie (24 V oder 48 V, großer Strom). Was an einer
+        Seite fehlt, wird zuerst innerhalb dieser Seite gerechnet und erst dann
+        von der anderen übernommen: Ein MPPT arbeitet mit rund 97 % Wirkungsgrad,
+        die beiden Leistungen sind also fast, aber nicht ganz dieselbe Zahl.
+        """
         aktiv = conf[CONF_ENABLED]
         leistung = units.watt(self.hass, conf[CONF_CHARGER_POWER])
         aus_spannung = units.volt(self.hass, conf[CONF_CHARGER_OUT_VOLTAGE])
         aus_strom = units.ampere(self.hass, conf[CONF_CHARGER_OUT_CURRENT])
-        # Ein MPPT meldet oft Spannung und Strom, aber keine Leistung.
-        if leistung is None and aus_spannung is not None and aus_strom is not None:
-            leistung = aus_spannung * aus_strom
+        ein_spannung = units.volt(self.hass, conf[CONF_CHARGER_IN_VOLTAGE])
+        ein_strom = units.ampere(self.hass, conf[CONF_CHARGER_IN_CURRENT])
+
+        # Eingangsseite: erst aus sich selbst, dann aus der Modulleistung.
+        ein_leistung, ein_spannung, ein_strom = self._dreieck(
+            modulleistung, ein_spannung, ein_strom
+        )
+
+        # Ausgangsseite: erst aus sich selbst, dann aus der Eingangsseite.
+        leistung, aus_spannung, aus_strom = self._dreieck(
+            leistung, aus_spannung, aus_strom
+        )
+        # Übernahme von der anderen Seite ohne Korrektur: Der Wirkungsgrad
+        # eines MPPT liegt bei rund 97 %, aber ihn hier anzunehmen hieße, eine
+        # gemessene Zahl um eine geschätzte zu verändern. Lieber die echte Zahl
+        # beider Seiten zeigen - dann sieht man den Verlust sogar.
+        if leistung is None and ein_leistung is not None:
+            leistung, aus_spannung, aus_strom = self._dreieck(
+                ein_leistung, aus_spannung, aus_strom
+            )
+        if ein_leistung is None and leistung is not None:
+            ein_leistung, ein_spannung, ein_strom = self._dreieck(
+                leistung, ein_spannung, ein_strom
+            )
+
         return {
             "enabled": aktiv,
             "name": conf[CONF_CHARGER_NAME],
@@ -290,12 +407,9 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "system_voltage": conf[CONF_SYSTEM_VOLTAGE],
             "max_current": conf[CONF_CHARGER_MAX_CURRENT],
             "power": units.rund(leistung),
-            "input_voltage": units.rund(
-                units.volt(self.hass, conf[CONF_CHARGER_IN_VOLTAGE])
-            ),
-            "input_current": units.rund(
-                units.ampere(self.hass, conf[CONF_CHARGER_IN_CURRENT]), 2
-            ),
+            "input_power": units.rund(ein_leistung),
+            "input_voltage": units.rund(ein_spannung),
+            "input_current": units.rund(ein_strom, 2),
             "output_voltage": units.rund(aus_spannung, 2),
             "output_current": units.rund(aus_strom, 2),
             "yield": units.rund(units.kwh(self.hass, conf[CONF_CHARGER_YIELD]), 2),
@@ -362,6 +476,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
             "energy": gespeichert,
             "runtime": self._laufzeit(gespeichert, leistung, conf[CONF_BATTERY_MIN_SOC], kapazitaet),
+            "time_to_full": self._ladezeit(gespeichert, leistung, kapazitaet),
             "entities": {
                 feld.removesuffix("_entity"): conf[feld]
                 for feld in (
@@ -397,13 +512,57 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         nutzbar = max(0.0, gespeichert - reserve)
         return round(nutzbar / (abs(leistung) / 1000.0), 2)
 
+    @staticmethod
+    def _ladezeit(
+        gespeichert: float | None,
+        leistung: float | None,
+        kapazitaet: float | None,
+    ) -> float | None:
+        """Stunden bis voll - das Gegenstück zur Restlaufzeit.
+
+        Die Restlaufzeit bleibt unbekannt, solange geladen wird; das ist
+        richtig, aber dann steht in der Karte gar nichts. Beim Laden ist die
+        interessante Zahl, wann die Batterie voll ist.
+
+        Gerechnet wird mit der aktuellen Ladeleistung. Dass ein BMS zum Ende
+        hin abregelt, bleibt unberücksichtigt - die letzten Prozent dauern in
+        der Realität länger als hier angezeigt.
+        """
+        if gespeichert is None or leistung is None or leistung <= 1 or not kapazitaet:
+            return None
+        fehlend = max(0.0, kapazitaet - gespeichert)
+        return round(fehlend / (leistung / 1000.0), 2)
+
     def _wechselrichter(self, conf: dict[str, Any]) -> dict[str, Any]:
+        """Der Wechselrichter, ebenfalls mit beiden Seiten.
+
+        Eingangsseite ist die Batterie oder der Modulstrang (DC), Ausgangsseite
+        das Hausnetz (AC). Fehlt auf einer Seite eine Größe, wird sie aus den
+        beiden anderen gerechnet - der DC-Strom etwa aus Leistung und
+        Batteriespannung, den kaum ein Gerät getrennt meldet.
+        """
         leistung = units.watt(self.hass, conf[CONF_INVERTER_POWER])
+        ac_spannung = units.volt(self.hass, conf[CONF_INVERTER_AC_VOLTAGE])
+        ac_strom = units.ampere(self.hass, conf[CONF_INVERTER_AC_CURRENT])
+        dc_spannung = units.volt(self.hass, conf[CONF_INVERTER_DC_VOLTAGE])
+
+        leistung, ac_spannung, ac_strom = self._dreieck(
+            leistung, ac_spannung, ac_strom
+        )
+        # Der DC-Strom aus AC-Leistung und Batteriespannung. Die
+        # Wandlungsverluste bleiben außen vor - in Wirklichkeit fließt etwas
+        # mehr. Als Größenordnung ist die Zahl trotzdem nützlich, und kaum ein
+        # Batteriewechselrichter meldet den DC-Strom getrennt.
+        dc_strom = None
+        if leistung is not None and dc_spannung and abs(dc_spannung) > 1:
+            dc_strom = leistung / dc_spannung
+
         nenn = conf[CONF_RATED_POWER]
         auslastung = None
         if leistung is not None and nenn:
             auslastung = round(100.0 * leistung / nenn, 1)
         return {
+            "dc_current": units.rund(dc_strom, 2),
             "enabled": conf[CONF_ENABLED],
             "name": conf[CONF_INVERTER_NAME],
             "manufacturer": conf[CONF_INVERTER_MANUFACTURER],
@@ -413,15 +572,9 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "hybrid": conf[CONF_INVERTER_HYBRID],
             "power": units.rund(leistung),
             "load": auslastung,
-            "ac_voltage": units.rund(
-                units.volt(self.hass, conf[CONF_INVERTER_AC_VOLTAGE]), 1
-            ),
-            "ac_current": units.rund(
-                units.ampere(self.hass, conf[CONF_INVERTER_AC_CURRENT]), 2
-            ),
-            "dc_voltage": units.rund(
-                units.volt(self.hass, conf[CONF_INVERTER_DC_VOLTAGE]), 2
-            ),
+            "ac_voltage": units.rund(ac_spannung, 1),
+            "ac_current": units.rund(ac_strom, 2),
+            "dc_voltage": units.rund(dc_spannung, 2),
             "frequency": units.rund(
                 units.raw(self.hass, conf[CONF_INVERTER_FREQUENCY]), 2
             ),
@@ -576,6 +729,12 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 round(100.0 * pv / spitze, 1) if pv is not None and spitze else None
             ),
             "pv_energy": units.add(*(a["modules"]["energy"] for a in anlagen)),
+            # Der AC-seitige Ertrag. Fuer die Kostenrechnung ist er die bessere
+            # Bezugsgroesse als der DC-Ertrag: Nur was der Wechselrichter
+            # abgibt, kann ins Netz gehen oder im Haus verbraucht werden.
+            "inverter_energy": units.add(
+                *(a["inverter"]["energy"] for a in anlagen if a["inverter"]["enabled"])
+            ),
             "inverter_power": units.rund(wr),
             "inverter_rated": units.rund(nenn),
             "inverter_load": (
@@ -593,16 +752,54 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     # ------------------------------------------------------------- Haus
 
-    def _haus(self, summen: dict[str, Any], netz: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _ac_erzeugung(leistung: float | None) -> float | None:
+        """Abgabe des Wechselrichters, nach unten auf null begrenzt."""
+        if leistung is None:
+            return None
+        return max(leistung, 0.0)
+
+    @staticmethod
+    def _hausbeitrag(wechselrichter: dict[str, Any]) -> float | None:
+        """Was dieser Wechselrichter zum gerechneten Hausverbrauch beiträgt.
+
+        Positive Abgabe zählt unverändert: Sie deckt Verbrauch, der sonst aus
+        dem Netz käme.
+
+        Negative Abgabe bedeutet zweierlei, je nach Gerät:
+
+        * Ein gewöhnlicher Einspeisewechselrichter im Standby verbraucht ein
+          paar Watt. Die stecken im Netzbezug schon drin und dürfen nicht noch
+          einmal abgezogen werden - sonst kämen bei -2 W Abgabe und 16 W Bezug
+          14 W heraus, obwohl das Haus 16 W zieht. Also null.
+        * Ein Hybrid (Victron MultiPlus und Verwandte) zieht dagegen richtig
+          Leistung aus dem Netz, um die Batterie zu laden. Das ist kein
+          Hausverbrauch, sondern Speicherladung - diese Leistung wird abgezogen.
+          Ohne das stünden beim Laden mit 1 kW über 1000 W Hausverbrauch da.
+        """
+        leistung = wechselrichter["power"]
+        if leistung is None:
+            return None
+        if leistung >= 0:
+            return leistung
+        return leistung if wechselrichter["hybrid"] else 0.0
+
+    def _haus(
+        self,
+        anlagen: list[dict[str, Any]],
+        summen: dict[str, Any],
+        netz: dict[str, Any],
+    ) -> dict[str, Any]:
         """Hausverbrauch und die beiden Quoten.
 
         Gerechnet wird der Netzparallelbetrieb: Was die Wechselrichter abgeben,
         bleibt im Haus, soweit es dort gebraucht wird; der Rest geht ins Netz,
         und was fehlt, kommt von dort. Also
 
-            Verbrauch = Wechselrichterleistung + Netzleistung
+            Verbrauch = Netzbezug - Einspeisung + Abgabe aller Wechselrichter
 
-        mit positiver Netzleistung für Bezug. Ein gemessener Hausverbrauch hat
+        Die ersten beiden Glieder sind zusammen die vorzeichenbehaftete
+        Netzleistung, positiv bei Bezug. Ein gemessener Hausverbrauch hat
         Vorrang - gerechnet wird nur, was nicht gemessen ist.
         """
         conf = self.config[CONF_HOUSE]
@@ -610,8 +807,14 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         gerechnet = None
         if conf[CONF_HOUSE_CALCULATE]:
-            wr = summen["inverter_power"]
             netzleistung = netz["power"]
+            wr = units.add(
+                *(
+                    self._hausbeitrag(a["inverter"])
+                    for a in anlagen
+                    if a["inverter"]["enabled"]
+                )
+            )
             if wr is not None or netzleistung is not None:
                 gerechnet = (wr or 0.0) + (netzleistung or 0.0)
 
@@ -624,8 +827,15 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 100.0 * max(0.0, min(verbrauch, verbrauch - bezug)) / verbrauch, 1
             )
 
+        # Bezugsgröße für den Eigenverbrauch ist die erzeugte Leistung am Modul,
+        # nicht die Abgabe des Wechselrichters. Bei einer DC-gekoppelten Anlage
+        # lädt die Sonne über den Laderegler die Batterie, während der
+        # Wechselrichter noch nichts abgibt: Am AC-Ausgang gemessen wäre der
+        # Eigenverbrauch 0/0 und damit unbekannt, obwohl das Dach liefert und
+        # alles davon im Haus bleibt. Ohne Modulsensor bleibt die Abgabe des
+        # Wechselrichters die beste verfügbare Größe.
         eigenverbrauch = None
-        erzeugung = summen["inverter_power"]
+        erzeugung = units.first(summen["pv_power"], self._ac_erzeugung(summen["inverter_power"]))
         if erzeugung is not None and erzeugung > 0:
             einspeisung = netz["export_power"] or 0.0
             eigenverbrauch = round(
@@ -638,4 +848,10 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "house_energy": units.rund(units.kwh(self.hass, conf[CONF_HOUSE_ENERGY]), 2),
             "self_sufficiency": autarkie,
             "self_consumption": eigenverbrauch,
+            # Damit Sensoren und Karte erkennen, was überhaupt hinterlegt ist -
+            # dieselbe Form wie bei Netz, Batterie und Wechselrichter.
+            "entities": {
+                "power": conf[CONF_HOUSE_POWER],
+                "energy": conf[CONF_HOUSE_ENERGY],
+            },
         }
