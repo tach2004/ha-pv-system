@@ -232,11 +232,6 @@ python3 tests/test_dateien.py
 Die Tests laufen ohne Home-Assistant-Installation: Sie ersetzen die wenigen
 Namen, die die Rechenmodule importieren, durch schlanke Nachbauten.
 
-## Veröffentlichen
-
-Für die Aufnahme in HACS fehlen noch Beschreibung und Themen am
-GitHub-Repository – die Prüfung meldet das, und
-[docs/HACS.md](docs/HACS.md) sagt, wo es einzutragen ist.
 
 ## Lizenz
 
