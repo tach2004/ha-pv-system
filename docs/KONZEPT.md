@@ -228,6 +228,22 @@ Der Preis: Änderungen sammeln sich im Arbeitsspeicher und werden erst mit
 Alternative – nach jedem Formular zu speichern – würde die Integration mitten
 im Bearbeiten mehrfach neu laden.
 
+## Welche Sensoren von sich aus laufen
+
+Angelegt wird alles - eingeschaltet ist nur, was diese Integration wirklich
+**ausrechnet**: Summen über mehrere Anlagen, Ausnutzung, Speicherinhalt,
+Restlaufzeit, Hausverbrauch, Autarkie, Eigenverbrauch.
+
+Abgeschaltet sind die reinen Spiegel: Spannungen, Temperaturen, Netzfrequenz,
+Zählerstände, der Ladestand je Anlage. Eine PV-Anlage bringt diese Werte
+ohnehin als eigene Entitäten mit; sie ein zweites Mal aufzuzeichnen kostet
+Platz in der Datenbank und bringt keine neue Information. Die Entität
+existiert trotzdem - ein Klick in der Geräteansicht schaltet sie ein.
+
+Das betrifft rund ein Dutzend Sensoren je Standort. Die Karte ist davon nicht
+betroffen: Sie liest die Originalentitäten direkt und zeigt alle Werte, auch
+die der abgeschalteten Sensoren.
+
 ## Warum die Sensoren nicht alles spiegeln
 
 Angelegt wird, was die Integration **ausrechnet** oder auf eine gemeinsame

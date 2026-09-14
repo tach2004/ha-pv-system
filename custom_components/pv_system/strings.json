@@ -4,7 +4,6 @@
       "user": {
         "data": {
           "name": "Name",
-          "phases": "Phases",
           "plant_count": "Number of plants",
           "power_entity": "Grid meter (total power)",
           "power_sign": "Power sign"
@@ -176,11 +175,18 @@
           "voltage_entity": "Voltage"
         },
         "data_description": {
+          "capacity_kwh": "Nominal capacity from the label. Together with the state of charge it gives the stored energy in kWh.",
+          "current_entity": "Battery current. Its sign's meaning is set below.",
+          "enabled": "Off when this plant has no storage. The block is then omitted.",
+          "health_entity": "State of health in percent, if the BMS reports it.",
           "min_soc": "Discharge stops here. Remaining runtime is calculated against this limit.",
-          "power_entity": "The sensor reporting current power. W, kW and MW are recognised.",
-          "power_sign": "How the meter counts. Chosen wrongly the card shows the flow reversed."
+          "power_entity": "Charge and discharge power. If absent, voltage × current is used.",
+          "power_sign": "How the meter counts. Chosen wrongly the card shows the flow reversed.",
+          "soc_entity": "State of charge in percent, usually from the BMS. Without it stored energy and runtime stay empty.",
+          "temperature_entity": "Cell temperature from the BMS.",
+          "voltage_entity": "Terminal voltage of the battery (e.g. 51.8 V on a 48 V system)."
         },
-        "description": "Optional. Capacity and state of charge together give the stored energy.",
+        "description": "Capacity and state of charge together give the stored energy.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Battery – {plant}"
       },
       "charger": {
@@ -201,11 +207,16 @@
           "yield_entity": "Yield meter"
         },
         "data_description": {
+          "enabled": "Off when the modules go straight to the inverter. The whole block is then omitted.",
           "input_voltage_entity": "The voltage coming from the modules - often three digits on an MPPT.",
+          "max_current": "Display only, e.g. 85 A on an MPPT 250/85.",
           "output_voltage_entity": "The voltage on the battery side, i.e. 24 V, 48 V and so on.",
-          "power_entity": "The sensor reporting current power. W, kW and MW are recognised."
+          "power_entity": "Charging power towards the battery. If absent it is computed from output voltage × output current.",
+          "state_entity": "Operating state as text, e.g. “Bulk”, “Absorption”, “Float”.",
+          "temperature_entity": "Temperature of the controller itself, not of the battery.",
+          "yield_entity": "kWh meter that many MPPT controllers provide."
         },
-        "description": "Optional. Without one the modules go straight to the inverter.",
+        "description": "Without a charge controller the modules go straight to the inverter - leave the switch above off.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Charge controller – {plant}"
       },
       "display": {
@@ -240,10 +251,15 @@
           "power_sign": "Power sign"
         },
         "data_description": {
-          "power_entity": "The sensor reporting current power. W, kW and MW are recognised.",
+          "export_power_entity": "Counterpart to import power - likewise only needed with separate meters.",
+          "import_power_entity": "Only needed if your meter reports import and export separately instead of one signed figure.",
+          "l1_power_entity": "Power on L1. Leave empty if you only have the total meter - the card then does not draw phases individually.",
+          "meter_model": "Display only, e.g. “Shelly Pro 3EM Gen2”.",
+          "phases": "Phases of the house connection. Almost always three - only change it if you know otherwise.",
+          "power_entity": "The total across all phases at the house connection. The most important field here.",
           "power_sign": "How the meter counts. Chosen wrongly the card shows the flow reversed."
         },
-        "description": "The total meter is enough. If phases are measured individually the card draws them separately.",
+        "description": "The total meter is enough. If phases are measured individually the card draws them separately.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Grid and meter"
       },
       "house": {
@@ -254,7 +270,8 @@
         },
         "data_description": {
           "calculate": "Consumption = inverter power + grid power. A measured value takes precedence.",
-          "power_entity": "The sensor reporting current power. W, kW and MW are recognised."
+          "energy_entity": "kWh meter of house consumption, if available.",
+          "power_entity": "A measured house consumption, if you have one. It takes precedence over the calculation. Empty is the normal case."
         },
         "title": "House and consumption"
       },
@@ -288,10 +305,15 @@
           "temperature_entity": "Temperature"
         },
         "data_description": {
+          "ac_voltage_entity": "Grid voltage at the output, typically around 230 V.",
+          "dc_voltage_entity": "DC voltage at the input - the battery voltage on a battery inverter.",
+          "enabled": "Off when this plant has no inverter of its own.",
+          "hybrid": "On when the device can also charge from the grid (e.g. Victron MultiPlus).",
           "phase": "Which phase this single-phase inverter feeds into.",
-          "power_entity": "The sensor reporting current power. W, kW and MW are recognised."
+          "power_entity": "AC output power - the built-in sensor or an inline meter such as a Shelly. House consumption is derived from this figure.",
+          "rated_power_w": "Continuous rating from the label. The load bar is based on it."
         },
-        "description": "Designed for single-phase inverters running in parallel with the grid.",
+        "description": "Designed for single-phase inverters running in parallel with the grid.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Inverter – {plant}"
       },
       "modules": {
@@ -311,12 +333,15 @@
         },
         "data_description": {
           "count": "How many modules belong to this plant.",
+          "current_entity": "String current (DC) on the module side. May be left empty.",
+          "energy_entity": "A kWh meter for this array's yield, if you have one. May be left empty.",
           "parallel": "Four in series, two such strings in parallel makes eight modules.",
           "peak_wp": "Peak power of a single module as printed on its label.",
-          "power_entity": "The sensor reporting current power. W, kW and MW are recognised.",
-          "series": "Leave empty to get a matching layout suggested."
+          "power_entity": "What the modules currently deliver - the DC sensor of the charge controller or inverter. Empty: the charge controller fills in, otherwise the card leaves it blank.",
+          "series": "Leave empty to get a matching layout suggested.",
+          "voltage_entity": "Voltage of the module string (DC), e.g. 148 V for four modules in series - not the battery voltage. May be left empty."
         },
-        "description": "Current layout: {peak}",
+        "description": "Current layout: {peak}\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Modules – {plant}"
       },
       "plant_delete": {
@@ -327,7 +352,7 @@
         "title": "Delete plant"
       },
       "plant_menu": {
-        "description": "Changes are only applied once you pick “Save and close” in the menu.",
+        "description": "**{plant}**\n\nChanges are only applied once you pick “Save and close” in the menu.",
         "menu_options": {
           "battery": "Battery",
           "charger": "Charge controller",
@@ -338,7 +363,7 @@
           "plants": "Another plant",
           "save": "Save and close"
         },
-        "title": "Plant {plant}"
+        "title": "Plant"
       },
       "plant_name": {
         "data": {

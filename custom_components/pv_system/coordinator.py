@@ -188,8 +188,20 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self._berechnen()
 
     async def async_shutdown(self) -> None:
+        """Beim Abbau alles abmelden.
+
+        Der Sammler wird bewusst NICHT awaitet: Debouncer.async_shutdown ist
+        mit @callback ausgezeichnet und gibt None zurück. Ein await darauf
+        wirft "NoneType can't be awaited", der Abbau scheitert, und der
+        Eintrag bleibt in ConfigEntryState.FAILED_UNLOAD hängen. Danach lässt
+        er sich nicht mehr neu laden - jede Änderung in den Optionen endet im
+        Einrichtungsfehler, und die Sensoren sind weg.
+
+        DataUpdateCoordinator.async_shutdown ist dagegen eine echte Coroutine
+        und gehört awaitet.
+        """
         self.async_untrack_sources()
-        await self._sammler.async_shutdown()
+        self._sammler.async_shutdown()
         await super().async_shutdown()
 
     # ------------------------------------------------------------- Rechnung

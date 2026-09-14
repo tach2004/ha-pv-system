@@ -67,6 +67,17 @@ Modulen in zwei Strings zu je vier steht dort `4` und `2`.
 Bleiben beide leer, wird eine passende Aufteilung vorgeschlagen. Sie ist nur
 ein Vorschlag – die Karte zeichnet, was dort steht.
 
+### Was ist Pflicht?
+
+Nur die Felder mit **\*** – bei den Modulen sind das Anzahl und Leistung je
+Modul, bei der Einrichtung Name und Anzahl der Anlagen. Alles andere darf leer
+bleiben. Was du nicht angibst, wird in der Karte einfach nicht gezeigt; eine
+Anlage ohne Laderegler oder ohne Speicher bekommt diese Blöcke gar nicht erst.
+
+Jedes Feld hat unter seiner Beschriftung einen Hinweis, was genau dort
+hingehört – „Spannung“ meint bei den Modulen die Stringspannung, bei der
+Batterie die Klemmenspannung.
+
 ### Welchen Sensor wo?
 
 | Block          | Feld                 | Typisch dafür                          |

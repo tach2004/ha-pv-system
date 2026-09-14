@@ -4,7 +4,6 @@
       "user": {
         "data": {
           "name": "Name",
-          "phases": "Phasen",
           "plant_count": "Anzahl Anlagen",
           "power_entity": "Netzzähler (Gesamtleistung)",
           "power_sign": "Vorzeichen der Leistung"
@@ -176,11 +175,18 @@
           "voltage_entity": "Spannung"
         },
         "data_description": {
+          "capacity_kwh": "Nennkapazität laut Typenschild. Zusammen mit dem Ladestand ergibt sie den Inhalt in kWh.",
+          "current_entity": "Batteriestrom. Positiv oder negativ - die Bedeutung legst du unten beim Vorzeichen fest.",
+          "enabled": "Aus, wenn diese Anlage keinen Speicher hat. Der Block wird dann nicht gezeichnet.",
+          "health_entity": "Zustand in Prozent (SoH), falls das BMS ihn meldet.",
           "min_soc": "Bis hierher wird entladen. Die Restlaufzeit rechnet mit dieser Grenze.",
-          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt.",
-          "power_sign": "Wie der Zähler zählt. Falsch gewählt zeigt die Karte den Fluss verkehrt herum."
+          "power_entity": "Lade- und Entladeleistung. Fehlt sie, wird Spannung × Strom gerechnet.",
+          "power_sign": "Wie der Zähler zählt. Falsch gewählt zeigt die Karte den Fluss verkehrt herum.",
+          "soc_entity": "Der Ladestand in Prozent, meist vom BMS. Ohne ihn bleiben Inhalt und Restlaufzeit leer.",
+          "temperature_entity": "Zelltemperatur aus dem BMS.",
+          "voltage_entity": "Die Klemmenspannung der Batterie (z. B. 51,8 V bei einem 48-V-System)."
         },
-        "description": "Optional. Kapazität und Ladestand ergeben zusammen den Speicherinhalt.",
+        "description": "Kapazität und Ladestand ergeben zusammen den Speicherinhalt.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
         "title": "Batterie – {plant}"
       },
       "charger": {
@@ -201,11 +207,16 @@
           "yield_entity": "Ertragszähler"
         },
         "data_description": {
+          "enabled": "Aus, wenn die Module direkt am Wechselrichter hängen. Dann wird der ganze Block nicht gezeichnet.",
           "input_voltage_entity": "Die Spannung, die von den Modulen kommt - bei einem MPPT oft dreistellig.",
+          "max_current": "Nur zur Anzeige, z. B. 85 A beim MPPT 250/85.",
           "output_voltage_entity": "Die Spannung auf der Batterieseite, also 24 V, 48 V und so weiter.",
-          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt."
+          "power_entity": "Die Ladeleistung Richtung Batterie. Fehlt sie, wird sie aus Ausgangsspannung × Ausgangsstrom gerechnet.",
+          "state_entity": "Der Betriebszustand als Text, z. B. „Bulk“, „Absorption“, „Float“.",
+          "temperature_entity": "Temperatur des Ladereglers selbst, nicht die der Batterie.",
+          "yield_entity": "Zählerstand in kWh, den viele MPPT-Regler mitbringen."
         },
-        "description": "Optional. Ohne Laderegler gehen die Module direkt an den Wechselrichter.",
+        "description": "Ohne Laderegler gehen die Module direkt an den Wechselrichter - dann den Schalter oben aus lassen.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
         "title": "Laderegler – {plant}"
       },
       "display": {
@@ -240,10 +251,15 @@
           "power_sign": "Vorzeichen der Leistung"
         },
         "data_description": {
-          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt.",
+          "export_power_entity": "Gegenstück zur Bezugsleistung - ebenfalls nur bei getrennten Zählern nötig.",
+          "import_power_entity": "Nur nötig, wenn dein Zähler Bezug und Einspeisung getrennt meldet statt als eine Zahl mit Vorzeichen.",
+          "l1_power_entity": "Leistung auf L1. Leer lassen, wenn du nur den Summenzähler hast - dann zeichnet die Karte die Phasen nicht einzeln.",
+          "meter_model": "Nur zur Anzeige, z. B. „Shelly Pro 3EM Gen2“.",
+          "phases": "Phasen des Hausanschlusses. In Deutschland fast immer drei - nur ändern, wenn du es sicher anders weißt.",
+          "power_entity": "Die Summe über alle Phasen am Hausanschluss. Das ist das wichtigste Feld hier.",
           "power_sign": "Wie der Zähler zählt. Falsch gewählt zeigt die Karte den Fluss verkehrt herum."
         },
-        "description": "Der Summenzähler reicht. Sind die Phasen einzeln erfasst, zeichnet die Karte sie getrennt.",
+        "description": "Der Summenzähler reicht. Sind die Phasen einzeln erfasst, zeichnet die Karte sie getrennt.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
         "title": "Netz und Zähler"
       },
       "house": {
@@ -254,7 +270,8 @@
         },
         "data_description": {
           "calculate": "Verbrauch = Wechselrichterleistung + Netzleistung. Ein gemessener Hausverbrauch hat Vorrang.",
-          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt."
+          "energy_entity": "Zählerstand des Hausverbrauchs in kWh, falls vorhanden.",
+          "power_entity": "Ein gemessener Hausverbrauch, falls vorhanden. Er hat Vorrang vor der Rechnung. Leer lassen ist der Normalfall."
         },
         "title": "Haus und Verbrauch"
       },
@@ -288,10 +305,15 @@
           "temperature_entity": "Temperatur"
         },
         "data_description": {
+          "ac_voltage_entity": "Netzspannung am Ausgang, üblicherweise um 230 V.",
+          "dc_voltage_entity": "Die Gleichspannung am Eingang - bei einem Batteriewechselrichter die Batteriespannung.",
+          "enabled": "Aus, wenn diese Anlage keinen eigenen Wechselrichter hat.",
+          "hybrid": "An, wenn das Gerät auch aus dem Netz laden kann (z. B. Victron MultiPlus).",
           "phase": "Auf welcher Phase dieser einphasige Wechselrichter einspeist.",
-          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt."
+          "power_entity": "Die abgegebene AC-Leistung - der interne Sensor oder ein Zwischenzähler wie ein Shelly. Aus dieser Zahl entsteht der Hausverbrauch.",
+          "rated_power_w": "Dauerleistung laut Typenschild. Daraus entsteht der Auslastungsbalken."
         },
-        "description": "Ausgelegt für einphasige Wechselrichter im Netzparallelbetrieb.",
+        "description": "Ausgelegt für einphasige Wechselrichter im Netzparallelbetrieb.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
         "title": "Wechselrichter – {plant}"
       },
       "modules": {
@@ -311,12 +333,15 @@
         },
         "data_description": {
           "count": "So viele Module hängen an dieser Anlage.",
+          "current_entity": "Der Strangstrom (DC) auf der Modulseite. Leer lassen ist in Ordnung.",
+          "energy_entity": "Ein Zählerstand in kWh für den Ertrag dieser Module, falls vorhanden. Leer lassen ist in Ordnung.",
           "parallel": "Vier in Reihe und davon zwei Stränge parallel ergeben acht Module.",
           "peak_wp": "Die Spitzenleistung eines einzelnen Moduls laut Typenschild.",
-          "power_entity": "Der Sensor, der die aktuelle Leistung meldet. W, kW und MW werden erkannt.",
-          "series": "Leer lassen, dann wird eine passende Aufteilung vorgeschlagen."
+          "power_entity": "Was die Module gerade liefern - der DC-Sensor des Ladereglers oder des Wechselrichters. Leer: Die Leistung kommt dann ersatzweise vom Laderegler, sonst bleibt das Feld in der Karte leer.",
+          "series": "Leer lassen, dann wird eine passende Aufteilung vorgeschlagen.",
+          "voltage_entity": "Die Spannung des Modulstrangs (DC), also z. B. 148 V bei vier Modulen in Reihe - nicht die Batteriespannung. Leer lassen ist in Ordnung."
         },
-        "description": "Aktuelle Auslegung: {peak}",
+        "description": "Aktuelle Auslegung: {peak}\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
         "title": "Module – {plant}"
       },
       "plant_delete": {
@@ -327,7 +352,7 @@
         "title": "Anlage löschen"
       },
       "plant_menu": {
-        "description": "Änderungen werden erst übernommen, wenn du im Menü „Speichern und schließen“ wählst.",
+        "description": "**{plant}**\n\nÄnderungen werden erst übernommen, wenn du im Menü „Speichern und schließen“ wählst.",
         "menu_options": {
           "battery": "Batterie",
           "charger": "Laderegler",
@@ -338,7 +363,7 @@
           "plants": "Andere Anlage",
           "save": "Speichern und schließen"
         },
-        "title": "Anlage {plant}"
+        "title": "Anlage"
       },
       "plant_name": {
         "data": {

@@ -131,8 +131,30 @@ class PvSystemCard extends HTMLElement {
     this._aufbau = null; // erzwingt einen Neuaufbau
   }
 
+  /**
+   * Größe im Abschnitts-Layout.
+   *
+   * getCardSize gilt als veraltet; für Abschnitte ("Sections") fragt Home
+   * Assistant getGridOptions. Ohne diese Methode bekommt die Karte die
+   * Vorgabe von wenigen Spalten - für ein Flussdiagramm viel zu schmal - und
+   * lässt sich im Kachel-Layout nicht sinnvoll vergrößern.
+   *
+   * "full" ist die Vorgabe, nicht die Grenze: Über den Layout-Regler bleibt
+   * alles zwischen min_columns und der Abschnittsbreite einstellbar.
+   */
+  getGridOptions() {
+    const anzahl = this._daten && this._daten.plants ? this._daten.plants.length : 1;
+    return {
+      columns: "full",
+      min_columns: 6,
+      rows: "auto",
+      min_rows: 4 + Math.min(4, anzahl),
+    };
+  }
+
+  /** Für Ansichten, die noch nach der alten Größe fragen (Masonry). */
   getCardSize() {
-    const anzahl = (this._daten && this._daten.plants ? this._daten.plants.length : 1);
+    const anzahl = this._daten && this._daten.plants ? this._daten.plants.length : 1;
     return 6 + Math.min(4, anzahl);
   }
 
@@ -1469,7 +1491,7 @@ if (!window.customCards.some((karte) => karte.type === "pv-system-card")) {
   window.customCards.push({
     type: "pv-system-card",
     name: "PV-System",
-    preview: false,
+    preview: true,
     description:
       "Flussdiagramm aus Modulen, Laderegler, Batterie, Wechselrichter, Phasen und Netz.",
     documentationURL: "https://github.com/tach2004/ha-pv-system",

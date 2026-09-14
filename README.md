@@ -104,6 +104,10 @@ Das genügt bei einem Standort – die Karte findet ihn selbst. Weitere Optionen
 | `compact` | `false` | Kennzahlenleiste unter dem Diagramm weglassen    |
 | `titel`   | –       | Eigene Überschrift; `false` lässt sie ganz weg   |
 
+Im Abschnitts-Layout meldet die Karte ihre Größe über `getGridOptions`: volle
+Breite als Vorgabe, mindestens sechs Spalten, Höhe nach Inhalt. Über den
+Layout-Regler lässt sich beides ändern.
+
 Ein Klick auf einen Block öffnet die Einzelheiten darunter. Werte mit
 gepunkteter Unterstreichung führen zur Original-Entität.
 
@@ -119,6 +123,12 @@ Anlage und je Phase Leistung, Spannung und Erzeugung.
 
 Angelegt wird nur, was auch etwas anzeigen kann: Ohne Batterie entstehen keine
 Batteriesensoren, ohne Temperaturfühler kein Temperatursensor.
+
+**Eingeschaltet** ist von sich aus nur, was die Integration ausrechnet.
+Reine Spiegel vorhandener Sensoren – Spannungen, Temperaturen, Netzfrequenz,
+Zählerstände – sind angelegt, aber abgeschaltet: Sie kosten sonst
+Datenbankplatz für Werte, die schon da sind. Ein Klick in der Geräteansicht
+schaltet sie ein. Die Karte zeigt sie ohnehin, sie liest die Originale.
 
 ## Dienste
 

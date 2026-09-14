@@ -256,11 +256,11 @@ def _felder_module() -> dict[Any, Any]:
 
 def _felder_laderegler() -> dict[Any, Any]:
     return {
-        vol.Required(CONF_ENABLED): bool,
+        vol.Optional(CONF_ENABLED): bool,
         vol.Optional(CONF_CHARGER_NAME): _text(),
         vol.Optional(CONF_CHARGER_MANUFACTURER): _text(),
         vol.Optional(CONF_CHARGER_MODEL): _text(),
-        vol.Required(CONF_SYSTEM_VOLTAGE): _auswahl(
+        vol.Optional(CONF_SYSTEM_VOLTAGE): _auswahl(
             SYSTEM_VOLTAGES, "system_voltage"
         ),
         vol.Optional(CONF_CHARGER_MAX_CURRENT): _zahl(1, 500, 1, "A"),
@@ -277,17 +277,17 @@ def _felder_laderegler() -> dict[Any, Any]:
 
 def _felder_batterie() -> dict[Any, Any]:
     return {
-        vol.Required(CONF_ENABLED): bool,
+        vol.Optional(CONF_ENABLED): bool,
         vol.Optional(CONF_BATTERY_NAME): _text(),
         vol.Optional(CONF_BATTERY_MANUFACTURER): _text(),
         vol.Optional(CONF_BATTERY_MODEL): _text(),
-        vol.Required(CONF_CAPACITY): _zahl(0.1, 1000, 0.01, "kWh"),
-        vol.Required(CONF_NOMINAL_VOLTAGE): _auswahl(
+        vol.Optional(CONF_CAPACITY): _zahl(0.1, 1000, 0.01, "kWh"),
+        vol.Optional(CONF_NOMINAL_VOLTAGE): _auswahl(
             SYSTEM_VOLTAGES, "system_voltage"
         ),
-        vol.Required(CONF_CHEMISTRY): _auswahl(CHEMISTRIES, "chemistry"),
-        vol.Required(CONF_BATTERY_MIN_SOC): _zahl(0, 90, 1, "%"),
-        vol.Required(CONF_POWER_SIGN): _auswahl(BATTERY_SIGNS, "battery_sign"),
+        vol.Optional(CONF_CHEMISTRY): _auswahl(CHEMISTRIES, "chemistry"),
+        vol.Optional(CONF_BATTERY_MIN_SOC): _zahl(0, 90, 1, "%"),
+        vol.Optional(CONF_POWER_SIGN): _auswahl(BATTERY_SIGNS, "battery_sign"),
         vol.Optional(CONF_BATTERY_SOC): _sensor("battery"),
         vol.Optional(CONF_BATTERY_POWER): _sensor("power"),
         vol.Optional(CONF_BATTERY_VOLTAGE): _sensor("voltage"),
@@ -302,13 +302,13 @@ def _felder_batterie() -> dict[Any, Any]:
 
 def _felder_wechselrichter() -> dict[Any, Any]:
     return {
-        vol.Required(CONF_ENABLED): bool,
+        vol.Optional(CONF_ENABLED): bool,
         vol.Optional(CONF_INVERTER_NAME): _text(),
         vol.Optional(CONF_INVERTER_MANUFACTURER): _text(),
         vol.Optional(CONF_INVERTER_MODEL): _text(),
-        vol.Required(CONF_RATED_POWER): _zahl(50, 100000, 10, "W"),
-        vol.Required(CONF_PHASE): _auswahl(PHASES, "phase"),
-        vol.Required(CONF_INVERTER_HYBRID): bool,
+        vol.Optional(CONF_RATED_POWER): _zahl(50, 100000, 10, "W"),
+        vol.Optional(CONF_PHASE): _auswahl(PHASES, "phase"),
+        vol.Optional(CONF_INVERTER_HYBRID): bool,
         vol.Optional(CONF_INVERTER_POWER): _sensor("power"),
         vol.Optional(CONF_INVERTER_AC_VOLTAGE): _sensor("voltage"),
         vol.Optional(CONF_INVERTER_AC_CURRENT): _sensor("current"),
@@ -322,7 +322,7 @@ def _felder_wechselrichter() -> dict[Any, Any]:
 
 def _felder_haus() -> dict[Any, Any]:
     return {
-        vol.Required(CONF_HOUSE_CALCULATE): bool,
+        vol.Optional(CONF_HOUSE_CALCULATE): bool,
         vol.Optional(CONF_HOUSE_POWER): _sensor("power"),
         vol.Optional(CONF_HOUSE_ENERGY): _sensor("energy"),
     }
@@ -330,8 +330,8 @@ def _felder_haus() -> dict[Any, Any]:
 
 def _felder_darstellung() -> dict[Any, Any]:
     return {
-        vol.Required(CONF_ANIMATE): bool,
-        vol.Required(CONF_SHOW_STRINGS): bool,
+        vol.Optional(CONF_ANIMATE): bool,
+        vol.Optional(CONF_SHOW_STRINGS): bool,
         vol.Optional(CONF_CURRENCY_PRICE): _zahl(0, 10, "any", "EUR/kWh"),
         vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, "any", "EUR/kWh"),
     }
@@ -339,10 +339,10 @@ def _felder_darstellung() -> dict[Any, Any]:
 
 def _felder_netz() -> dict[Any, Any]:
     felder: dict[Any, Any] = {
-        vol.Required(CONF_GRID_NAME): _text(),
+        vol.Optional(CONF_GRID_NAME): _text(),
         vol.Optional(CONF_METER_MODEL): _text(),
-        vol.Required(CONF_PHASES): _auswahl(["1", "2", "3"], "phase_count"),
-        vol.Required(CONF_POWER_SIGN): _auswahl(GRID_SIGNS, "grid_sign"),
+        vol.Optional(CONF_PHASES): _auswahl(["1", "2", "3"], "phase_count"),
+        vol.Optional(CONF_POWER_SIGN): _auswahl(GRID_SIGNS, "grid_sign"),
         vol.Optional(CONF_GRID_POWER): _sensor("power"),
         vol.Optional(CONF_GRID_IMPORT_POWER): _sensor("power"),
         vol.Optional(CONF_GRID_EXPORT_POWER): _sensor("power"),
@@ -362,14 +362,17 @@ def _felder_netz() -> dict[Any, Any]:
 
 
 def _schema_einrichtung() -> vol.Schema:
-    """Das Formular des ersten Schritts."""
+    """Das Formular des ersten Schritts.
+
+    Bewusst kurz. Die Phasenzahl des Hausanschlusses wird hier nicht mehr
+    gefragt: In Deutschland sind es praktisch immer drei, und wer es anders
+    hat, findet die Angabe unter "Netz und Zähler". Wie viele Phasen eine
+    einzelne Anlage bedient, sagt ohnehin der Wechselrichter.
+    """
     return vol.Schema(
         {
             vol.Required(CONF_NAME, default=DEFAULT_NAME): _text(),
             vol.Required(CONF_PLANT_COUNT, default=1): _zahl(1, 20, 1),
-            vol.Required(CONF_PHASES, default="3"): _auswahl(
-                ["1", "2", "3"], "phase_count"
-            ),
             vol.Optional(CONF_GRID_POWER): _sensor("power"),
             vol.Required(CONF_POWER_SIGN, default=GRID_SIGNS[0]): _auswahl(
                 GRID_SIGNS, "grid_sign"
@@ -401,7 +404,6 @@ class PvSystemConfigFlow(ConfigFlow, domain=DOMAIN):
                 {
                     CONF_GRID_POWER: user_input.get(CONF_GRID_POWER),
                     CONF_POWER_SIGN: user_input.get(CONF_POWER_SIGN),
-                    CONF_PHASES: user_input.get(CONF_PHASES),
                 }
             )
             return self.async_create_entry(
