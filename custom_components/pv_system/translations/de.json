@@ -52,6 +52,9 @@
       "house_power": {
         "name": "Hausverbrauch"
       },
+      "house_energy": {
+        "name": "Hausverbrauch Energie"
+      },
       "inverter_load": {
         "name": "Wechselrichterauslastung"
       },

@@ -237,6 +237,18 @@ STANDORT: tuple[PvSensorDescription, ...] = (
         wert=lambda d: d["house"]["house_power"],
         extra=lambda d: {"source": d["house"]["house_source"]},
     ),
+    PvSensorDescription(
+        key="house_energy",
+        translation_key="house_energy",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=KWH,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        wert=lambda d: d["house"]["house_energy"],
+        # Nur anlegen, wenn eine Energie-Entität hinterlegt ist. Ohne sie gäbe
+        # es einen Zähler, der dauerhaft unbekannt bleibt.
+        wenn=lambda c: bool(c["house"]["entities"]["energy"]),
+    ),
     _prozent(
         "self_sufficiency", lambda d: d["house"]["self_sufficiency"], "mdi:home-lightning-bolt"
     ),

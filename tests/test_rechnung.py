@@ -176,6 +176,46 @@ def test_hausverbrauch_und_autarkie():
     assert daten["house"]["self_consumption"] == round(100 * 3160 / 5010, 1)
 
 
+def test_wechselrichter_im_standby_verkleinert_den_verbrauch_nicht():
+    """Negative Abgabe ist Verbrauch, nicht negative Erzeugung.
+
+    Ein Wechselrichter im Standby meldet eine kleine negative Leistung. Als
+    "negative Erzeugung" verrechnet käme bei -2 W Abgabe und 16 W Netzbezug ein
+    Hausverbrauch von 14 W heraus, obwohl das Haus 16 W zieht - die 2 W des
+    Wechselrichters stecken im Netzbezug schon drin.
+    """
+    k, hass = _koordinator()
+    hass.states.setzen("sensor.wr3", -2, "W")
+    hass.states.setzen("sensor.netz", 16, "W")
+    daten = k._berechnen()
+    assert daten["totals"]["inverter_power"] == -2      # unverfälscht angezeigt
+    assert daten["house"]["house_power"] == 16          # nicht 14
+
+
+def test_eigenverbrauch_bezieht_sich_auf_die_modulleistung():
+    """DC-gekoppelte Anlage: Die Sonne lädt, der Wechselrichter gibt nichts ab.
+
+    Am AC-Ausgang gemessen wäre der Eigenverbrauch 0/0 und damit unbekannt,
+    obwohl das Dach liefert und alles davon im Haus bleibt.
+    """
+    k, hass = _koordinator()
+    hass.states.setzen("sensor.pv1", 187, "W")
+    hass.states.setzen("sensor.netz", 16, "W")          # Bezug, keine Einspeisung
+    daten = k._berechnen()
+    assert daten["totals"]["pv_power"] == 187
+    assert daten["house"]["self_consumption"] == 100.0
+
+
+def test_eigenverbrauch_faellt_auf_den_wechselrichter_zurueck():
+    """Ohne Modulsensor bleibt die Abgabe des Wechselrichters die Bezugsgröße."""
+    k, hass = _koordinator()
+    hass.states.setzen("sensor.wr3", 1000, "W")
+    hass.states.setzen("sensor.netz", -400, "W")        # 400 W ins Netz
+    daten = k._berechnen()
+    assert daten["totals"]["pv_power"] is None
+    assert daten["house"]["self_consumption"] == 60.0
+
+
 def test_autarkie_bei_netzbezug():
     k, hass = _koordinator()
     hass.states.setzen("sensor.wr3", 1000, "W")
@@ -237,6 +277,21 @@ def test_restlaufzeit_nur_beim_entladen():
 
     hass.states.setzen("sensor.akku3_p", -500, "W")   # lädt
     assert k._berechnen()["plants"][2]["battery"]["runtime"] is None
+
+
+def test_ladezeit_nur_beim_laden():
+    """Das Gegenstück zur Restlaufzeit - sonst steht beim Laden gar nichts da."""
+    k, hass = _koordinator()
+    hass.states.setzen("sensor.akku1_soc", 50, "%")     # 1,28 von 2,56 kWh
+    hass.states.setzen("sensor.akku1_p", 1280, "W")     # lädt
+    akku = k._berechnen()["plants"][0]["battery"]
+    assert akku["runtime"] is None                      # lädt, also keine Restlaufzeit
+    assert akku["time_to_full"] == 1.0                  # 1,28 kWh bei 1,28 kW
+
+    hass.states.setzen("sensor.akku1_p", -1280, "W")    # entlädt
+    akku = k._berechnen()["plants"][0]["battery"]
+    assert akku["time_to_full"] is None
+    assert akku["runtime"] is not None
 
 
 def test_temperatur_in_fahrenheit():
