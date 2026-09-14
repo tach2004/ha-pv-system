@@ -332,3 +332,118 @@ def _alle_tests():
 if __name__ == "__main__":
     _alle_tests()
     print("alle Rechentests bestanden")
+
+
+# ------------------------------------------------- Hybrid und Hausverbrauch
+
+
+def test_hybrid_laedt_aus_dem_netz_und_das_ist_kein_hausverbrauch():
+    """Ein MultiPlus, der die Batterie aus dem Netz lädt, ist kein Verbraucher.
+
+    Ohne diese Unterscheidung stünden beim Laden mit 1 kW über 1000 W
+    Hausverbrauch da, obwohl im Haus nur ein paar Watt laufen.
+    """
+    optionen = _aufbau()
+    optionen["plants"][2]["inverter"]["hybrid"] = True
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3", -1000, "W")     # zieht aus dem Netz
+    hass.states.setzen("sensor.netz", 1016, "W")     # Bezug inklusive Ladung
+    daten = k._berechnen()
+    assert daten["house"]["house_power"] == 16
+
+
+def test_ohne_hybrid_bleibt_der_standby_im_netzbezug():
+    """Der gewöhnliche Wechselrichter im Standby ist selbst ein Verbraucher."""
+    optionen = _aufbau()
+    optionen["plants"][2]["inverter"]["hybrid"] = False
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3", -2, "W")
+    hass.states.setzen("sensor.netz", 16, "W")
+    daten = k._berechnen()
+    assert daten["house"]["house_power"] == 16
+
+
+# ----------------------------------------------------- Abgeleitete Groessen
+
+
+def test_laderegler_rechnet_den_eingangsstrom_aus():
+    """Fehlt der Strangstrom, entsteht er aus Modulleistung und Spannung."""
+    optionen = _aufbau()
+    optionen["plants"][0]["charger"]["input_voltage_entity"] = "sensor.mppt1_uin"
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.pv1", 600, "W")
+    hass.states.setzen("sensor.mppt1_uin", 120, "V")
+    laderegler = k._berechnen()["plants"][0]["charger"]
+    assert laderegler["input_power"] == 600
+    assert laderegler["input_current"] == 5.0
+
+
+def test_laderegler_rechnet_den_ausgangsstrom_aus():
+    """Nur Batteriespannung und Leistung: Der Ladestrom folgt daraus."""
+    optionen = _aufbau()
+    optionen["plants"][2]["charger"]["output_voltage_entity"] = "sensor.mppt3_uout"
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.mppt3_p", 1200, "W")
+    hass.states.setzen("sensor.mppt3_uout", 50, "V")
+    laderegler = k._berechnen()["plants"][2]["charger"]
+    assert laderegler["output_current"] == 24.0
+
+
+def test_keine_division_durch_null_im_standby():
+    """Bei 0 V darf nichts gerechnet werden - sonst fliegt die Integration."""
+    optionen = _aufbau()
+    optionen["plants"][2]["charger"]["output_voltage_entity"] = "sensor.mppt3_uout"
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.mppt3_p", 0, "W")
+    hass.states.setzen("sensor.mppt3_uout", 0, "V")
+    laderegler = k._berechnen()["plants"][2]["charger"]
+    assert laderegler["output_current"] is None
+
+
+def test_wechselrichter_rechnet_ac_strom_und_dc_strom():
+    optionen = _aufbau()
+    optionen["plants"][2]["inverter"]["ac_voltage_entity"] = "sensor.wr3_u"
+    optionen["plants"][2]["inverter"]["dc_voltage_entity"] = "sensor.wr3_udc"
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3", 2300, "W")
+    hass.states.setzen("sensor.wr3_u", 230, "V")
+    hass.states.setzen("sensor.wr3_udc", 50, "V")
+    wr = k._berechnen()["plants"][2]["inverter"]
+    assert wr["ac_current"] == 10.0
+    assert wr["dc_current"] == 46.0
+
+
+def test_modulwerte_kommen_notfalls_vom_laderegler():
+    """Ohne eigene Modulsensoren springt die Eingangsseite des MPPT ein."""
+    optionen = _aufbau()
+    optionen["plants"][2]["modules"].pop("power_entity")
+    optionen["plants"][2]["charger"]["input_voltage_entity"] = "sensor.mppt3_uin"
+    optionen["plants"][2]["charger"]["input_current_entity"] = "sensor.mppt3_iin"
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.mppt3_uin", 148, "V")
+    hass.states.setzen("sensor.mppt3_iin", 10, "A")
+    module = k._berechnen()["plants"][2]["modules"]
+    assert module["power"] == 1480
+    assert module["power_source"] == "charger"
+    assert module["voltage"] == 148
+
+
+# -------------------------------------------------------------- Kostenblock
+
+
+def test_kosten_haengen_an_der_gerechneten_struktur():
+    """Die Karte holt die Beträge aus demselben Datenbaum wie alles andere."""
+    optionen = _aufbau()
+    optionen["costs"] = {"price_per_kwh": 0.34, "feed_in_price": 0.08}
+    k, _ = _koordinator(optionen)
+    kosten = k._berechnen()["costs"]
+    assert kosten["configured"] is True
+    assert kosten["price"] == 0.34
+    assert set(kosten["periods"]) == {"day", "month", "year", "total"}
+
+
+def test_ohne_preise_bleibt_der_kostenblock_leer():
+    k, _ = _koordinator()
+    kosten = k._berechnen()["costs"]
+    assert kosten["configured"] is False
+    assert kosten["periods"]["day"]["cost"] is None

@@ -116,6 +116,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvSystemConfigEntry) -> 
     await _async_register_card(hass)
 
     coordinator = PvSystemCoordinator(hass, entry)
+    # Die Periodenmarken der Kostenrechnung liegen auf der Platte und müssen
+    # vor der ersten Rechnung da sein - sonst würde der laufende Tag beim
+    # Neustart auf null zurückgesetzt.
+    await coordinator.kosten.async_laden()
     # Vor dem ersten Rechnen anmelden: Sonst fiele ein Messwert, der genau in
     # dieses Fenster fällt, unter den Tisch und die Karte zeigte bis zum
     # Sicherheitsnetz alte Zahlen.
@@ -133,6 +137,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvSystemConfigEntry) -> 
 async def async_unload_entry(hass: HomeAssistant, entry: PvSystemConfigEntry) -> bool:
     """Standort abbauen."""
     if geladen := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        # Erst die Marken sichern, dann abbauen: Ein verzögertes Speichern
+        # käme sonst nach dem Ende des Eintrags und ginge verloren.
+        await entry.runtime_data.kosten.async_speichern()
         await entry.runtime_data.async_shutdown()
     return geladen
 

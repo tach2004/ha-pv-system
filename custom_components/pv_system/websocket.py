@@ -62,6 +62,7 @@ def ws_topology(
                 "grid": daten.get("grid", {}),
                 "totals": daten.get("totals", {}),
                 "house": daten.get("house", {}),
+                "costs": daten.get("costs", {}),
                 "display": coordinator.config.get("display", {}),
             }
         )

@@ -117,8 +117,28 @@ CONF_HOUSE_CALCULATE: Final = "calculate"
 # ----------------------------------------------------------------- Darstellung
 CONF_ANIMATE: Final = "animate"
 CONF_SHOW_STRINGS: Final = "show_strings"
+
+# ----------------------------------------------------------------- Kosten
+# Die beiden Preise standen bis 0.0.3 unter "Darstellung". Sie sind dort
+# falsch aufgehoben, sobald aus ihnen gerechnet wird - deshalb ein eigener
+# Abschnitt. Die Schluesselnamen bleiben, damit vorhandene Eintraege beim
+# Normalisieren einfach umziehen koennen.
+CONF_COSTS: Final = "costs"
 CONF_CURRENCY_PRICE: Final = "price_per_kwh"
 CONF_FEED_IN_PRICE: Final = "feed_in_price"
+CONF_BASE_PRICE: Final = "base_price"
+CONF_INVESTMENT: Final = "investment"
+CONF_CURRENCY: Final = "currency"
+
+# Zeitraeume der Kostenrechnung. "total" laeuft seit der Einrichtung durch und
+# traegt die Amortisation.
+PERIOD_DAY: Final = "day"
+PERIOD_MONTH: Final = "month"
+PERIOD_YEAR: Final = "year"
+PERIOD_TOTAL: Final = "total"
+PERIODS: Final = [PERIOD_DAY, PERIOD_MONTH, PERIOD_YEAR, PERIOD_TOTAL]
+
+DEFAULT_CURRENCY: Final = "EUR"
 
 # ----------------------------------------------------------------- Vorzeichen
 # Nicht jeder Zähler zählt gleich herum. Statt die Nutzerin raten zu lassen,
@@ -207,3 +227,14 @@ KEY_PLANT_BATTERY_TEMPERATURE: Final = "plant_battery_temperature"
 KEY_PLANT_CHARGER_POWER: Final = "plant_charger_power"
 KEY_PLANT_CHARGER_IN_VOLTAGE: Final = "plant_charger_input_voltage"
 KEY_PLANT_CHARGER_OUT_VOLTAGE: Final = "plant_charger_output_voltage"
+
+# Sensor-Kennungen der Kostenrechnung
+KEY_COST_RATE: Final = "cost_rate"
+KEY_YIELD_RATE: Final = "yield_rate"
+KEY_GRID_COST: Final = "grid_cost_{period}"
+KEY_FEED_IN_REVENUE: Final = "feed_in_revenue_{period}"
+KEY_SAVINGS: Final = "savings_{period}"
+KEY_YIELD: Final = "yield_{period}"
+KEY_BALANCE: Final = "balance_{period}"
+KEY_PAYBACK_PROGRESS: Final = "payback_progress"
+KEY_PAYBACK_YEARS: Final = "payback_years"

@@ -139,3 +139,33 @@ def _alle_tests():
 if __name__ == "__main__":
     _alle_tests()
     print("alle Struktur-Tests bestanden")
+
+
+def test_preise_ziehen_aus_der_darstellung_um():
+    """Bis 0.0.3 standen Arbeitspreis und Vergütung unter "Darstellung".
+
+    Wer sie dort eingetragen hat, soll sie nach dem Update wiederfinden - ohne
+    sie neu zu tippen und ohne Migrationsschritt am Konfigurationseintrag.
+    """
+    daten = topology.normalisieren(
+        {
+            "plants": [],
+            "display": {"price_per_kwh": 0.34, "feed_in_price": 0.08},
+        }
+    )
+    assert daten["costs"]["price_per_kwh"] == 0.34
+    assert daten["costs"]["feed_in_price"] == 0.08
+    assert daten["costs"]["currency"] == "EUR"
+    # Und aus der Darstellung sind sie verschwunden.
+    assert "price_per_kwh" not in daten["display"]
+
+
+def test_neuer_preis_gewinnt_gegen_den_alten_ort():
+    daten = topology.normalisieren(
+        {
+            "plants": [],
+            "display": {"price_per_kwh": 0.34},
+            "costs": {"price_per_kwh": 0.41},
+        }
+    )
+    assert daten["costs"]["price_per_kwh"] == 0.41

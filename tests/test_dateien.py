@@ -27,6 +27,20 @@ SPRACHEN = ["de", "en"]
 # (f"phase_{art}"). Die drei Arten stehen deshalb hier.
 PHASEN_SCHLUESSEL = {"phase_power", "phase_voltage", "phase_pv_power"}
 
+# Ebenso die Kostensensoren: Ihr Schlüssel entsteht aus Muster und Zeitraum
+# (f"savings_{period}"), steht also nirgends als Konstante im Quelltext.
+KOSTEN_SCHLUESSEL = {
+    muster.format(period=zeitraum)
+    for muster in (
+        "grid_cost_{period}",
+        "feed_in_revenue_{period}",
+        "savings_{period}",
+        "yield_{period}",
+        "balance_{period}",
+    )
+    for zeitraum in ("day", "month", "year", "total")
+}
+
 # Schritte des Konfigurationsdialogs, die kein Formular zeigen.
 OHNE_FORMULAR = {"save"}
 
@@ -164,11 +178,23 @@ def test_deutsch_ist_wirklich_uebersetzt():
 # ------------------------------------------------------------------ Sensoren
 
 
+def _konstanten() -> dict[str, str]:
+    """Die Zeichenketten-Konstanten aus const.py, nach Namen."""
+    return {
+        ziel.id: knoten.value.value
+        for knoten in ast.walk(_baum("const.py"))
+        if isinstance(knoten, ast.AnnAssign) and isinstance(knoten.value, ast.Constant)
+        for ziel in [knoten.target]
+        if isinstance(ziel, ast.Name) and isinstance(knoten.value.value, str)
+    }
+
+
 def _sensor_schluessel() -> set[str]:
     """Alle translation_keys, die sensor.py anlegt."""
     baum = _baum("sensor.py")
-    gefunden: set[str] = set(PHASEN_SCHLUESSEL)
+    gefunden: set[str] = set(PHASEN_SCHLUESSEL) | set(KOSTEN_SCHLUESSEL)
     hilfsfunktionen = {"_leistung", "_prozent", "_energie", "_spannung", "_temperatur"}
+    konstanten = _konstanten()
 
     for knoten in ast.walk(baum):
         if isinstance(knoten, ast.Call):
@@ -178,8 +204,13 @@ def _sensor_schluessel() -> set[str]:
                     gefunden.add(knoten.args[0].value)
             if name == "PvSensorDescription":
                 for wort in knoten.keywords:
-                    if wort.arg == "key" and isinstance(wort.value, ast.Constant):
+                    if wort.arg != "key":
+                        continue
+                    # key="pv_power" oder key=KEY_COST_RATE - beides kommt vor.
+                    if isinstance(wort.value, ast.Constant):
                         gefunden.add(wort.value.value)
+                    elif isinstance(wort.value, ast.Name) and wort.value.id in konstanten:
+                        gefunden.add(konstanten[wort.value.id])
         if isinstance(knoten, ast.Assign):
             for ziel in knoten.targets:
                 if (

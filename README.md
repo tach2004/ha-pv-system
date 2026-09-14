@@ -20,8 +20,10 @@ gemeinsame Einheiten und setzt daraus ein Bild zusammen.
 
 </details>
 
-> **Beta.** Version 0.0.1 ist der erste Entwurf. Aufbau der Konfiguration und
-> Namen der Sensoren können sich noch ändern.
+Alles, was die Anlage hergibt, wird angezeigt: Spannungen und Ströme auf
+beiden Seiten von Laderegler und Wechselrichter, Ladezustand und Restlaufzeit
+der Batterie, Leistung je Phase – und seit 1.0.0 auch, was das Ganze kostet
+und einbringt.
 
 ## Was sie kann
 
@@ -39,8 +41,23 @@ gemeinsame Einheiten und setzt daraus ein Bild zusammen.
 * **Batterien** mit Ladestand, Leistung, Spannung, Temperatur, Zyklen,
   Gesundheitszustand und Restlaufzeit bis zur Entladegrenze.
 * **Smart Meter** mit Gesamtleistung und Leistung, Spannung und Strom je Phase.
+  Jede Phase bekommt ihre eigene Leitung im Bild – man sieht, auf welcher
+  gerade eingespeist und auf welcher bezogen wird.
 * **Hausverbrauch, Autarkie und Eigenverbrauch** – gemessen, wenn es einen
-  Sensor gibt, sonst gerechnet.
+  Sensor gibt, sonst gerechnet:
+
+      Verbrauch = Netzbezug − Einspeisung + Abgabe aller Wechselrichter
+
+  Ein Hybrid-Wechselrichter, der die Batterie aus dem Netz lädt, wird dabei
+  nicht als Verbraucher gezählt – das ist Speicherladung, kein Hausverbrauch.
+* **Kosten und Ertrag** aus den Zählerständen: Bezugskosten, Einspeiseerlös,
+  Ersparnis durch Eigenverbrauch, Ertrag und Bilanz – je für heute, den Monat,
+  das Jahr und seit der Einrichtung. Dazu der Momentanwert in Euro je Stunde
+  und die Amortisation der Anlage.
+* **Was fehlt, wird gerechnet**: Wer Spannung und Strom misst, hat auch die
+  Leistung – und umgekehrt. Fehlt der Strangstrom, entsteht er aus
+  Modulleistung und Spannung; fehlt der Ladestrom, aus Ladeleistung und
+  Batteriespannung.
 * **Einheiten werden umgerechnet**: W, kW, MW, Wh, kWh, mV, mA, °F – die
   Summe stimmt, egal wie die Quelle zählt.
 * **Vorzeichen werden festgelegt**, nicht geraten: Du sagst, ob positiv am
@@ -84,8 +101,13 @@ PV-System
 │             └── Anlage 2 ...
 ├── Netz und Zähler          Gesamt- und Phasenleistung, Vorzeichen
 ├── Haus und Verbrauch       gemessen oder gerechnet
-└── Darstellung              Animation, Verschaltung, Preise
+├── Kosten und Ertrag        Arbeitspreis, Vergütung, Grundpreis, Investition
+└── Darstellung              Animation, Verschaltung
 ```
+
+Jedes Feld trägt einen Hinweistext, der sagt, welcher Sensor gemeint ist und
+was passiert, wenn man es leer lässt. Fast alles darf leer bleiben; nur die
+mit `*` markierten Felder sind nötig.
 
 Änderungen sammeln sich im Menü und werden mit **„Speichern und schließen"**
 übernommen.
@@ -113,6 +135,38 @@ gepunkteter Unterstreichung führen zur Original-Entität.
 
 Ein vollständiges Beispiel-Dashboard liegt in
 [dashboards/pv-system.yaml](dashboards/pv-system.yaml).
+
+## Kosten und Ertrag
+
+Gerechnet wird aus **Zählerständen**, nicht aus aufsummierten Leistungen. Der
+Unterschied ist wichtig: Wer Watt über die Zeit aufaddiert, sammelt bei jedem
+Neustart einen Fehler ein, der nie wieder verschwindet. Ein Zählerstand trägt
+die Wahrheit schon in sich – gemerkt wird nur sein Wert zu Beginn des Tages,
+des Monats und des Jahres.
+
+| Größe              | Rechnung                                            |
+|--------------------|-----------------------------------------------------|
+| Bezugskosten       | bezogene kWh × Arbeitspreis (+ anteiliger Grundpreis) |
+| Einspeiseerlös     | eingespeiste kWh × Vergütung                        |
+| Ersparnis          | selbst genutzte kWh × Arbeitspreis                  |
+| Ertrag             | Ersparnis + Einspeiseerlös                          |
+| Bilanz             | Ertrag − Bezugskosten                               |
+| Amortisation       | Ertrag seit Einrichtung ÷ Investitionskosten        |
+
+Die selbst genutzten Kilowattstunden entstehen aus *erzeugt minus
+eingespeist*, sobald ein Ertragszähler eingetragen ist – sonst aus
+*verbraucht minus bezogen*.
+
+Zwei Dinge sind ehrlich zu sagen:
+
+* **Rückwirkend geht nichts.** Tag, Monat und Jahr laufen ab dem Zeitpunkt, an
+  dem ein Preis eingetragen wird. Am ersten Tag stehen dort kleine Zahlen.
+* **Ohne Preis keine Geldsensoren.** Bleibt der Arbeitspreis leer, entsteht
+  keine einzige Entität dieser Art – statt zwei Dutzend, die dauerhaft
+  „unbekannt" anzeigen.
+
+Fällt ein Zähler zurück – Gerätetausch, ein zurückgesetzter Shelly –, wird die
+Marke neu gesetzt, statt eine negative Differenz auszuweisen.
 
 ## Entitäten
 
