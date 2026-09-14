@@ -362,6 +362,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
             "energy": gespeichert,
             "runtime": self._laufzeit(gespeichert, leistung, conf[CONF_BATTERY_MIN_SOC], kapazitaet),
+            "time_to_full": self._ladezeit(gespeichert, leistung, kapazitaet),
             "entities": {
                 feld.removesuffix("_entity"): conf[feld]
                 for feld in (
@@ -396,6 +397,27 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         reserve = (kapazitaet or 0.0) * (min_soc or 0.0) / 100.0
         nutzbar = max(0.0, gespeichert - reserve)
         return round(nutzbar / (abs(leistung) / 1000.0), 2)
+
+    @staticmethod
+    def _ladezeit(
+        gespeichert: float | None,
+        leistung: float | None,
+        kapazitaet: float | None,
+    ) -> float | None:
+        """Stunden bis voll - das Gegenstück zur Restlaufzeit.
+
+        Die Restlaufzeit bleibt unbekannt, solange geladen wird; das ist
+        richtig, aber dann steht in der Karte gar nichts. Beim Laden ist die
+        interessante Zahl, wann die Batterie voll ist.
+
+        Gerechnet wird mit der aktuellen Ladeleistung. Dass ein BMS zum Ende
+        hin abregelt, bleibt unberücksichtigt - die letzten Prozent dauern in
+        der Realität länger als hier angezeigt.
+        """
+        if gespeichert is None or leistung is None or leistung <= 1 or not kapazitaet:
+            return None
+        fehlend = max(0.0, kapazitaet - gespeichert)
+        return round(fehlend / (leistung / 1000.0), 2)
 
     def _wechselrichter(self, conf: dict[str, Any]) -> dict[str, Any]:
         leistung = units.watt(self.hass, conf[CONF_INVERTER_POWER])
@@ -593,6 +615,21 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     # ------------------------------------------------------------- Haus
 
+    @staticmethod
+    def _ac_erzeugung(leistung: float | None) -> float | None:
+        """Abgabe des Wechselrichters, nach unten auf null begrenzt.
+
+        Ein Wechselrichter im Standby meldet eine kleine negative Leistung - er
+        verbraucht dann, statt zu erzeugen. Als "negative Erzeugung" in den
+        Hausverbrauch gerechnet macht er ihn um seinen eigenen Verbrauch zu
+        klein: Bei -2 W Abgabe und 16 W Netzbezug kämen 14 W heraus, obwohl das
+        Haus 16 W zieht. Er ist eine Last wie jede andere und steckt im
+        Netzbezug schon drin.
+        """
+        if leistung is None:
+            return None
+        return max(leistung, 0.0)
+
     def _haus(self, summen: dict[str, Any], netz: dict[str, Any]) -> dict[str, Any]:
         """Hausverbrauch und die beiden Quoten.
 
@@ -610,8 +647,8 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         gerechnet = None
         if conf[CONF_HOUSE_CALCULATE]:
-            wr = summen["inverter_power"]
             netzleistung = netz["power"]
+            wr = self._ac_erzeugung(summen["inverter_power"])
             if wr is not None or netzleistung is not None:
                 gerechnet = (wr or 0.0) + (netzleistung or 0.0)
 
@@ -624,8 +661,15 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 100.0 * max(0.0, min(verbrauch, verbrauch - bezug)) / verbrauch, 1
             )
 
+        # Bezugsgröße für den Eigenverbrauch ist die erzeugte Leistung am Modul,
+        # nicht die Abgabe des Wechselrichters. Bei einer DC-gekoppelten Anlage
+        # lädt die Sonne über den Laderegler die Batterie, während der
+        # Wechselrichter noch nichts abgibt: Am AC-Ausgang gemessen wäre der
+        # Eigenverbrauch 0/0 und damit unbekannt, obwohl das Dach liefert und
+        # alles davon im Haus bleibt. Ohne Modulsensor bleibt die Abgabe des
+        # Wechselrichters die beste verfügbare Größe.
         eigenverbrauch = None
-        erzeugung = summen["inverter_power"]
+        erzeugung = units.first(summen["pv_power"], self._ac_erzeugung(summen["inverter_power"]))
         if erzeugung is not None and erzeugung > 0:
             einspeisung = netz["export_power"] or 0.0
             eigenverbrauch = round(
@@ -638,4 +682,10 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "house_energy": units.rund(units.kwh(self.hass, conf[CONF_HOUSE_ENERGY]), 2),
             "self_sufficiency": autarkie,
             "self_consumption": eigenverbrauch,
+            # Damit Sensoren und Karte erkennen, was überhaupt hinterlegt ist -
+            # dieselbe Form wie bei Netz, Batterie und Wechselrichter.
+            "entities": {
+                "power": conf[CONF_HOUSE_POWER],
+                "energy": conf[CONF_HOUSE_ENERGY],
+            },
         }

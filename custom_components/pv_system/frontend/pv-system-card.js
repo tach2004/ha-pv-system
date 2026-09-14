@@ -586,6 +586,18 @@ class PvSystemCard extends HTMLElement {
           `${id}:charger:ein`,
           e("text", { class: "mini", x: x + 22, y: g.yLaderegler + 32 })
         );
+        // Betriebszustand (Bulk, Absorption, Float ...) rechts neben der
+        // Eingangsspannung. Die Zeile ist dort frei, und der Zustand ist die
+        // Angabe, für die man sonst die Detailtabelle öffnen müsste.
+        this._ref(
+          box,
+          `${id}:charger:zustand`,
+          e("text", {
+            class: "klein rechts",
+            x: x + M.spalte - 32,
+            y: g.yLaderegler + 32,
+          })
+        );
         this._ref(
           box,
           `${id}:charger:aus`,
@@ -1047,6 +1059,7 @@ class PvSystemCard extends HTMLElement {
           `${id}:charger:system`,
           c.system_voltage === "hv" ? "HV" : `${c.system_voltage} V`
         );
+        this._setzen(`${id}:charger:zustand`, c.state || "");
       }
 
       if (anlage.battery.enabled) {
@@ -1316,6 +1329,7 @@ class PvSystemCard extends HTMLElement {
         ["Inhalt", einheit(b.energy, "kWh", 2, l)],
         ["Kapazität", einheit(b.capacity, "kWh", 2, l)],
         ["Restlaufzeit", b.runtime ? einheit(b.runtime, "h", 1, l) : "–"],
+        ["Voll in", b.time_to_full ? einheit(b.time_to_full, "h", 1, l) : "–"],
         ["Spannung", einheit(b.voltage, "V", 2, l), b.entities.voltage],
         ["Strom", einheit(b.current, "A", 2, l), b.entities.current],
         ["Temperatur", einheit(b.temperature, "°C", 1, l), b.entities.temperature],
@@ -1376,8 +1390,9 @@ class PvSystemCard extends HTMLElement {
       const h = this._daten.house;
       const t = this._daten.totals;
       zeilen = [
-        ["Verbrauch", watt(h.house_power, l)],
+        ["Verbrauch", watt(h.house_power, l), h.entities.power],
         ["Ermittelt", h.house_source === "sensor" ? "gemessen" : "gerechnet"],
+        ["Energiezähler", einheit(h.house_energy, "kWh", 2, l), h.entities.energy],
         ["Autarkie", prozent(h.self_sufficiency, l)],
         ["Eigenverbrauch", prozent(h.self_consumption, l)],
         ["Erzeugung AC", watt(t.inverter_power, l)],

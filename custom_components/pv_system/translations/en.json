@@ -52,6 +52,9 @@
       "house_power": {
         "name": "House consumption"
       },
+      "house_energy": {
+        "name": "House consumption energy"
+      },
       "inverter_load": {
         "name": "Inverter load"
       },
