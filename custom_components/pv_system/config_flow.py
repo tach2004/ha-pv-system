@@ -119,7 +119,6 @@ from .const import (
     CONF_PV_VOLTAGE,
     CONF_RATED_POWER,
     CONF_SHOW_STRINGS,
-    CONF_START_DATE,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
     CONF_TILT,
@@ -347,10 +346,12 @@ def _felder_darstellung() -> dict[Any, Any]:
 
 
 def _felder_kosten() -> dict[Any, Any]:
-    """Preise, Grundgebuehr und Investition.
+    """Die Preise des Standorts.
 
-    Alles darf leer bleiben: Ohne Arbeitspreis rechnet die Integration keine
-    Kosten und legt auch keine Geldsensoren an.
+    Was eine Anlage gekostet hat und seit wann sie laeuft, steht bei der Anlage
+    - die Investition des Standorts ist die Summe seiner Anlagen. Alles hier
+    darf leer bleiben: Ohne Arbeitspreis rechnet die Integration keine Kosten
+    und legt auch keine Geldsensoren an.
     """
     # Bewusst ohne Einheit an den Feldern: Die Waehrung ist einstellbar, ein
     # fest eingetragenes "EUR" waere fuer jede andere schlicht falsch. Was
@@ -359,16 +360,13 @@ def _felder_kosten() -> dict[Any, Any]:
         vol.Optional(CONF_CURRENCY_PRICE): _zahl(0, 10, "any"),
         vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, "any"),
         vol.Optional(CONF_BASE_PRICE): _zahl(0, 1000, "any"),
-        vol.Optional(CONF_INVESTMENT): _zahl(0, 1000000, 1),
         vol.Optional(CONF_CURRENCY): _text(),
-        vol.Optional(CONF_START_DATE): selector.DateSelector(),
         vol.Optional(CONF_PRIOR_IMPORT): _zahl(0, 10000000, "any"),
-        vol.Optional(CONF_PRIOR_EXPORT): _zahl(0, 10000000, "any"),
     }
 
 
 def _felder_anlagenkosten() -> dict[Any, Any]:
-    """Was diese Anlage gekostet hat - und seit wann sie laeuft.
+    """Was diese Anlage gekostet hat, seit wann sie laeuft und was sie brachte.
 
     Bewusst an der Anlage und nicht am Standort: Wer drei Anlagen hat, hat sie
     zu drei Zeitpunkten und zu drei Preisen gebaut. Und mit drei Inbetriebnahmen
@@ -379,6 +377,7 @@ def _felder_anlagenkosten() -> dict[Any, Any]:
         vol.Optional(CONF_COMMISSIONED): selector.DateSelector(),
         vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, "any"),
         vol.Optional(CONF_PRIOR_YIELD): _zahl(0, 10000000, "any"),
+        vol.Optional(CONF_PRIOR_EXPORT): _zahl(0, 10000000, "any"),
     }
 
 

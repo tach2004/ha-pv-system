@@ -27,8 +27,12 @@ Amortisation vom ersten Tag an, statt erst in zwanzig Jahren.
 
 **Je Anlage.** Wer drei Anlagen hat, hat sie meist zu drei Zeitpunkten und zu
 drei Preisen gebaut - und bei drei Inbetriebnahmen auch zu drei
-Einspeisevergütungen. Investition, Datum und Vergütung stehen deshalb an der
-Anlage, nicht am Standort.
+Einspeisevergütungen. Investition, Datum, Vergütung und die Zählerstände von
+davor stehen deshalb an der Anlage.
+
+Der Standort erbt daraus: Seine Investition ist die Summe seiner Anlagen, sein
+Beginn die älteste Inbetriebnahme. Beides zusätzlich eintragen zu können wäre
+nur eine Gelegenheit, sich zu widersprechen.
 """
 
 from __future__ import annotations
@@ -151,7 +155,7 @@ class Kostenrechner:
             # den Gesamtzeitraum - heute und diesen Monat ist es nicht passiert.
             if periode == PERIOD_TOTAL:
                 mengen = _dazu(mengen, vorher)
-                mengen["start"] = _startdatum(preise, mengen.get("start"))
+                mengen["start"] = _fruehester_beginn(anlagen, mengen.get("start"))
             zeitraeume[periode] = self._geld(
                 mengen, arbeitspreis, verguetung, grundpreis, jetzt
             )
@@ -164,10 +168,10 @@ class Kostenrechner:
         # Die Rohmengen waren nur für die Aufteilung auf die Anlagen nötig.
         for zeitraum in zeitraeume.values():
             zeitraum.pop("_mengen", None)
-        investition = _summe(
-            _zahl(preise.get("investment")),
-            *(_zahl(a.get("investment")) for a in anlagen),
-        )
+        # Die Investition des Standorts ist die Summe seiner Anlagen - und nur
+        # das. Ein eigenes Feld dafür stünde neben einer Summe, die es schon
+        # gibt, und wäre spätestens bei der zweiten Anlage falsch.
+        investition = _summe(*(_zahl(a.get("investment")) for a in anlagen))
 
         return {
             "currency": preise.get("currency") or "EUR",
@@ -190,11 +194,14 @@ class Kostenrechner:
     ) -> dict[str, float]:
         """Was die Zähler vor dem ersten Lauf der Integration schon anzeigten.
 
+        Erzeugung und Einspeisung kommen von den Anlagen, der Netzbezug vom
+        Standort - er lässt sich keiner Anlage zuordnen.
+
         Der Eigenverbrauch ergibt sich daraus wie sonst auch: erzeugt minus
         eingespeist, nach unten auf null begrenzt.
         """
         bezug = _zahl(preise.get("prior_import")) or 0.0
-        einspeisung = _zahl(preise.get("prior_export")) or 0.0
+        einspeisung = sum(_zahl(a.get("prior_export")) or 0.0 for a in anlagen)
         erzeugt = sum(_zahl(a.get("prior_yield")) or 0.0 for a in anlagen)
         return {
             "import": bezug,
@@ -210,11 +217,18 @@ class Kostenrechner:
         marke = self._marken.get(periode)
         veraendert = False
 
-        # Neuer Tag, neuer Monat, neues Jahr: Marke auf die aktuellen Stände.
-        # "total" wird nur einmal gesetzt und läuft dann durch.
-        if marke is None or (
-            periode != PERIOD_TOTAL and _als_zeit(marke.get("start")) < beginn
-        ):
+        if marke is None:
+            # Erster Lauf überhaupt: Gezählt wird ab jetzt, nicht ab
+            # Monatserstem. Vorher hat niemand gemessen, und ein Zeitraum, der
+            # weiter zurückreicht als seine Daten, führt in die Irre - der
+            # anteilige Grundpreis stünde sonst für ein ganzes Jahr da, in dem
+            # eine einzige Kilowattstunde erfasst wurde.
+            marke = {"start": dt_util.as_local(jetzt).isoformat(), "werte": {}}
+            self._marken[periode] = marke
+            veraendert = True
+        elif periode != PERIOD_TOTAL and _als_zeit(marke.get("start")) < beginn:
+            # Neuer Tag, neuer Monat, neues Jahr: Jetzt stimmt der
+            # Periodenanfang, denn gemessen wurde durchgehend.
             marke = {"start": beginn.isoformat(), "werte": {}}
             self._marken[periode] = marke
             veraendert = True
@@ -260,9 +274,11 @@ class Kostenrechner:
         eigen = mengen.get("own")
 
         kosten = None
+        grundkosten = None
         if preis is not None and bezug is not None:
             anteil = _tage_seit(mengen.get("start"), jetzt) / TAGE_JE_MONAT
-            kosten = round(bezug * preis + grundpreis * anteil, 2)
+            grundkosten = round(grundpreis * anteil, 2)
+            kosten = round(bezug * preis + grundkosten, 2)
         erloes = (
             round(einspeisung * verguetung, 2)
             if verguetung is not None and einspeisung is not None
@@ -283,6 +299,10 @@ class Kostenrechner:
             "export_kwh": einspeisung,
             "own_kwh": eigen,
             "cost": kosten,
+            # Der Grundpreis steckt in "cost" mit drin. Getrennt ausgewiesen,
+            # weil sonst niemand nachvollziehen kann, warum an einem Tag ohne
+            # Netzbezug trotzdem Kosten stehen.
+            "base_cost": grundkosten,
             "revenue": erloes,
             "savings": ersparnis,
             "yield": ertrag,
@@ -317,23 +337,30 @@ class Kostenrechner:
         haben in Deutschland regelmäßig zwei Sätze.
         """
         mengen = gesamt.get("_mengen") or {}
-        ertraege = {
-            anlage["id"]: max(
-                0.0,
-                (_zahl(mengen.get(f"anlage:{anlage['id']}")) or 0.0)
-                + (_zahl(anlage.get("prior_yield")) or 0.0),
-            )
+        # Gemessen seit dem ersten Lauf, getrennt vom Vorher: Nur die gemessene
+        # Einspeisung muss aufgeteilt werden, die von vorher steht je Anlage
+        # schon fest.
+        gemessen = {
+            anlage["id"]: max(0.0, _zahl(mengen.get(f"anlage:{anlage['id']}")) or 0.0)
             for anlage in anlagen
         }
-        summe = sum(ertraege.values())
-        einspeisung_gesamt = _zahl(gesamt.get("export_kwh")) or 0.0
+        summe = sum(gemessen.values())
+        einspeisung_gemessen = max(
+            0.0,
+            (_zahl(gesamt.get("export_kwh")) or 0.0)
+            - sum(_zahl(a.get("prior_export")) or 0.0 for a in anlagen),
+        )
 
         ergebnis: dict[str, Any] = {}
         for anlage in anlagen:
             kennung = anlage["id"]
-            erzeugt = ertraege[kennung]
-            anteil = erzeugt / summe if summe > 0 else 0.0
-            eingespeist = min(erzeugt, einspeisung_gesamt * anteil)
+            vorher_erzeugt = _zahl(anlage.get("prior_yield")) or 0.0
+            vorher_eingespeist = _zahl(anlage.get("prior_export")) or 0.0
+            erzeugt = gemessen[kennung] + vorher_erzeugt
+            anteil = gemessen[kennung] / summe if summe > 0 else 0.0
+            eingespeist = min(
+                erzeugt, einspeisung_gemessen * anteil + vorher_eingespeist
+            )
             eigen = max(0.0, erzeugt - eingespeist)
             satz = _zahl(anlage.get("feed_in"))
             if satz is None:
@@ -434,13 +461,19 @@ def _amortisation_werte(
     }
 
 
-def _startdatum(preise: dict[str, Any], vorgabe: Any) -> Any:
-    """Das eingetragene Inbetriebnahmedatum, sonst die gesetzte Marke.
+def _fruehester_beginn(anlagen: list[dict[str, Any]], vorgabe: Any) -> Any:
+    """Der Standort läuft, seit seine älteste Anlage läuft.
 
-    Ohne diese Angabe begänne der Gesamtzeitraum an dem Tag, an dem jemand die
-    Integration eingerichtet hat - und die Jahresrate wäre um Jahre daneben.
+    Ohne ein einziges Inbetriebnahmedatum begänne der Gesamtzeitraum an dem
+    Tag, an dem jemand die Integration eingerichtet hat - und die Jahresrate
+    wäre um Jahre daneben.
     """
-    return _als_datum(preise.get("start_date")) or vorgabe
+    daten = [
+        datum
+        for datum in (_als_datum(a.get("commissioned")) for a in anlagen)
+        if datum
+    ]
+    return min(daten) if daten else vorgabe
 
 
 def _anlagenbeginn(anlage: dict[str, Any], vorgabe: Any) -> Any:

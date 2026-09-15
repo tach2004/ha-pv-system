@@ -41,7 +41,8 @@ und einbringt.
 * **Batterien** mit Ladestand, Leistung, Spannung, Temperatur, Zyklen,
   Gesundheitszustand und Restlaufzeit bis zur Entladegrenze.
 * **Smart Meter** mit Gesamtleistung und Leistung, Spannung und Strom je Phase.
-  Jede Phase ist eine eigene Leitung im Bild, und sie zeigt den Fluss
+  Am Zähler und am Haus steht je eine Senkrechte, welche die drei Phasen
+  kreuzt; sie führt die Summe. Die Phasen selbst zeigen den Fluss
   abschnittsweise: zwischen Zähler und Wechselrichter fließt etwas anderes als
   zwischen Wechselrichter und Haus. Bei 980 W Einspeisung und 1820 W vom
   Wechselrichter läuft L1 links ins Netz und rechts davon mit 840 W ins Haus –
@@ -59,10 +60,11 @@ und einbringt.
   und die Amortisation.
 * **Kosten je Anlage**: Investition, Inbetriebnahmedatum und – weil zwei
   Anlagen aus zwei Jahren regelmäßig zwei Sätze haben – eine eigene
-  Einspeisevergütung. Jede Anlage bekommt ihre eigene Amortisation.
+  Einspeisevergütung. Jede Anlage bekommt ihre eigene Amortisation; die des
+  Standorts ist ihre Summe.
 * **Rückwirkend**: Wer die Integration erst Jahre nach dem Bau einrichtet,
-  trägt das Datum und die Zählerstände von davor ein. Die Amortisation stimmt
-  dann vom ersten Tag an.
+  trägt bei der Anlage das Datum und die Zählerstände von davor ein. Die
+  Amortisation stimmt dann vom ersten Tag an.
 * **Was fehlt, wird gerechnet**: Wer Spannung und Strom misst, hat auch die
   Leistung – und umgekehrt. Fehlt der Strangstrom, entsteht er aus
   Modulleistung und Spannung; fehlt der Ladestrom, aus Ladeleistung und
@@ -156,7 +158,7 @@ des Monats und des Jahres.
 
 | Größe              | Rechnung                                            |
 |--------------------|-----------------------------------------------------|
-| Bezugskosten       | bezogene kWh × Arbeitspreis (+ anteiliger Grundpreis) |
+| Bezugskosten       | bezogene kWh × Arbeitspreis + anteiliger Grundpreis |
 | Einspeiseerlös     | eingespeiste kWh × Vergütung                        |
 | Ersparnis          | selbst genutzte kWh × Arbeitspreis                  |
 | Ertrag             | Ersparnis + Einspeiseerlös                          |
@@ -167,12 +169,19 @@ Die selbst genutzten Kilowattstunden entstehen aus *erzeugt minus
 eingespeist*, sobald ein Ertragszähler eingetragen ist – sonst aus
 *verbraucht minus bezogen*.
 
+Der anteilige Grundpreis steht in der Karte als eigene Zeile. Ohne sie stünde
+an einem Tag ohne Netzbezug ein Betrag, den niemand erklären kann.
+
 ### Je Anlage
 
-Investition, Inbetriebnahmedatum und eine abweichende Einspeisevergütung stehen
-bei der Anlage selbst, nicht am Standort: Wer drei Anlagen hat, hat sie zu drei
-Zeitpunkten und zu drei Preisen gebaut. Unter *Kosten und Ertrag* gehören nur
-noch die gemeinsamen Kosten hinein – Zähler, Elektriker, Verkabelung.
+Investition, Inbetriebnahmedatum, eine abweichende Einspeisevergütung und die
+Zählerstände von davor stehen bei der Anlage selbst, nicht am Standort: Wer
+drei Anlagen hat, hat sie zu drei Zeitpunkten und zu drei Preisen gebaut.
+
+Der Standort erbt daraus: Seine **Investition ist die Summe seiner Anlagen**,
+sein **Beginn die älteste Inbetriebnahme**. Beides zusätzlich eintragen zu
+können wäre nur eine Gelegenheit, sich zu widersprechen. Unter *Kosten und
+Ertrag* stehen deshalb nur noch die Preise.
 
 Wie viel eine **einzelne** Anlage ins Netz gespeist hat, misst niemand: Am
 Hausanschluss hängt ein Zähler für alle zusammen. Die Einspeisung wird deshalb
@@ -183,16 +192,24 @@ eine nach Westen zeigt. In der Karte steht deshalb „geschätzt" daneben.
 ### Rückwirkend
 
 Eine Anlage läuft fast immer schon, bevor jemand diese Integration einrichtet.
-Vier Felder holen das nach:
+Vier Felder holen das nach – drei bei der Anlage, eines am Standort:
 
-* **Zählen seit** und **Inbetriebnahme** – ohne Datum begänne die Amortisation
-  an dem Tag, an dem du die Integration eingerichtet hast, und die geschätzte
-  Restzeit wäre um Jahre daneben.
-* **Bezug davor**, **Einspeisung davor** und **Ertrag davor** – die
-  Zählerstände, die bis zum ersten Lauf schon aufgelaufen sind.
+| Feld | wo | wofür |
+|---|---|---|
+| **Inbetriebnahme** | Anlage | Ohne Datum begänne die Amortisation an dem Tag, an dem du die Integration eingerichtet hast |
+| **Ertrag davor** | Anlage | Was der Wechselrichter bis dahin erzeugt hat |
+| **Einspeisung davor** | Anlage | Was davon ins Netz ging – wird mit der Vergütung genau dieser Anlage verrechnet |
+| **Bezug davor** | Standort | Was der Netzzähler bis dahin gezogen hat; einer Anlage lässt sich das nicht zuordnen |
+
+Ein Beispiel: eine Anlage, am 05.04.2023 für 1650 € gebaut, hat seither
+2300 kWh erzeugt und nichts eingespeist. Bei 0,34 €/kWh sind das 782 € an
+vermiedenem Einkauf – **47,4 % amortisiert**, gut vier Jahre bis zur Null.
+Gemessen hat die Integration davon keine einzige Kilowattstunde.
 
 Diese Angaben zählen ausschließlich in den Gesamtzeitraum. Heute, diesen Monat
 und dieses Jahr ist das nicht passiert, und dort taucht es auch nicht auf.
+Umgekehrt beginnt jeder dieser Zeiträume beim **ersten Lauf** und nicht am
+Monatsersten: Ein Zeitraum darf nicht weiter zurückreichen als seine Daten.
 
 Eines bleibt ehrlich zu sagen: **Ohne Preis keine Geldsensoren.** Bleibt der
 Arbeitspreis leer, entsteht keine einzige Entität dieser Art – statt zwei

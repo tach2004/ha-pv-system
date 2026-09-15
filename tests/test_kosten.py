@@ -31,9 +31,15 @@ PREISE = {
     "price": 0.34,
     "feed_in": 0.08,
     "base": 0.0,
-    "investment": 4000.0,
     "currency": "EUR",
 }
+
+# Investition und Inbetriebnahme stehen seit 1.0.2 nur noch an der Anlage; die
+# des Standorts ist ihre Summe.
+def _eine_anlage(**abweichend):
+    anlage = {"id": "a1", "investment": 4000.0, "prior_yield": 0.0}
+    anlage.update(abweichend)
+    return [anlage]
 
 
 def _rechner():
@@ -169,8 +175,11 @@ def test_einspeisung_macht_die_kostenrate_negativ():
 def test_amortisation_braucht_eine_belastbare_dauer():
     """Aus drei Stunden Sonne keine Jahresprognose."""
     r = _rechner()
-    r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0}, PREISE, {})
-    ergebnis = r.rechnen({"import": 0.0, "export": 0.0, "own": 100.0}, PREISE, {})
+    anlagen = _eine_anlage()
+    r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0}, PREISE, {}, anlagen)
+    ergebnis = r.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 100.0}, PREISE, {}, anlagen
+    )
     assert ergebnis["payback_progress"] == round(100 * 34.0 / 4000.0, 1)
     assert ergebnis["payback_years"] is None
 
@@ -178,9 +187,13 @@ def test_amortisation_braucht_eine_belastbare_dauer():
 def test_amortisation_rechnet_nach_einer_woche_hoch():
     r = _rechner()
     vorher = _jetzt() - timedelta(days=100)
-    r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0}, PREISE, {}, jetzt=vorher)
+    anlagen = _eine_anlage(commissioned=vorher.date().isoformat())
+    r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0}, PREISE, {}, anlagen,
+              jetzt=vorher)
     # 1000 kWh selbst genutzt in 100 Tagen = 340 EUR
-    ergebnis = r.rechnen({"import": 0.0, "export": 0.0, "own": 1000.0}, PREISE, {})
+    ergebnis = r.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 1000.0}, PREISE, {}, anlagen
+    )
     assert ergebnis["payback_progress"] == 8.5
     # 340 EUR in 100 Tagen sind 1241 EUR im Jahr, Rest 3660 EUR -> knapp 3 Jahre
     assert 2.5 < ergebnis["payback_years"] < 3.5
@@ -230,8 +243,8 @@ def test_marken_ueberstehen_einen_neustart():
 def test_vorher_zaehlt_nur_in_den_gesamtzeitraum():
     """Was vor dem ersten Lauf war, ist heute nicht passiert."""
     r = _rechner()
-    preise = dict(PREISE, prior_import=1000.0, prior_export=400.0)
-    anlagen = [{"id": "a1", "prior_yield": 900.0}]
+    preise = dict(PREISE, prior_import=1000.0)
+    anlagen = [{"id": "a1", "prior_yield": 900.0, "prior_export": 400.0}]
     r.rechnen({"import": 10.0, "export": 5.0, "own": 2.0}, preise, {}, anlagen)
     ergebnis = r.rechnen(
         {"import": 14.0, "export": 8.0, "own": 3.0}, preise, {}, anlagen
@@ -251,17 +264,20 @@ def test_vorher_zaehlt_nur_in_den_gesamtzeitraum():
 def test_startdatum_macht_die_amortisation_erst_moeglich():
     """Ohne Datum ist die Beobachtungsdauer null - und die Restzeit unbekannt."""
     r = _rechner()
-    ohne = r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    ohne = r.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 0.0}, PREISE, {}, _eine_anlage()
+    )
     assert ohne["payback_years"] is None
 
     # Dieselbe Sekunde, aber mit Inbetriebnahme vor zwei Jahren und dem, was
     # die Anlage in der Zeit schon erzeugt hat.
     vor_zwei_jahren = (_jetzt() - timedelta(days=730)).date().isoformat()
-    preise = dict(PREISE, start_date=vor_zwei_jahren, prior_export=2000.0)
-    anlagen = [{"id": "a1", "prior_yield": 8000.0}]
+    anlagen = _eine_anlage(
+        commissioned=vor_zwei_jahren, prior_yield=8000.0, prior_export=2000.0
+    )
     r2 = _rechner()
     ergebnis = r2.rechnen(
-        {"import": 0.0, "export": 0.0, "own": 0.0}, preise, {}, anlagen
+        {"import": 0.0, "export": 0.0, "own": 0.0}, PREISE, {}, anlagen
     )
     gesamt = ergebnis["periods"]["total"]
     assert gesamt["own_kwh"] == 6000.0
@@ -277,8 +293,9 @@ def test_zukuenftiges_datum_wird_nicht_hochgerechnet():
     morgen = (_jetzt() + timedelta(days=1)).date().isoformat()
     ergebnis = r.rechnen(
         {"import": 0.0, "export": 0.0, "own": 100.0},
-        dict(PREISE, start_date=morgen),
+        PREISE,
         {},
+        _eine_anlage(commissioned=morgen),
     )
     assert ergebnis["payback_years"] is None
 
@@ -292,12 +309,14 @@ def _anlagen():
             "id": "a1",
             "investment": 1000.0,
             "prior_yield": 0.0,
+            "prior_export": 0.0,
             "feed_in": None,
         },
         {
             "id": "a2",
             "investment": 3000.0,
             "prior_yield": 0.0,
+            "prior_export": 0.0,
             # Ältere Anlage, höherer Satz - in Deutschland der Normalfall.
             "feed_in": 0.12,
         },
@@ -345,9 +364,7 @@ def test_amortisation_je_anlage():
     r = _rechner()
     anlagen = _anlagen()
     vorher = _jetzt() - timedelta(days=365)
-    # Ohne gemeinsame Kosten am Standort: Die Investition ist dann genau die
-    # Summe der beiden Anlagen.
-    preise = dict(PREISE, investment=None)
+    preise = PREISE
     start = {"import": 0.0, "export": 0.0, "own": 0.0, "anlage:a1": 0.0, "anlage:a2": 0.0}
     r.rechnen(start, preise, {}, anlagen, jetzt=vorher)
     ergebnis = r.rechnen(
@@ -360,8 +377,7 @@ def test_amortisation_je_anlage():
     assert a1["yield"] == 85.0
     assert a1["payback_progress"] == 8.5
     assert a1["payback_years"] is not None
-    # Die Investition des Standorts ist die Summe aller Anlagen plus der
-    # gemeinsamen Kosten - hier gibt es keine, also genau 1000 + 3000.
+    # Die Investition des Standorts ist genau die Summe seiner Anlagen.
     assert ergebnis["investment"] == 4000.0
 
 
@@ -373,3 +389,135 @@ def test_ohne_investition_keine_amortisation_der_anlage():
         PREISE, {}, anlagen,
     )
     assert ergebnis["plants"]["a1"]["payback_progress"] is None
+
+
+# ------------------------------------------------------ der Fall aus der Praxis
+
+
+def test_anlage_von_2023_amortisiert_sich_rueckwirkend():
+    """Der Fall, für den das rückwirkende Rechnen gebaut wurde.
+
+    Eine Anlage, am 05.04.2023 für 1650 EUR gebaut, hat bis heute 2300 kWh
+    erzeugt und nichts eingespeist. Gemessen hat die Integration davon nichts -
+    sie wurde gerade erst eingerichtet. Trotzdem muss die Amortisation stimmen.
+    """
+    r = _rechner()
+    anlagen = [
+        {
+            "id": "a1",
+            "investment": 1650.0,
+            "commissioned": "2023-04-05",
+            "prior_yield": 2300.0,
+            "prior_export": 0.0,
+        }
+    ]
+    jetzt = datetime(2026, 9, 15, 12, 0).astimezone()
+    leer = {"import": None, "export": None, "own": None, "anlage:a1": None}
+    ergebnis = r.rechnen(leer, PREISE, {}, anlagen, jetzt=jetzt)
+
+    a1 = ergebnis["plants"]["a1"]
+    assert a1["yield_kwh"] == 2300.0
+    assert a1["export_kwh"] == 0.0
+    assert a1["own_kwh"] == 2300.0
+    assert a1["savings"] == round(2300 * 0.34, 2)      # 782,00 EUR gespart
+    assert a1["yield"] == 782.0
+    assert a1["payback_progress"] == 47.4              # von 1650 EUR
+    # 782 EUR in gut drei Jahren sind rund 227 im Jahr; 868 EUR fehlen noch.
+    assert 3.0 < a1["payback_years"] < 4.5
+    assert a1["start"] == "2023-04-05"
+
+    # Der Standort erbt beides von seiner einzigen Anlage.
+    assert ergebnis["investment"] == 1650.0
+    assert ergebnis["periods"]["total"]["own_kwh"] == 2300.0
+    assert ergebnis["payback_progress"] == 47.4
+
+
+def test_einspeisung_von_vorher_wird_mit_der_verguetung_verrechnet():
+    """Was vorher ins Netz ging, zählt nicht als Ersparnis, sondern als Erlös."""
+    r = _rechner()
+    anlagen = [
+        {
+            "id": "a1",
+            "investment": 1650.0,
+            "commissioned": "2023-04-05",
+            "prior_yield": 2300.0,
+            "prior_export": 800.0,
+            "feed_in": 0.12,
+        }
+    ]
+    jetzt = datetime(2026, 9, 15, 12, 0).astimezone()
+    leer = {"import": None, "export": None, "own": None, "anlage:a1": None}
+    a1 = r.rechnen(leer, PREISE, {}, anlagen, jetzt=jetzt)["plants"]["a1"]
+
+    assert a1["export_kwh"] == 800.0
+    assert a1["own_kwh"] == 1500.0
+    assert a1["savings"] == round(1500 * 0.34, 2)      # 510,00
+    assert a1["revenue"] == round(800 * 0.12, 2)       # 96,00 zum eigenen Satz
+    assert a1["yield"] == 606.0
+
+
+def test_standort_beginnt_mit_seiner_aeltesten_anlage():
+    r = _rechner()
+    anlagen = [
+        {"id": "a1", "commissioned": "2025-04-18", "prior_yield": 0.0},
+        {"id": "a2", "commissioned": "2023-09-01", "prior_yield": 0.0},
+    ]
+    ergebnis = r.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 0.0}, PREISE, {}, anlagen
+    )
+    assert ergebnis["periods"]["total"]["start"] == "2023-09-01"
+
+
+# ---------------------------------------------------------------- Grundpreis
+
+
+def test_grundpreis_wird_getrennt_ausgewiesen():
+    """Sonst steht an einem Tag ohne Netzbezug unerklärt ein Betrag da."""
+    r = _rechner()
+    preise = dict(PREISE, base=30.44)      # ein Euro je Tag
+    r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, preise, {})
+    tag = r.rechnen({"import": 102.0, "export": 0.0, "own": 0.0}, preise, {})[
+        "periods"
+    ]["day"]
+    assert tag["base_cost"] is not None
+    assert tag["cost"] == round(2.0 * 0.34 + tag["base_cost"], 2)
+
+
+def test_ohne_grundpreis_bleibt_der_anteil_null():
+    r = _rechner()
+    tag = r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0}, PREISE, {})[
+        "periods"
+    ]["day"]
+    assert tag["base_cost"] == 0.0
+
+
+def test_erster_lauf_beginnt_jetzt_nicht_am_monatsersten():
+    """Ein Zeitraum darf nicht weiter zurückreichen als seine Daten.
+
+    Sonst stünde beim ersten Lauf am 20. des Monats ein anteiliger Grundpreis
+    für zwanzig Tage da, in denen nichts gemessen wurde.
+    """
+    r = _rechner()
+    jetzt = datetime(2026, 9, 20, 12, 0).astimezone()
+    preise = dict(PREISE, base=30.44)
+    r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, preise, {}, jetzt=jetzt)
+    ergebnis = r.rechnen(
+        {"import": 100.0, "export": 0.0, "own": 0.0}, preise, {}, jetzt=jetzt
+    )
+    for periode in ("day", "month", "year"):
+        assert ergebnis["periods"][periode]["base_cost"] == 0.0, periode
+        assert ergebnis["periods"][periode]["start"].startswith("2026-09-20")
+
+
+def test_nach_dem_tageswechsel_stimmt_der_periodenanfang():
+    """Ab dem zweiten Tag wurde durchgehend gemessen - dann gilt Mitternacht."""
+    r = _rechner()
+    gestern = datetime(2026, 9, 20, 12, 0).astimezone()
+    heute = datetime(2026, 9, 21, 12, 0).astimezone()
+    r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, PREISE, {}, jetzt=gestern)
+    ergebnis = r.rechnen(
+        {"import": 110.0, "export": 0.0, "own": 0.0}, PREISE, {}, jetzt=heute
+    )
+    assert ergebnis["periods"]["day"]["start"].startswith("2026-09-21T00:00")
+    # Der Monat läuft weiter ab dem ersten Lauf.
+    assert ergebnis["periods"]["month"]["start"].startswith("2026-09-20")

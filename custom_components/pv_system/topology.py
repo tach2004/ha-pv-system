@@ -108,7 +108,6 @@ from .const import (
     CONF_PV_VOLTAGE,
     CONF_RATED_POWER,
     CONF_SHOW_STRINGS,
-    CONF_START_DATE,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
     CONF_TILT,
@@ -386,7 +385,12 @@ def darstellung_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
 def kosten_normalisieren(
     roh: dict[str, Any] | None, alt: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Preise und Investition.
+    """Preise des Standorts.
+
+    Was eine Anlage gekostet hat und seit wann sie laeuft, steht bewusst nicht
+    hier, sondern an der Anlage: Die Investition des Standorts ist die Summe
+    seiner Anlagen, sein Beginn die aelteste Inbetriebnahme. Beides zweimal
+    eintragen zu muessen waere eine Gelegenheit, sich zu widersprechen.
 
     ``alt`` ist der fruehere Darstellungs-Block: Bis 0.0.3 standen Arbeitspreis
     und Einspeiseverguetung dort. Wer sie schon eingetragen hat, soll sie nach
@@ -402,22 +406,25 @@ def kosten_normalisieren(
             roh.get(CONF_FEED_IN_PRICE, frueher.get(CONF_FEED_IN_PRICE)), None
         ),
         CONF_BASE_PRICE: _zahl(roh.get(CONF_BASE_PRICE), None),
-        CONF_INVESTMENT: _zahl(roh.get(CONF_INVESTMENT), None),
         CONF_CURRENCY: str(roh.get(CONF_CURRENCY) or DEFAULT_CURRENCY),
-        CONF_START_DATE: _datum(roh.get(CONF_START_DATE)),
         CONF_PRIOR_IMPORT: _zahl(roh.get(CONF_PRIOR_IMPORT), None),
-        CONF_PRIOR_EXPORT: _zahl(roh.get(CONF_PRIOR_EXPORT), None),
     }
 
 
 def anlagenkosten_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
-    """Was diese eine Anlage gekostet hat und seit wann sie laeuft."""
+    """Was diese eine Anlage gekostet hat, seit wann sie laeuft, was sie brachte.
+
+    ``prior_export`` gehoert hierher und nicht an den Netzanschluss: Nur so
+    laesst sich die Einspeisung von vorher mit der Verguetung genau dieser
+    Anlage verrechnen - und zwei Anlagen aus zwei Jahren haben zwei Saetze.
+    """
     roh = dict(roh or {})
     return {
         CONF_INVESTMENT: _zahl(roh.get(CONF_INVESTMENT), None),
         CONF_COMMISSIONED: _datum(roh.get(CONF_COMMISSIONED)),
         CONF_FEED_IN_PRICE: _zahl(roh.get(CONF_FEED_IN_PRICE), None),
         CONF_PRIOR_YIELD: _zahl(roh.get(CONF_PRIOR_YIELD), None),
+        CONF_PRIOR_EXPORT: _zahl(roh.get(CONF_PRIOR_EXPORT), None),
     }
 
 

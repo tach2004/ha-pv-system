@@ -59,12 +59,13 @@ const BATTERIE_B = 132;   // Breite des Batteriekastens
 const KASTEN_UNTEN = 150; // Breite von Netz- und Hauskasten
 const MINDESTBREITE = 2 * KASTEN_UNTEN + 120; // damit beide nebeneinander passen
 
-// Die drei Phasen fächern am Netz auf und laufen am Haus wieder ein. L1 liegt
-// außen: Sie beginnt links am weitesten außen und endet rechts am weitesten
-// außen - so kreuzen sich die Leitungen nicht.
-const FAECHER = 18;       // Abstand der Steigleitungen
-const FAECHER_NETZ = 22;  // erste Steigleitung im Netzkasten
-const FAECHER_HAUS = 74;  // erste (= L3) Steigleitung im Hauskasten
+// Je eine Senkrechte an beiden Enden, und die drei Phasen kreuzen sie. Ein
+// Fächer mit drei getrennten Steigleitungen war der Versuch, "nicht gebrückt"
+// zu zeigen - er sah aber aus wie drei Hausanschlüsse. Eine Senkrechte mit
+// Knotenpunkten ist das übliche Schaltbild und liest sich sofort richtig:
+// unten die Summe, waagerecht die einzelnen Phasen.
+const STEIG_NETZ = 40;    // x der Senkrechten im Netzkasten
+const STEIG_HAUS = 110;   // x der Senkrechten im Hauskasten
 const WRBALKEN = M.spalte - 54;
 
 /* --------------------------------------------------------------- Helfer */
@@ -610,12 +611,16 @@ class PvSystemCard extends HTMLElement {
     return punkte.map((liste) => liste.sort((a, b) => a.x - b.x));
   }
 
-  /** x der Steigleitung einer Phase am Netz- und am Hauskasten. */
-  _faecherX(i, seite) {
+  /**
+   * x der Senkrechten am Netz- bzw. am Hauskasten.
+   *
+   * Für alle drei Phasen dieselbe: Sie treffen sich dort, so wie am
+   * Hausanschluss auch. Die Phase bekommt den Wert erst durch den Knotenpunkt,
+   * nicht durch eine eigene Steigleitung.
+   */
+  _steigX(seite) {
     const g = this._geo;
-    return seite === "netz"
-      ? g.netzX + FAECHER_NETZ + i * FAECHER
-      : g.hausX + FAECHER_HAUS + (g.phasen - 1 - i) * FAECHER;
+    return seite === "netz" ? g.netzX + STEIG_NETZ : g.hausX + STEIG_HAUS;
   }
 
   _modulHoehe(anlage, zeigeStrings) {
@@ -1076,8 +1081,8 @@ class PvSystemCard extends HTMLElement {
 
     for (let i = 0; i < g.phasen; i++) {
       const y = g.yBus + i * M.busAbstand;
-      const links = this._faecherX(i, "netz");
-      const rechts = this._faecherX(i, "haus");
+      const links = this._steigX("netz");
+      const rechts = this._steigX("haus");
       // Die Knotenpunkte von links nach rechts. Ein Wechselrichter außerhalb
       // der Strecke - bei vielen Anlagen steht der Zähler unter einer Spalte -
       // erweitert sie einfach.
@@ -1097,13 +1102,11 @@ class PvSystemCard extends HTMLElement {
         this._leitung(leitungen, von, y, bis, y, `bus:${i}:${k}`, "f-netz");
       }
 
-      // Beschriftung ganz links, alle drei untereinander. Jeweils vor der
-      // eigenen Steigleitung stünde L2 mitten in der Steigleitung von L1 -
-      // die läuft an dieser Stelle senkrecht vorbei.
+      // Beschriftung links vor der Senkrechten, alle drei untereinander.
       leitungen.appendChild(
         e("text", {
           class: "klein",
-          x: this._faecherX(0, "netz") - 7,
+          x: links - 8,
           y: y + 3.5,
           "text-anchor": "end",
           text: `L${i + 1}`,
@@ -1125,39 +1128,28 @@ class PvSystemCard extends HTMLElement {
     const netzX = g.netzX;
     const hausX = g.hausX;
 
-    // Am Netz führt eine Leitung aus dem Kasten nach oben und fächert dort in
-    // die drei Phasen auf. Strom kann nur von dort kommen, also gibt es auch
-    // nur eine Zuleitung - drei getrennte Stränge bis zum Kasten hinunter
-    // behaupteten drei getrennte Anschlüsse.
-    const sammel = g.yUnten - 14;
-    const erste = this._faecherX(0, "netz");
-    const letzte = this._faecherX(g.phasen - 1, "netz");
-    for (let i = 0; i < g.phasen; i++) {
-      const y = g.yBus + i * M.busAbstand;
-      const x = this._faecherX(i, "netz");
-      this._leitung(leitungen, x, y, x, sammel, `netz:${i}`, "f-netz");
-      leitungen.appendChild(
-        e("circle", { cx: x, cy: y, r: 3.4, fill: "var(--pv-netz, #4a8fd4)" })
+    // An beiden Enden eine Senkrechte, welche die drei Phasen kreuzt. Der
+    // Knotenpunkt an jeder Kreuzung sagt: Hier hängt diese Phase dran. Die
+    // Senkrechte führt die Summe - am Netz je nach Richtung, am Haus immer
+    // hinein, denn ein Haus speist nicht ein, es verbraucht nur.
+    for (const [seite, name, farbe] of [
+      ["netz", "netz", "var(--pv-netz, #4a8fd4)"],
+      ["haus", "haus", "var(--pv-haus, #9b6ad4)"],
+    ]) {
+      const x = this._steigX(seite);
+      this._leitung(
+        leitungen, x, g.yBus, x, g.yUnten, name, seite === "netz" ? "f-netz" : "f-haus"
       );
-    }
-    if (g.phasen > 1) {
-      leitungen.appendChild(
-        e("path", { class: "leitung", d: `M ${erste} ${sammel} H ${letzte}` })
-      );
-    }
-    const netzMitte = (erste + letzte) / 2;
-    this._leitung(leitungen, netzMitte, sammel, netzMitte, g.yUnten, "netz", "f-netz");
-
-    // Am Haus gehen die drei Phasen durch bis in den Kasten. Sie dort auf eine
-    // Leitung zusammenzuführen wäre falsch: Hinter dem Haus geht es in keine
-    // Richtung weiter, die drei enden schlicht dort.
-    for (let i = 0; i < g.phasen; i++) {
-      const y = g.yBus + i * M.busAbstand;
-      const x = this._faecherX(i, "haus");
-      this._leitung(leitungen, x, y, x, g.yUnten, `haus:${i}`, "f-haus");
-      leitungen.appendChild(
-        e("circle", { cx: x, cy: y, r: 3.4, fill: "var(--pv-haus, #9b6ad4)" })
-      );
+      for (let i = 0; i < g.phasen; i++) {
+        leitungen.appendChild(
+          e("circle", {
+            cx: x,
+            cy: g.yBus + i * M.busAbstand,
+            r: 3.4,
+            fill: farbe,
+          })
+        );
+      }
     }
 
     const netz = this._kasten(bloecke, "grid:", netzX, g.yUnten, KASTEN_UNTEN, M.unten - 10);
@@ -1543,8 +1535,6 @@ class PvSystemCard extends HTMLElement {
       "house:quelle",
       d.house.house_source === "sensor" ? "gemessen" : "gerechnet"
     );
-    this._faerben("netz", bezugAktiv);
-    this._fluss("netz", netzleistung, 5000, bezugAktiv);
 
     // Kennzahlenleiste
     this._setzen("kpi:pv", watt(t.pv_power, l));
@@ -1612,6 +1602,7 @@ class PvSystemCard extends HTMLElement {
       leistungJeWr.set(anlage.id, anlage.inverter.enabled ? zahl(anlage.inverter.power) : null);
     }
 
+    let insHaus = 0;
     for (let i = 0; i < g.phasen; i++) {
       const phase = phasen[["l1", "l2", "l3"][i]] || {};
       // Je Phase die eigene Leistung, sonst der Gesamtwert gleichmäßig
@@ -1622,8 +1613,6 @@ class PvSystemCard extends HTMLElement {
           : netzleistung === null
           ? null
           : netzleistung / g.phasen;
-      const bezugHier = (netzHier || 0) > 0;
-
       const punkte = (this._busPunkte || [])[i] || [];
       const netzIndex = punkte.findIndex((k) => k.art === "netz");
       let summe = 0;
@@ -1641,12 +1630,15 @@ class PvSystemCard extends HTMLElement {
         this._fluss(name, summe, 3000, zumNetz);
       }
 
-      // Die Steigleitungen: am Netz je nach Richtung, am Haus das, was nach
-      // dem letzten Knotenpunkt übrig geblieben ist.
-      this._faerben(`netz:${i}`, bezugHier);
-      this._fluss(`netz:${i}`, netzHier, 5000, bezugHier);
-      this._fluss(`haus:${i}`, summe, 2000);
+      insHaus += summe;
     }
+
+    // Die beiden Senkrechten führen die Summe. Am Netz entscheidet das
+    // Vorzeichen über Farbe und Richtung; am Haus geht es immer hinein, denn
+    // ein Haus speist nicht ein.
+    this._faerben("netz", (netzleistung || 0) > 0);
+    this._fluss("netz", netzleistung, 5000, (netzleistung || 0) > 0);
+    this._fluss("haus", insHaus, 5000);
   }
 
   /** Eine Flusslinie zwischen Bezugsfarbe und einer zweiten Farbe umschalten. */
@@ -1938,6 +1930,10 @@ class PvSystemCard extends HTMLElement {
         "Einspeisevergütung",
         k.feed_in === null ? "–" : `${einheit(k.feed_in, "", 3, l)}${w}/kWh`,
       ],
+      [
+        "Grundpreis",
+        k.base_price ? `${geld(k.base_price, w, l)} je Monat` : "–",
+      ],
       ["Netzkosten jetzt", k.cost_rate === null ? "–" : `${einheit(k.cost_rate, "", 3, l)}${w}/h`],
       ["Ertrag jetzt", k.yield_rate === null ? "–" : `${einheit(k.yield_rate, "", 3, l)}${w}/h`],
     ];
@@ -1950,7 +1946,14 @@ class PvSystemCard extends HTMLElement {
     for (const [name, wort] of zeitraeume) {
       const z = zeit[name] || {};
       zeilen.push(
-        [`Bezug ${wort}`, `${einheit(z.import_kwh, "kWh", 2, l)} · ${geld(z.cost, w, l)}`],
+        [`Bezug ${wort}`, `${einheit(z.import_kwh, "kWh", 2, l)} · ${geld(z.cost, w, l)}`]
+      );
+      // Der Grundpreis steckt in den Bezugskosten. Ohne diese Zeile stünde an
+      // einem Tag ohne Netzbezug ein Betrag da, den niemand erklären kann.
+      if (k.base_price) {
+        zeilen.push([`davon Grundpreis ${wort}`, geld(z.base_cost, w, l)]);
+      }
+      zeilen.push(
         [
           `Einspeisung ${wort}`,
           `${einheit(z.export_kwh, "kWh", 2, l)} · ${geld(z.revenue, w, l)}`,
@@ -1965,7 +1968,7 @@ class PvSystemCard extends HTMLElement {
     zeilen.push(
       ["Ertrag gesamt", geld(gesamt.yield, w, l)],
       ["Bilanz gesamt", geld(gesamt.balance, w, l)],
-      ["Investition", k.investment === null ? "–" : geld(k.investment, w, l)],
+      ["Investition aller Anlagen", k.investment === null ? "–" : geld(k.investment, w, l)],
       ["Amortisation", einheit(k.payback_progress, "%", 1, l)],
       [
         "Noch",

@@ -376,10 +376,6 @@ FELDNAMEN_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
     },
     "costs": {
-        "investment": (
-            "Gemeinsame Investitionskosten",
-            "Shared investment cost",
-        ),
         "feed_in_price": (
             "Einspeisevergütung (Vorgabe)",
             "Feed-in tariff (default)",
@@ -819,16 +815,16 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "integration started counting. Usually shown on the inverter. "
             "Without it the time before is missing from the payback.",
         ),
+        "prior_export": (
+            "Wie viel davon ins Netz ging. Diese Kilowattstunden zählen nicht "
+            "als Ersparnis, sondern werden mit der Vergütung dieser Anlage "
+            "verrechnet. Wer nicht einspeist, trägt 0 ein oder lässt es leer.",
+            "How much of that went to the grid. These kilowatt hours do not "
+            "count as savings but are settled at this plant's tariff. If you "
+            "do not export, enter 0 or leave it empty.",
+        ),
     },
     "costs": {
-        "start_date": (
-            "Seit wann gerechnet werden soll - meist der Tag der "
-            "Inbetriebnahme. Zusammen mit den drei „davor“-Feldern stimmt die "
-            "Amortisation damit vom ersten Tag an.",
-            "From when to calculate - usually the day of commissioning. "
-            "Together with the three “before” fields the payback is right from "
-            "day one.",
-        ),
         "prior_import": (
             "Wie viele Kilowattstunden du aus dem Netz bezogen hast, bevor die "
             "Integration zu zählen begann. Nur für den Gesamtzeitraum; Tag, "
@@ -836,10 +832,6 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "How many kilowatt hours you drew from the grid before the "
             "integration started counting. Only for the total; day, month and "
             "year are unaffected.",
-        ),
-        "prior_export": (
-            "Gegenstück dazu: die eingespeisten Kilowattstunden von davor.",
-            "The counterpart: the kilowatt hours exported before that.",
         ),
         "price_per_kwh": (
             "Was eine Kilowattstunde aus dem Netz kostet, z. B. 0,34. Ohne "
@@ -862,12 +854,6 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "The monthly base fee of your electricity contract. It is spread "
             "proportionally across day, month and year. Empty or 0 if you do "
             "not want it counted here.",
-        ),
-        "investment": (
-            "Was die Anlage insgesamt gekostet hat. Daraus entstehen "
-            "Amortisationsfortschritt und die geschätzte Restzeit.",
-            "What the system cost in total. Payback progress and the estimated "
-            "remaining time are derived from it.",
         ),
         "currency": (
             "Das Währungskürzel, z. B. EUR oder CHF. Es wird als Einheit an "
@@ -923,11 +909,11 @@ NETZFELDER = [
 HAUSFELDER = ["calculate", "power_entity", "energy_entity"]
 ANZEIGEFELDER = ["animate", "show_strings"]
 KOSTENFELDER = [
-    "price_per_kwh", "feed_in_price", "base_price", "investment", "currency",
-    "start_date", "prior_import", "prior_export",
+    "price_per_kwh", "feed_in_price", "base_price", "currency", "prior_import",
 ]
 ANLAGENKOSTENFELDER = [
     "investment", "commissioned", "feed_in_price", "prior_yield",
+    "prior_export",
 ]
 
 OPTIONAL: T = ('\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.', '\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.')
@@ -1140,21 +1126,25 @@ def baum(sprache) -> dict:
                             "„Netz und Zähler“ eingetragen hast - nicht aus "
                             "hochgerechneten Leistungen. Tag, Monat und Jahr "
                             "laufen ab dem Zeitpunkt mit, an dem du hier einen "
-                            "Preis einträgst - es sei denn, du trägst unten "
-                            "ein, seit wann gezählt werden soll und was die "
-                            "Zähler davor schon anzeigten.\n\nWas eine "
-                            "einzelne Anlage gekostet hat, steht bei ihr "
-                            "selbst unter „Kosten dieser Anlage“; hier gehören "
-                            "nur gemeinsame Kosten hinein."
+                            "Preis einträgst - für die Zeit davor sorgen die "
+                            "Angaben bei der jeweiligen Anlage.\n\nWas eine "
+                            "Anlage gekostet hat und seit wann sie läuft, "
+                            "steht bei ihr selbst unter „Kosten dieser "
+                            "Anlage“. Die Investition des Standorts ist die "
+                            "Summe seiner Anlagen, sein Beginn die älteste "
+                            "Inbetriebnahme - beides muss hier niemand noch "
+                            "einmal eintragen."
                             + OPTIONAL[0],
                             "Everything is derived from the meter readings you "
                             "entered under “Grid and meter” - not from "
                             "extrapolated power. Day, month and year start "
-                            "counting the moment you enter a price here - "
-                            "unless you fill in below since when to count and "
-                            "what the meters already showed before.\n\nWhat a "
-                            "single plant cost belongs to that plant under "
-                            "“Costs of this plant”; only shared costs go here."
+                            "counting the moment you enter a price here - the "
+                            "time before is covered by the figures at each "
+                            "plant.\n\nWhat a plant cost and since when it "
+                            "runs belongs to that plant under “Costs of this "
+                            "plant”. The site's investment is the sum of its "
+                            "plants, its start the earliest commissioning - "
+                            "nobody needs to enter either again here."
                             + OPTIONAL[1],
                         )
                     ),
