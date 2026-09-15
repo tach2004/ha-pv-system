@@ -152,6 +152,7 @@ OPTIONEN = {
                 "investment": 1400,
                 "commissioned": "2025-04-18",
                 "prior_yield": 480,
+                "prior_export": 120,
             },
         },
         {
@@ -198,6 +199,7 @@ OPTIONEN = {
                 # Ältere Anlage, höherer Satz - der Normalfall in Deutschland.
                 "feed_in_price": 0.123,
                 "prior_yield": 4900,
+                "prior_export": 1980,
             },
         },
     ],
@@ -218,11 +220,8 @@ OPTIONEN = {
         "price_per_kwh": 0.34,
         "feed_in_price": 0.082,
         "base_price": 12.9,
-        "investment": 900,          # gemeinsame Kosten: Zähler, Elektriker
         "currency": "EUR",
-        "start_date": "2023-09-01",
         "prior_import": 3800,
-        "prior_export": 2100,
     },
 }
 

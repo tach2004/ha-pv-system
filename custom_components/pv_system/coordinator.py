@@ -109,7 +109,6 @@ from .const import (
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_RATED_POWER,
-    CONF_START_DATE,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
     CONF_TILT,
@@ -290,11 +289,8 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "price": conf[CONF_CURRENCY_PRICE],
                 "feed_in": conf[CONF_FEED_IN_PRICE],
                 "base": conf[CONF_BASE_PRICE],
-                "investment": conf[CONF_INVESTMENT],
                 "currency": conf[CONF_CURRENCY],
-                "start_date": conf[CONF_START_DATE],
                 "prior_import": conf[CONF_PRIOR_IMPORT],
-                "prior_export": conf[CONF_PRIOR_EXPORT],
             },
             {
                 "import": netz["import_power"],
@@ -314,6 +310,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "commissioned": conf[CONF_COMMISSIONED],
             "feed_in": conf[CONF_FEED_IN_PRICE],
             "prior_yield": conf[CONF_PRIOR_YIELD],
+            "prior_export": conf[CONF_PRIOR_EXPORT],
         }
 
     def _kosten_conf(self, kennung: str) -> dict[str, Any]:
