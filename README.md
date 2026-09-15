@@ -41,8 +41,11 @@ und einbringt.
 * **Batterien** mit Ladestand, Leistung, Spannung, Temperatur, Zyklen,
   Gesundheitszustand und Restlaufzeit bis zur Entladegrenze.
 * **Smart Meter** mit Gesamtleistung und Leistung, Spannung und Strom je Phase.
-  Jede Phase bekommt ihre eigene Leitung im Bild – man sieht, auf welcher
-  gerade eingespeist und auf welcher bezogen wird.
+  Jede Phase ist eine eigene Leitung im Bild, und sie zeigt den Fluss
+  abschnittsweise: zwischen Zähler und Wechselrichter fließt etwas anderes als
+  zwischen Wechselrichter und Haus. Bei 980 W Einspeisung und 1820 W vom
+  Wechselrichter läuft L1 links ins Netz und rechts davon mit 840 W ins Haus –
+  beides gleichzeitig, jedes in seine Richtung.
 * **Hausverbrauch, Autarkie und Eigenverbrauch** – gemessen, wenn es einen
   Sensor gibt, sonst gerechnet:
 
@@ -52,8 +55,14 @@ und einbringt.
   nicht als Verbraucher gezählt – das ist Speicherladung, kein Hausverbrauch.
 * **Kosten und Ertrag** aus den Zählerständen: Bezugskosten, Einspeiseerlös,
   Ersparnis durch Eigenverbrauch, Ertrag und Bilanz – je für heute, den Monat,
-  das Jahr und seit der Einrichtung. Dazu der Momentanwert in Euro je Stunde
-  und die Amortisation der Anlage.
+  das Jahr und seit der Inbetriebnahme. Dazu der Momentanwert in Euro je Stunde
+  und die Amortisation.
+* **Kosten je Anlage**: Investition, Inbetriebnahmedatum und – weil zwei
+  Anlagen aus zwei Jahren regelmäßig zwei Sätze haben – eine eigene
+  Einspeisevergütung. Jede Anlage bekommt ihre eigene Amortisation.
+* **Rückwirkend**: Wer die Integration erst Jahre nach dem Bau einrichtet,
+  trägt das Datum und die Zählerstände von davor ein. Die Amortisation stimmt
+  dann vom ersten Tag an.
 * **Was fehlt, wird gerechnet**: Wer Spannung und Strom misst, hat auch die
   Leistung – und umgekehrt. Fehlt der Strangstrom, entsteht er aus
   Modulleistung und Spannung; fehlt der Ladestrom, aus Ladeleistung und
@@ -97,7 +106,8 @@ PV-System
 │             │              ├── Module      Anzahl, Wp, Verschaltung, Sensoren
 │             │              ├── Laderegler  Systemspannung, Ein-/Ausgang
 │             │              ├── Batterie    Kapazität, Ladestand, Temperatur
-│             │              └── Wechselr.   Nennleistung, Phase, Sensoren
+│             │              ├── Wechselr.   Nennleistung, Phase, Sensoren
+│             │              └── Kosten      Investition, Inbetriebnahme, Satz
 │             └── Anlage 2 ...
 ├── Netz und Zähler          Gesamt- und Phasenleistung, Vorzeichen
 ├── Haus und Verbrauch       gemessen oder gerechnet
@@ -151,19 +161,42 @@ des Monats und des Jahres.
 | Ersparnis          | selbst genutzte kWh × Arbeitspreis                  |
 | Ertrag             | Ersparnis + Einspeiseerlös                          |
 | Bilanz             | Ertrag − Bezugskosten                               |
-| Amortisation       | Ertrag seit Einrichtung ÷ Investitionskosten        |
+| Amortisation       | Ertrag seit Inbetriebnahme ÷ Investitionskosten     |
 
 Die selbst genutzten Kilowattstunden entstehen aus *erzeugt minus
 eingespeist*, sobald ein Ertragszähler eingetragen ist – sonst aus
 *verbraucht minus bezogen*.
 
-Zwei Dinge sind ehrlich zu sagen:
+### Je Anlage
 
-* **Rückwirkend geht nichts.** Tag, Monat und Jahr laufen ab dem Zeitpunkt, an
-  dem ein Preis eingetragen wird. Am ersten Tag stehen dort kleine Zahlen.
-* **Ohne Preis keine Geldsensoren.** Bleibt der Arbeitspreis leer, entsteht
-  keine einzige Entität dieser Art – statt zwei Dutzend, die dauerhaft
-  „unbekannt" anzeigen.
+Investition, Inbetriebnahmedatum und eine abweichende Einspeisevergütung stehen
+bei der Anlage selbst, nicht am Standort: Wer drei Anlagen hat, hat sie zu drei
+Zeitpunkten und zu drei Preisen gebaut. Unter *Kosten und Ertrag* gehören nur
+noch die gemeinsamen Kosten hinein – Zähler, Elektriker, Verkabelung.
+
+Wie viel eine **einzelne** Anlage ins Netz gespeist hat, misst niemand: Am
+Hausanschluss hängt ein Zähler für alle zusammen. Die Einspeisung wird deshalb
+nach dem Anteil an der Gesamterzeugung aufgeteilt. Das trifft zu, solange die
+Anlagen zur selben Zeit liefern, und liegt daneben, wenn eine nach Osten und
+eine nach Westen zeigt. In der Karte steht deshalb „geschätzt" daneben.
+
+### Rückwirkend
+
+Eine Anlage läuft fast immer schon, bevor jemand diese Integration einrichtet.
+Vier Felder holen das nach:
+
+* **Zählen seit** und **Inbetriebnahme** – ohne Datum begänne die Amortisation
+  an dem Tag, an dem du die Integration eingerichtet hast, und die geschätzte
+  Restzeit wäre um Jahre daneben.
+* **Bezug davor**, **Einspeisung davor** und **Ertrag davor** – die
+  Zählerstände, die bis zum ersten Lauf schon aufgelaufen sind.
+
+Diese Angaben zählen ausschließlich in den Gesamtzeitraum. Heute, diesen Monat
+und dieses Jahr ist das nicht passiert, und dort taucht es auch nicht auf.
+
+Eines bleibt ehrlich zu sagen: **Ohne Preis keine Geldsensoren.** Bleibt der
+Arbeitspreis leer, entsteht keine einzige Entität dieser Art – statt zwei
+Dutzend, die dauerhaft „unbekannt" anzeigen.
 
 Fällt ein Zähler zurück – Gerätetausch, ein zurückgesetzter Shelly –, wird die
 Marke neu gesetzt, statt eine negative Differenz auszuweisen.
@@ -231,7 +264,6 @@ python3 tests/test_dateien.py
 
 Die Tests laufen ohne Home-Assistant-Installation: Sie ersetzen die wenigen
 Namen, die die Rechenmodule importieren, durch schlanke Nachbauten.
-
 
 ## Lizenz
 

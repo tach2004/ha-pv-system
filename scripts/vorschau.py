@@ -148,6 +148,11 @@ OPTIONEN = {
                 "power_entity": "sensor.wr1",
                 "energy_entity": "sensor.wr1_e",
             },
+            "costs": {
+                "investment": 1400,
+                "commissioned": "2025-04-18",
+                "prior_yield": 480,
+            },
         },
         {
             "id": "a2",
@@ -187,6 +192,13 @@ OPTIONEN = {
                 "power_entity": "sensor.wr2",
                 "energy_entity": "sensor.wr2_e",
             },
+            "costs": {
+                "investment": 6800,
+                "commissioned": "2023-09-01",
+                # Ältere Anlage, höherer Satz - der Normalfall in Deutschland.
+                "feed_in_price": 0.123,
+                "prior_yield": 4900,
+            },
         },
     ],
     "grid": {
@@ -205,8 +217,12 @@ OPTIONEN = {
     "costs": {
         "price_per_kwh": 0.34,
         "feed_in_price": 0.082,
-        "investment": 4200,
+        "base_price": 12.9,
+        "investment": 900,          # gemeinsame Kosten: Zähler, Elektriker
         "currency": "EUR",
+        "start_date": "2023-09-01",
+        "prior_import": 3800,
+        "prior_export": 2100,
     },
 }
 

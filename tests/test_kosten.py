@@ -222,3 +222,154 @@ def test_marken_ueberstehen_einen_neustart():
     asyncio.run(zweiter.async_laden())
     ergebnis = zweiter.rechnen({"import": 106.0, "export": 0.0, "own": 0.0}, PREISE, {})
     assert ergebnis["periods"]["day"]["import_kwh"] == 6.0
+
+
+# ----------------------------------------------------------------- Rückwirkend
+
+
+def test_vorher_zaehlt_nur_in_den_gesamtzeitraum():
+    """Was vor dem ersten Lauf war, ist heute nicht passiert."""
+    r = _rechner()
+    preise = dict(PREISE, prior_import=1000.0, prior_export=400.0)
+    anlagen = [{"id": "a1", "prior_yield": 900.0}]
+    r.rechnen({"import": 10.0, "export": 5.0, "own": 2.0}, preise, {}, anlagen)
+    ergebnis = r.rechnen(
+        {"import": 14.0, "export": 8.0, "own": 3.0}, preise, {}, anlagen
+    )
+
+    tag = ergebnis["periods"]["day"]
+    assert tag["import_kwh"] == 4.0          # nur die gemessene Differenz
+    assert tag["export_kwh"] == 3.0
+
+    gesamt = ergebnis["periods"]["total"]
+    assert gesamt["import_kwh"] == 1004.0    # Differenz plus das Vorherige
+    assert gesamt["export_kwh"] == 403.0
+    # Eigenverbrauch vorher: 900 erzeugt minus 400 eingespeist
+    assert gesamt["own_kwh"] == 501.0
+
+
+def test_startdatum_macht_die_amortisation_erst_moeglich():
+    """Ohne Datum ist die Beobachtungsdauer null - und die Restzeit unbekannt."""
+    r = _rechner()
+    ohne = r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    assert ohne["payback_years"] is None
+
+    # Dieselbe Sekunde, aber mit Inbetriebnahme vor zwei Jahren und dem, was
+    # die Anlage in der Zeit schon erzeugt hat.
+    vor_zwei_jahren = (_jetzt() - timedelta(days=730)).date().isoformat()
+    preise = dict(PREISE, start_date=vor_zwei_jahren, prior_export=2000.0)
+    anlagen = [{"id": "a1", "prior_yield": 8000.0}]
+    r2 = _rechner()
+    ergebnis = r2.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 0.0}, preise, {}, anlagen
+    )
+    gesamt = ergebnis["periods"]["total"]
+    assert gesamt["own_kwh"] == 6000.0
+    assert gesamt["yield"] == round(6000 * 0.34 + 2000 * 0.08, 2)
+    # 2200 EUR in zwei Jahren sind 1100 im Jahr; 4000 Investition, 1800 Rest.
+    assert ergebnis["payback_progress"] > 50
+    assert 1.5 < ergebnis["payback_years"] < 1.8
+
+
+def test_zukuenftiges_datum_wird_nicht_hochgerechnet():
+    """Ein Datum in der Zukunft ergibt keine Beobachtungsdauer."""
+    r = _rechner()
+    morgen = (_jetzt() + timedelta(days=1)).date().isoformat()
+    ergebnis = r.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 100.0},
+        dict(PREISE, start_date=morgen),
+        {},
+    )
+    assert ergebnis["payback_years"] is None
+
+
+# -------------------------------------------------------------- Je Anlage
+
+
+def _anlagen():
+    return [
+        {
+            "id": "a1",
+            "investment": 1000.0,
+            "prior_yield": 0.0,
+            "feed_in": None,
+        },
+        {
+            "id": "a2",
+            "investment": 3000.0,
+            "prior_yield": 0.0,
+            # Ältere Anlage, höherer Satz - in Deutschland der Normalfall.
+            "feed_in": 0.12,
+        },
+    ]
+
+
+def test_einspeisung_wird_nach_ertragsanteil_aufgeteilt():
+    """Welche Anlage eingespeist hat, misst niemand - geteilt wird nach Anteil."""
+    r = _rechner()
+    anlagen = _anlagen()
+    start = {"import": 0.0, "export": 0.0, "own": 0.0, "anlage:a1": 0.0, "anlage:a2": 0.0}
+    r.rechnen(start, PREISE, {}, anlagen)
+    ergebnis = r.rechnen(
+        {"import": 0.0, "export": 300.0, "own": 700.0,
+         "anlage:a1": 250.0, "anlage:a2": 750.0},
+        PREISE, {}, anlagen,
+    )
+    a1 = ergebnis["plants"]["a1"]
+    a2 = ergebnis["plants"]["a2"]
+    assert a1["yield_kwh"] == 250.0
+    assert a2["yield_kwh"] == 750.0
+    # 300 kWh Einspeisung im Verhältnis 1:3
+    assert a1["export_kwh"] == 75.0
+    assert a2["export_kwh"] == 225.0
+    assert a1["own_kwh"] == 175.0
+    assert a2["own_kwh"] == 525.0
+
+
+def test_jede_anlage_darf_ihre_eigene_verguetung_haben():
+    r = _rechner()
+    anlagen = _anlagen()
+    start = {"import": 0.0, "export": 0.0, "own": 0.0, "anlage:a1": 0.0, "anlage:a2": 0.0}
+    r.rechnen(start, PREISE, {}, anlagen)
+    ergebnis = r.rechnen(
+        {"import": 0.0, "export": 300.0, "own": 700.0,
+         "anlage:a1": 250.0, "anlage:a2": 750.0},
+        PREISE, {}, anlagen,
+    )
+    # a1 ohne eigenen Satz: die 0,08 des Standorts. a2 mit eigenen 0,12.
+    assert ergebnis["plants"]["a1"]["revenue"] == round(75 * 0.08, 2)
+    assert ergebnis["plants"]["a2"]["revenue"] == round(225 * 0.12, 2)
+
+
+def test_amortisation_je_anlage():
+    r = _rechner()
+    anlagen = _anlagen()
+    vorher = _jetzt() - timedelta(days=365)
+    # Ohne gemeinsame Kosten am Standort: Die Investition ist dann genau die
+    # Summe der beiden Anlagen.
+    preise = dict(PREISE, investment=None)
+    start = {"import": 0.0, "export": 0.0, "own": 0.0, "anlage:a1": 0.0, "anlage:a2": 0.0}
+    r.rechnen(start, preise, {}, anlagen, jetzt=vorher)
+    ergebnis = r.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 1000.0,
+         "anlage:a1": 250.0, "anlage:a2": 750.0},
+        preise, {}, anlagen,
+    )
+    a1 = ergebnis["plants"]["a1"]
+    # 250 kWh selbst genutzt zu 0,34 = 85 EUR bei 1000 EUR Investition
+    assert a1["yield"] == 85.0
+    assert a1["payback_progress"] == 8.5
+    assert a1["payback_years"] is not None
+    # Die Investition des Standorts ist die Summe aller Anlagen plus der
+    # gemeinsamen Kosten - hier gibt es keine, also genau 1000 + 3000.
+    assert ergebnis["investment"] == 4000.0
+
+
+def test_ohne_investition_keine_amortisation_der_anlage():
+    r = _rechner()
+    anlagen = [{"id": "a1", "prior_yield": 0.0}]
+    ergebnis = r.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 0.0, "anlage:a1": 0.0},
+        PREISE, {}, anlagen,
+    )
+    assert ergebnis["plants"]["a1"]["payback_progress"] is None

@@ -53,6 +53,9 @@ from .const import (
     KEY_GRID_COST,
     KEY_PAYBACK_PROGRESS,
     KEY_PAYBACK_YEARS,
+    KEY_PLANT_PAYBACK_PROGRESS,
+    KEY_PLANT_PAYBACK_YEARS,
+    KEY_PLANT_YIELD,
     KEY_SAVINGS,
     KEY_YIELD,
     KEY_YIELD_RATE,
@@ -453,6 +456,49 @@ ANLAGE: tuple[PvSensorDescription, ...] = (
         icon="mdi:battery-clock",
         wert=lambda p: p["battery"]["runtime"],
     ),
+    # ---------------------------------------------------------- je Anlage: Geld
+    #
+    # Nur drei Stück und nur für den Gesamtzeitraum: Tag, Monat und Jahr je
+    # Anlage wären bei drei Anlagen sechzig Entitäten, und die Aufteilung der
+    # Einspeisung auf die Anlagen ist eine Näherung - für einen Tageswert wäre
+    # sie zu grob, für die Amortisation reicht sie.
+    PvSensorDescription(
+        key=KEY_PLANT_YIELD,
+        translation_key=KEY_PLANT_YIELD,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        icon="mdi:hand-coin-outline",
+        wert=lambda p: p["costs"].get("yield"),
+        extra=lambda p: {
+            "savings": p["costs"].get("savings"),
+            "revenue": p["costs"].get("revenue"),
+            "yield_kwh": p["costs"].get("yield_kwh"),
+            "export_kwh": p["costs"].get("export_kwh"),
+            "feed_in": p["costs"].get("feed_in"),
+        },
+    ),
+    PvSensorDescription(
+        key=KEY_PLANT_PAYBACK_PROGRESS,
+        translation_key=KEY_PLANT_PAYBACK_PROGRESS,
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        icon="mdi:progress-check",
+        wert=lambda p: p["costs"].get("payback_progress"),
+    ),
+    PvSensorDescription(
+        key=KEY_PLANT_PAYBACK_YEARS,
+        translation_key=KEY_PLANT_PAYBACK_YEARS,
+        native_unit_of_measurement=UnitOfTime.YEARS,
+        suggested_display_precision=1,
+        icon="mdi:calendar-clock",
+        wert=lambda p: p["costs"].get("payback_years"),
+        extra=lambda p: {
+            "yield_per_year": p["costs"].get("yield_year"),
+            "commissioned": p["costs"].get("start"),
+        },
+    ),
     PvSensorDescription(
         key="plant_battery_time_to_full",
         translation_key="plant_battery_time_to_full",
@@ -504,6 +550,15 @@ def _anlage_passt(beschreibung: PvSensorDescription, anlage: dict[str, Any]) -> 
     if key in NUR_MIT_LADEREGLER and not anlage["charger"]["enabled"]:
         return False
     if key in NUR_MIT_WECHSELRICHTER and not anlage["inverter"]["enabled"]:
+        return False
+
+    # Geld gibt es nur mit Preis; die Amortisation nur mit Investition.
+    kosten = anlage.get("costs") or {}
+    if key == KEY_PLANT_YIELD and kosten.get("yield") is None:
+        return False
+    if key in (KEY_PLANT_PAYBACK_PROGRESS, KEY_PLANT_PAYBACK_YEARS) and not kosten.get(
+        "investment"
+    ):
         return False
 
     quellen = {
@@ -614,6 +669,39 @@ class StandortSensor(PvBasis):
         if self.entity_description.extra and self.coordinator.data:
             attribute.update(self.entity_description.extra(self.coordinator.data))
         return attribute
+
+
+class AnlagenKostenSensor:
+    """Währung und Periodenanfang für die Geldsensoren einer Anlage.
+
+    Dieselbe Begründung wie bei KostenSensor: Beides kommt aus der
+    Konfiguration und lässt sich nicht in die Beschreibung schreiben. Als
+    Beimischung, damit die Anlagenlogik daneben unverändert bleibt.
+    """
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        if self.entity_description.device_class is not SensorDeviceClass.MONETARY:
+            return self.entity_description.native_unit_of_measurement
+        daten = self.coordinator.data or {}
+        return daten.get("costs", {}).get("currency") or "EUR"
+
+    @property
+    def last_reset(self) -> datetime | None:
+        if self.entity_description.state_class is not SensorStateClass.TOTAL:
+            return None
+        anlage = self._anlage or {}
+        return dt_util.parse_datetime(
+            _zeitpunkt((anlage.get("costs") or {}).get("start"))
+        )
+
+
+def _zeitpunkt(wert: Any) -> str:
+    """Ein Datum aus dem Dialog als Zeitstempel - sonst leer."""
+    if not isinstance(wert, str) or not wert.strip():
+        return ""
+    text = wert.strip()
+    return text if "T" in text else f"{text}T00:00:00"
 
 
 class KostenSensor(StandortSensor):
@@ -729,7 +817,7 @@ def _anlagenmodell(anlage: dict[str, Any]) -> str:
     return " · ".join(teile)
 
 
-class AnlagenSensor(PvBasis):
+class AnlagenSensor(AnlagenKostenSensor, PvBasis):
     """Werte einer einzelnen Anlage."""
 
     entity_description: PvSensorDescription
