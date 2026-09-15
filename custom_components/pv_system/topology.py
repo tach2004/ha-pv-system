@@ -50,6 +50,7 @@ from .const import (
     CONF_CHARGER_TEMPERATURE,
     CONF_CHARGER_YIELD,
     CONF_CHEMISTRY,
+    CONF_COMMISSIONED,
     CONF_COSTS,
     CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
@@ -98,12 +99,16 @@ from .const import (
     CONF_PHASES,
     CONF_PLANTS,
     CONF_POWER_SIGN,
+    CONF_PRIOR_EXPORT,
+    CONF_PRIOR_IMPORT,
+    CONF_PRIOR_YIELD,
     CONF_PV_CURRENT,
     CONF_PV_ENERGY,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_RATED_POWER,
     CONF_SHOW_STRINGS,
+    CONF_START_DATE,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
     CONF_TILT,
@@ -334,6 +339,7 @@ def anlage_normalisieren(roh: dict[str, Any] | None, nummer: int = 1) -> dict[st
         CONF_CHARGER: laderegler_normalisieren(roh.get(CONF_CHARGER)),
         CONF_BATTERY: batterie_normalisieren(roh.get(CONF_BATTERY)),
         CONF_INVERTER: wechselrichter_normalisieren(roh.get(CONF_INVERTER)),
+        CONF_COSTS: anlagenkosten_normalisieren(roh.get(CONF_COSTS)),
     }
 
 
@@ -398,7 +404,37 @@ def kosten_normalisieren(
         CONF_BASE_PRICE: _zahl(roh.get(CONF_BASE_PRICE), None),
         CONF_INVESTMENT: _zahl(roh.get(CONF_INVESTMENT), None),
         CONF_CURRENCY: str(roh.get(CONF_CURRENCY) or DEFAULT_CURRENCY),
+        CONF_START_DATE: _datum(roh.get(CONF_START_DATE)),
+        CONF_PRIOR_IMPORT: _zahl(roh.get(CONF_PRIOR_IMPORT), None),
+        CONF_PRIOR_EXPORT: _zahl(roh.get(CONF_PRIOR_EXPORT), None),
     }
+
+
+def anlagenkosten_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
+    """Was diese eine Anlage gekostet hat und seit wann sie laeuft."""
+    roh = dict(roh or {})
+    return {
+        CONF_INVESTMENT: _zahl(roh.get(CONF_INVESTMENT), None),
+        CONF_COMMISSIONED: _datum(roh.get(CONF_COMMISSIONED)),
+        CONF_FEED_IN_PRICE: _zahl(roh.get(CONF_FEED_IN_PRICE), None),
+        CONF_PRIOR_YIELD: _zahl(roh.get(CONF_PRIOR_YIELD), None),
+    }
+
+
+def _datum(wert: Any) -> str | None:
+    """Ein Datum als ISO-Text - oder nichts.
+
+    Der Datumswaehler liefert eine Zeichenkette, ein Dienstaufruf womoeglich
+    ein echtes date. Beides landet hier in derselben Form, damit der
+    Rechenkern sich nicht darum kuemmern muss.
+    """
+    if wert in (None, ""):
+        return None
+    text = str(wert)[:10]
+    teile = text.split("-")
+    if len(teile) != 3 or not all(teil.isdigit() for teil in teile):
+        return None
+    return text
 
 
 def normalisieren(optionen: dict[str, Any] | None) -> dict[str, Any]:

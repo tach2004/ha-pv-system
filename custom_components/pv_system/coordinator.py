@@ -54,6 +54,7 @@ from .const import (
     CONF_CHARGER_TEMPERATURE,
     CONF_CHARGER_YIELD,
     CONF_CHEMISTRY,
+    CONF_COMMISSIONED,
     CONF_COSTS,
     CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
@@ -100,11 +101,15 @@ from .const import (
     CONF_PHASES,
     CONF_PLANTS,
     CONF_POWER_SIGN,
+    CONF_PRIOR_EXPORT,
+    CONF_PRIOR_IMPORT,
+    CONF_PRIOR_YIELD,
     CONF_PV_CURRENT,
     CONF_PV_ENERGY,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_RATED_POWER,
+    CONF_START_DATE,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
     CONF_TILT,
@@ -113,7 +118,7 @@ from .const import (
     SIGN_POSITIVE_EXPORT,
 )
 from .kosten import Kostenrechner, eigenverbrauch_kwh
-from .topology import normalisieren, quellen
+from .topology import anlagenkosten_normalisieren, normalisieren, quellen
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -220,18 +225,29 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         summen = self._summen(anlagen, netz)
         haus = self._haus(anlagen, summen, netz)
         summen.update(haus)
+        kosten = self._kosten(anlagen, summen, netz, haus)
+        # Der Kostenblock jeder Anlage hängt auch an ihr selbst: So kommen
+        # Sensoren und Karte an ihn heran, ohne die Kennung nachschlagen zu
+        # müssen - sie arbeiten ohnehin immer mit einer einzelnen Anlage.
+        for anlage in anlagen:
+            anlage["costs"] = kosten["plants"].get(anlage[CONF_ID], {})
+
         return {
             "plants": anlagen,
             "grid": netz,
             "totals": summen,
             "house": haus,
-            "costs": self._kosten(summen, netz, haus),
+            "costs": kosten,
         }
 
     # ------------------------------------------------------------- Kosten
 
     def _kosten(
-        self, summen: dict[str, Any], netz: dict[str, Any], haus: dict[str, Any]
+        self,
+        anlagen: list[dict[str, Any]],
+        summen: dict[str, Any],
+        netz: dict[str, Any],
+        haus: dict[str, Any],
     ) -> dict[str, Any]:
         """Zaehlerstaende und Momentanleistungen an den Kostenrechner geben.
 
@@ -260,6 +276,14 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if erzeugt_jetzt is not None:
             eigen_jetzt = max(0.0, erzeugt_jetzt - (netz["export_power"] or 0.0))
 
+        # Der Ertrag jeder einzelnen Anlage als eigener Zählerstand. Daraus
+        # entsteht ihr Anteil an Einspeisung und Ersparnis - und damit ihre
+        # eigene Amortisation.
+        for anlage in anlagen:
+            zaehler[f"anlage:{anlage[CONF_ID]}"] = units.first(
+                anlage["inverter"]["energy"], anlage["modules"]["energy"]
+            )
+
         return self.kosten.rechnen(
             zaehler,
             {
@@ -268,13 +292,35 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "base": conf[CONF_BASE_PRICE],
                 "investment": conf[CONF_INVESTMENT],
                 "currency": conf[CONF_CURRENCY],
+                "start_date": conf[CONF_START_DATE],
+                "prior_import": conf[CONF_PRIOR_IMPORT],
+                "prior_export": conf[CONF_PRIOR_EXPORT],
             },
             {
                 "import": netz["import_power"],
                 "export": netz["export_power"],
                 "own": eigen_jetzt,
             },
+            [self._anlagenkosten(anlage) for anlage in anlagen],
         )
+
+    def _anlagenkosten(self, anlage: dict[str, Any]) -> dict[str, Any]:
+        """Die Kostenangaben einer Anlage, wie der Rechner sie erwartet."""
+        conf = self._kosten_conf(anlage[CONF_ID])
+        return {
+            "id": anlage[CONF_ID],
+            "name": anlage[CONF_NAME],
+            "investment": conf[CONF_INVESTMENT],
+            "commissioned": conf[CONF_COMMISSIONED],
+            "feed_in": conf[CONF_FEED_IN_PRICE],
+            "prior_yield": conf[CONF_PRIOR_YIELD],
+        }
+
+    def _kosten_conf(self, kennung: str) -> dict[str, Any]:
+        for anlage in self.config.get(CONF_PLANTS, []):
+            if anlage[CONF_ID] == kennung:
+                return anlage[CONF_COSTS]
+        return anlagenkosten_normalisieren(None)
 
     # ------------------------------------------------------------- Anlage
 

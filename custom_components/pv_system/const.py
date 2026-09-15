@@ -130,6 +130,18 @@ CONF_BASE_PRICE: Final = "base_price"
 CONF_INVESTMENT: Final = "investment"
 CONF_CURRENCY: Final = "currency"
 
+# Rueckwirkend rechnen. Eine Anlage laeuft fast immer schon, bevor jemand diese
+# Integration einrichtet - ohne diese Angaben begaenne die Amortisation bei
+# null, und die Restzeit waere um Jahre daneben.
+CONF_START_DATE: Final = "start_date"
+CONF_PRIOR_IMPORT: Final = "prior_import"
+CONF_PRIOR_EXPORT: Final = "prior_export"
+
+# Je Anlage: Investition, Inbetriebnahme und - weil zwei Anlagen aus zwei
+# Jahren in Deutschland regelmaessig zwei Saetze haben - eine eigene Verguetung.
+CONF_COMMISSIONED: Final = "commissioned"
+CONF_PRIOR_YIELD: Final = "prior_yield"
+
 # Zeitraeume der Kostenrechnung. "total" laeuft seit der Einrichtung durch und
 # traegt die Amortisation.
 PERIOD_DAY: Final = "day"
@@ -227,6 +239,9 @@ KEY_PLANT_BATTERY_TEMPERATURE: Final = "plant_battery_temperature"
 KEY_PLANT_CHARGER_POWER: Final = "plant_charger_power"
 KEY_PLANT_CHARGER_IN_VOLTAGE: Final = "plant_charger_input_voltage"
 KEY_PLANT_CHARGER_OUT_VOLTAGE: Final = "plant_charger_output_voltage"
+KEY_PLANT_YIELD: Final = "plant_yield_money"
+KEY_PLANT_PAYBACK_PROGRESS: Final = "plant_payback_progress"
+KEY_PLANT_PAYBACK_YEARS: Final = "plant_payback_years"
 
 # Sensor-Kennungen der Kostenrechnung
 KEY_COST_RATE: Final = "cost_rate"

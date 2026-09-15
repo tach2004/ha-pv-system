@@ -1,4 +1,4 @@
-"""Kosten, Ersparnis und Amortisation.
+"""Kosten, Ertrag und Amortisation.
 
 Gerechnet wird nicht aus Leistungen, sondern aus **Zählerständen**. Das ist der
 entscheidende Unterschied: Wer Watt über die Zeit aufsummiert, sammelt bei jedem
@@ -17,13 +17,24 @@ Vier Zeiträume laufen parallel:
 * ``day``   seit Mitternacht (Ortszeit)
 * ``month`` seit dem Ersten
 * ``year``  seit dem 1. Januar
-* ``total`` seit der Einrichtung - daraus entsteht die Amortisation
+* ``total`` seit der Inbetriebnahme - daraus entsteht die Amortisation
+
+**Rückwirkend.** Eine Anlage läuft meist schon, bevor jemand diese Integration
+einrichtet. Für den Zeitraum ``total`` lassen sich deshalb zwei Dinge angeben:
+das Datum der Inbetriebnahme und die Zählerstände, die bis zum ersten Lauf
+schon aufgelaufen sind. Beides wird schlicht dazugezählt - damit stimmt die
+Amortisation vom ersten Tag an, statt erst in zwanzig Jahren.
+
+**Je Anlage.** Wer drei Anlagen hat, hat sie meist zu drei Zeitpunkten und zu
+drei Preisen gebaut - und bei drei Inbetriebnahmen auch zu drei
+Einspeisevergütungen. Investition, Datum und Vergütung stehen deshalb an der
+Anlage, nicht am Standort.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -47,11 +58,16 @@ SPEICHER_VERSION = 1
 # Tagesgrenzen, der Rest ist reine Vorsicht gegen einen harten Neustart.
 SPEICHER_VERZUG = 120
 
-# Die drei Zählerstände, aus denen alles Weitere entsteht.
+# Die drei Zählerstände des Standorts, aus denen alles Weitere entsteht.
 ZAEHLER = ("import", "export", "own")
 
 # Ein Monat im Mittel - für die anteilige Verteilung des Grundpreises.
 TAGE_JE_MONAT = 30.44
+
+# So lange muss beobachtet worden sein, bevor aus dem Ertrag eine Jahresrate
+# hochgerechnet wird. Aus drei Sonnentagen im Juni eine Prognose zu machen,
+# wäre eine Zahl ohne Wert.
+MINDESTDAUER_TAGE = 7
 
 
 def _periodenbeginn(zeitpunkt: datetime, periode: str) -> datetime:
@@ -110,30 +126,48 @@ class Kostenrechner:
         zaehler: dict[str, float | None],
         preise: dict[str, Any],
         leistungen: dict[str, float | None],
+        anlagen: list[dict[str, Any]] | None = None,
         jetzt: datetime | None = None,
     ) -> dict[str, Any]:
         """Aus Zählerständen und Preisen die Kostenübersicht bauen.
 
-        ``zaehler`` enthält ``import``, ``export`` und ``own`` in kWh als
-        fortlaufende Stände. ``leistungen`` enthält die Momentanwerte in W für
-        die Angabe in Euro je Stunde.
+        ``zaehler`` enthält fortlaufende Stände in kWh: ``import``, ``export``,
+        ``own`` für den Standort und ``anlage:<id>`` für den Ertrag jeder
+        Anlage. ``leistungen`` enthält die Momentanwerte in W.
         """
         jetzt = jetzt or dt_util.utcnow()
+        anlagen = anlagen or []
         arbeitspreis = _zahl(preise.get("price"))
         verguetung = _zahl(preise.get("feed_in"))
         grundpreis = _zahl(preise.get("base")) or 0.0
-        investition = _zahl(preise.get("investment"))
 
+        vorher = self._vorher(preise, anlagen)
         zeitraeume: dict[str, Any] = {}
         veraendert = False
         for periode in PERIODS:
             mengen, neu = self._mengen(periode, zaehler, jetzt)
             veraendert = veraendert or neu
+            # Was vor dem ersten Lauf schon aufgelaufen ist, gehört allein in
+            # den Gesamtzeitraum - heute und diesen Monat ist es nicht passiert.
+            if periode == PERIOD_TOTAL:
+                mengen = _dazu(mengen, vorher)
+                mengen["start"] = _startdatum(preise, mengen.get("start"))
             zeitraeume[periode] = self._geld(
-                mengen, arbeitspreis, verguetung, grundpreis
+                mengen, arbeitspreis, verguetung, grundpreis, jetzt
             )
         if veraendert:
             self._merken()
+
+        je_anlage = self._anlagen(
+            anlagen, zeitraeume[PERIOD_TOTAL], arbeitspreis, verguetung, jetzt
+        )
+        # Die Rohmengen waren nur für die Aufteilung auf die Anlagen nötig.
+        for zeitraum in zeitraeume.values():
+            zeitraum.pop("_mengen", None)
+        investition = _summe(
+            _zahl(preise.get("investment")),
+            *(_zahl(a.get("investment")) for a in anlagen),
+        )
 
         return {
             "currency": preise.get("currency") or "EUR",
@@ -143,14 +177,35 @@ class Kostenrechner:
             "investment": investition,
             "configured": arbeitspreis is not None or verguetung is not None,
             "periods": zeitraeume,
+            "plants": je_anlage,
             **self._momentan(leistungen, arbeitspreis, verguetung),
-            **self._amortisation(zeitraeume[PERIOD_TOTAL], investition, jetzt),
+            **self._amortisation(
+                zeitraeume[PERIOD_TOTAL], investition, jetzt
+            ),
+        }
+
+    @staticmethod
+    def _vorher(
+        preise: dict[str, Any], anlagen: list[dict[str, Any]]
+    ) -> dict[str, float]:
+        """Was die Zähler vor dem ersten Lauf der Integration schon anzeigten.
+
+        Der Eigenverbrauch ergibt sich daraus wie sonst auch: erzeugt minus
+        eingespeist, nach unten auf null begrenzt.
+        """
+        bezug = _zahl(preise.get("prior_import")) or 0.0
+        einspeisung = _zahl(preise.get("prior_export")) or 0.0
+        erzeugt = sum(_zahl(a.get("prior_yield")) or 0.0 for a in anlagen)
+        return {
+            "import": bezug,
+            "export": einspeisung,
+            "own": max(0.0, erzeugt - einspeisung),
         }
 
     def _mengen(
         self, periode: str, zaehler: dict[str, float | None], jetzt: datetime
     ) -> tuple[dict[str, Any], bool]:
-        """Verbrauchte, eingespeiste und selbst genutzte kWh dieses Zeitraums."""
+        """Verbrauchte, eingespeiste und erzeugte kWh dieses Zeitraums."""
         beginn = _periodenbeginn(jetzt, periode)
         marke = self._marken.get(periode)
         veraendert = False
@@ -166,8 +221,8 @@ class Kostenrechner:
 
         werte: dict[str, Any] = marke.setdefault("werte", {})
         mengen: dict[str, Any] = {"start": marke.get("start")}
-        for name in ZAEHLER:
-            stand = _zahl(zaehler.get(name))
+        for name, stand_roh in zaehler.items():
+            stand = _zahl(stand_roh)
             if stand is None:
                 mengen[name] = None
                 continue
@@ -187,10 +242,11 @@ class Kostenrechner:
         preis: float | None,
         verguetung: float | None,
         grundpreis: float,
+        jetzt: datetime,
     ) -> dict[str, Any]:
         """Aus kWh werden Euro.
 
-        * Bezugskosten  = bezogene kWh × Arbeitspreis + anteiliger Grundpreis
+        * Bezugskosten   = bezogene kWh × Arbeitspreis + anteiliger Grundpreis
         * Einspeiseerlös = eingespeiste kWh × Vergütung
         * Ersparnis      = selbst genutzte kWh × Arbeitspreis
         * Ertrag         = Ersparnis + Einspeiseerlös
@@ -205,7 +261,8 @@ class Kostenrechner:
 
         kosten = None
         if preis is not None and bezug is not None:
-            kosten = round(bezug * preis + grundpreis * _monatsanteil(mengen), 2)
+            anteil = _tage_seit(mengen.get("start"), jetzt) / TAGE_JE_MONAT
+            kosten = round(bezug * preis + grundpreis * anteil, 2)
         erloes = (
             round(einspeisung * verguetung, 2)
             if verguetung is not None and einspeisung is not None
@@ -236,7 +293,73 @@ class Kostenrechner:
                 if ertrag is not None and kosten is not None
                 else None
             ),
+            # Die Erträge der einzelnen Anlagen hängen mit daran.
+            "_mengen": mengen,
         }
+
+    @staticmethod
+    def _anlagen(
+        anlagen: list[dict[str, Any]],
+        gesamt: dict[str, Any],
+        preis: float | None,
+        verguetung: float | None,
+        jetzt: datetime,
+    ) -> dict[str, Any]:
+        """Ertrag und Amortisation je Anlage, seit ihrer Inbetriebnahme.
+
+        Wie viel von einer einzelnen Anlage ins Netz ging, misst niemand: Am
+        Hausanschluss hängt ein Zähler für alle zusammen. Die Einspeisung wird
+        deshalb nach dem Anteil an der Gesamterzeugung aufgeteilt. Das ist eine
+        Näherung - sie trifft zu, solange die Anlagen zur selben Zeit liefern,
+        und liegt daneben, wenn eine nach Osten und eine nach Westen zeigt.
+
+        Die Vergütung darf je Anlage abweichen: Zwei Anlagen aus zwei Jahren
+        haben in Deutschland regelmäßig zwei Sätze.
+        """
+        mengen = gesamt.get("_mengen") or {}
+        ertraege = {
+            anlage["id"]: max(
+                0.0,
+                (_zahl(mengen.get(f"anlage:{anlage['id']}")) or 0.0)
+                + (_zahl(anlage.get("prior_yield")) or 0.0),
+            )
+            for anlage in anlagen
+        }
+        summe = sum(ertraege.values())
+        einspeisung_gesamt = _zahl(gesamt.get("export_kwh")) or 0.0
+
+        ergebnis: dict[str, Any] = {}
+        for anlage in anlagen:
+            kennung = anlage["id"]
+            erzeugt = ertraege[kennung]
+            anteil = erzeugt / summe if summe > 0 else 0.0
+            eingespeist = min(erzeugt, einspeisung_gesamt * anteil)
+            eigen = max(0.0, erzeugt - eingespeist)
+            satz = _zahl(anlage.get("feed_in"))
+            if satz is None:
+                satz = verguetung
+
+            ersparnis = round(eigen * preis, 2) if preis is not None else None
+            erloes = round(eingespeist * satz, 2) if satz is not None else None
+            ertrag = None
+            if ersparnis is not None or erloes is not None:
+                ertrag = round((ersparnis or 0.0) + (erloes or 0.0), 2)
+
+            investition = _zahl(anlage.get("investment"))
+            beginn = _anlagenbeginn(anlage, gesamt.get("start"))
+            ergebnis[kennung] = {
+                "yield_kwh": round(erzeugt, 2),
+                "export_kwh": round(eingespeist, 2),
+                "own_kwh": round(eigen, 2),
+                "savings": ersparnis,
+                "revenue": erloes,
+                "yield": ertrag,
+                "feed_in": satz,
+                "investment": investition,
+                "start": beginn,
+                **_amortisation_werte(ertrag, investition, beginn, jetzt),
+            }
+        return ergebnis
 
     @staticmethod
     def _momentan(
@@ -275,49 +398,101 @@ class Kostenrechner:
     def _amortisation(
         gesamt: dict[str, Any], investition: float | None, jetzt: datetime
     ) -> dict[str, Any]:
-        """Wie weit die Anlage sich bezahlt gemacht hat.
-
-        Die Hochrechnung braucht eine belastbare Beobachtungsdauer. Unter einer
-        Woche bleibt die Restzeit leer - aus drei Sonnentagen im Juni eine
-        Jahresprognose zu machen, wäre eine Zahl ohne Wert.
-        """
-        ertrag = gesamt.get("yield")
-        if not investition or ertrag is None:
-            return {"payback_progress": None, "payback_years": None, "yield_year": None}
-
-        fortschritt = round(100.0 * ertrag / investition, 1)
-        beginn = _als_zeit(gesamt.get("start"))
-        tage = max(0.0, (dt_util.as_local(jetzt) - beginn).total_seconds() / 86400.0)
-        if tage < 7 or ertrag <= 0:
-            return {
-                "payback_progress": fortschritt,
-                "payback_years": None,
-                "yield_year": None,
-            }
-
-        je_jahr = ertrag / tage * 365.0
-        rest = max(0.0, investition - ertrag)
+        """Wie weit sich der Standort insgesamt bezahlt gemacht hat."""
+        werte = _amortisation_werte(
+            gesamt.get("yield"), investition, gesamt.get("start"), jetzt
+        )
         return {
-            "payback_progress": fortschritt,
-            "payback_years": round(rest / je_jahr, 1),
-            "yield_year": round(je_jahr, 2),
+            "payback_progress": werte["payback_progress"],
+            "payback_years": werte["payback_years"],
+            "yield_year": werte["yield_year"],
         }
 
 
-def _monatsanteil(mengen: dict[str, Any]) -> float:
-    """Anteil eines Monats, der seit dem Periodenbeginn vergangen ist."""
-    beginn = _als_zeit(mengen.get("start"))
-    tage = max(0.0, (dt_util.as_local(dt_util.utcnow()) - beginn).total_seconds() / 86400.0)
-    return tage / TAGE_JE_MONAT
+def _amortisation_werte(
+    ertrag: float | None,
+    investition: float | None,
+    beginn: Any,
+    jetzt: datetime,
+) -> dict[str, Any]:
+    """Fortschritt, Restzeit und Jahresrate aus Ertrag und Investition."""
+    leer = {"payback_progress": None, "payback_years": None, "yield_year": None}
+    if not investition or ertrag is None:
+        return leer
+
+    fortschritt = round(100.0 * ertrag / investition, 1)
+    tage = _tage_seit(beginn, jetzt)
+    if tage < MINDESTDAUER_TAGE or ertrag <= 0:
+        return {**leer, "payback_progress": fortschritt}
+
+    je_jahr = ertrag / tage * 365.0
+    rest = max(0.0, investition - ertrag)
+    return {
+        "payback_progress": fortschritt,
+        "payback_years": round(rest / je_jahr, 1),
+        "yield_year": round(je_jahr, 2),
+    }
+
+
+def _startdatum(preise: dict[str, Any], vorgabe: Any) -> Any:
+    """Das eingetragene Inbetriebnahmedatum, sonst die gesetzte Marke.
+
+    Ohne diese Angabe begänne der Gesamtzeitraum an dem Tag, an dem jemand die
+    Integration eingerichtet hat - und die Jahresrate wäre um Jahre daneben.
+    """
+    return _als_datum(preise.get("start_date")) or vorgabe
+
+
+def _anlagenbeginn(anlage: dict[str, Any], vorgabe: Any) -> Any:
+    return _als_datum(anlage.get("commissioned")) or vorgabe
+
+
+def _dazu(mengen: dict[str, Any], vorher: dict[str, float]) -> dict[str, Any]:
+    """Die Vorher-Werte auf die gemessenen Mengen addieren."""
+    ergebnis = dict(mengen)
+    for name, wert in vorher.items():
+        if not wert:
+            continue
+        vorhanden = _zahl(ergebnis.get(name))
+        ergebnis[name] = round((vorhanden or 0.0) + wert, 3)
+    return ergebnis
+
+
+def _tage_seit(beginn: Any, jetzt: datetime) -> float:
+    return max(
+        0.0,
+        (dt_util.as_local(jetzt) - _als_zeit(beginn)).total_seconds() / 86400.0,
+    )
 
 
 def _als_zeit(wert: Any) -> datetime:
-    """Einen gespeicherten Zeitstempel lesen - notfalls den Beginn der Zeit."""
-    if isinstance(wert, str):
-        gelesen = dt_util.parse_datetime(wert)
+    """Einen gespeicherten Zeitstempel lesen - notfalls den Beginn der Zeit.
+
+    Zwei Formen kommen vor: der volle Zeitstempel einer Periodenmarke und das
+    reine Datum aus dem Datumswähler. Für das Datum wird Mitternacht Ortszeit
+    angenommen - alles andere wäre für eine Inbetriebnahme Willkür.
+    """
+    if isinstance(wert, str) and wert.strip():
+        text = wert.strip()
+        gelesen = dt_util.parse_datetime(text if "T" in text else f"{text}T00:00:00")
         if gelesen is not None:
             return dt_util.as_local(gelesen)
     return dt_util.as_local(dt_util.utc_from_timestamp(0))
+
+
+def _als_datum(wert: Any) -> str | None:
+    """Ein Datum als ISO-Text, wenn es sich überhaupt als solches lesen lässt."""
+    if isinstance(wert, date):
+        return wert.isoformat()[:10]
+    if isinstance(wert, str) and wert.strip():
+        text = wert.strip()[:10]
+        return text if dt_util.parse_datetime(f"{text}T00:00:00") else None
+    return None
+
+
+def _summe(*werte: float | None) -> float | None:
+    vorhanden = [w for w in werte if w is not None]
+    return round(sum(vorhanden), 2) if vorhanden else None
 
 
 def _zahl(wert: Any) -> float | None:

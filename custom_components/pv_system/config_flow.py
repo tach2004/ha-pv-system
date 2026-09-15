@@ -61,6 +61,7 @@ from .const import (
     CONF_CHARGER_TEMPERATURE,
     CONF_CHARGER_YIELD,
     CONF_CHEMISTRY,
+    CONF_COMMISSIONED,
     CONF_COSTS,
     CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
@@ -109,12 +110,16 @@ from .const import (
     CONF_PHASES,
     CONF_PLANTS,
     CONF_POWER_SIGN,
+    CONF_PRIOR_EXPORT,
+    CONF_PRIOR_IMPORT,
+    CONF_PRIOR_YIELD,
     CONF_PV_CURRENT,
     CONF_PV_ENERGY,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_RATED_POWER,
     CONF_SHOW_STRINGS,
+    CONF_START_DATE,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
     CONF_TILT,
@@ -127,6 +132,7 @@ from .const import (
 )
 from .topology import (
     anlage_normalisieren,
+    anlagenkosten_normalisieren,
     batterie_normalisieren,
     darstellung_normalisieren,
     haus_normalisieren,
@@ -355,6 +361,24 @@ def _felder_kosten() -> dict[Any, Any]:
         vol.Optional(CONF_BASE_PRICE): _zahl(0, 1000, "any"),
         vol.Optional(CONF_INVESTMENT): _zahl(0, 1000000, 1),
         vol.Optional(CONF_CURRENCY): _text(),
+        vol.Optional(CONF_START_DATE): selector.DateSelector(),
+        vol.Optional(CONF_PRIOR_IMPORT): _zahl(0, 10000000, "any"),
+        vol.Optional(CONF_PRIOR_EXPORT): _zahl(0, 10000000, "any"),
+    }
+
+
+def _felder_anlagenkosten() -> dict[Any, Any]:
+    """Was diese Anlage gekostet hat - und seit wann sie laeuft.
+
+    Bewusst an der Anlage und nicht am Standort: Wer drei Anlagen hat, hat sie
+    zu drei Zeitpunkten und zu drei Preisen gebaut. Und mit drei Inbetriebnahmen
+    kommen in Deutschland regelmaessig drei Einspeiseverguetungen.
+    """
+    return {
+        vol.Optional(CONF_INVESTMENT): _zahl(0, 1000000, 1),
+        vol.Optional(CONF_COMMISSIONED): selector.DateSelector(),
+        vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, "any"),
+        vol.Optional(CONF_PRIOR_YIELD): _zahl(0, 10000000, "any"),
     }
 
 
@@ -548,6 +572,7 @@ class PvSystemOptionsFlow(OptionsFlow):
                 "charger",
                 "battery",
                 "inverter",
+                "plant_costs",
                 "plant_delete",
                 "plants",
                 "save",
@@ -636,6 +661,21 @@ class PvSystemOptionsFlow(OptionsFlow):
         )
 
     # ----------------------------------------------------------- Wechselrichter
+
+    async def async_step_plant_costs(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._anlage[CONF_COSTS] = anlagenkosten_normalisieren(user_input)
+            return await self.async_step_plant_menu()
+
+        return self.async_show_form(
+            step_id="plant_costs",
+            data_schema=_mit_vorschlag(
+                _felder_anlagenkosten(), self._anlage[CONF_COSTS]
+            ),
+            description_placeholders={"plant": self._anlage[CONF_NAME]},
+        )
 
     async def async_step_inverter(
         self, user_input: dict[str, Any] | None = None

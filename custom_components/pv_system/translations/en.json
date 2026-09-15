@@ -157,6 +157,12 @@
       "plant_inverter_temperature": {
         "name": "Inverter temperature"
       },
+      "plant_payback_progress": {
+        "name": "Plant payback progress"
+      },
+      "plant_payback_years": {
+        "name": "Remaining payback time of the plant"
+      },
       "plant_pv_peak_power": {
         "name": "Module peak power"
       },
@@ -171,6 +177,9 @@
       },
       "plant_string_layout": {
         "name": "String layout"
+      },
+      "plant_yield_money": {
+        "name": "Plant yield"
       },
       "pv_energy": {
         "name": "PV yield"
@@ -315,18 +324,24 @@
         "data": {
           "base_price": "Monthly base fee",
           "currency": "Currency",
-          "feed_in_price": "Feed-in tariff",
-          "investment": "Investment cost",
-          "price_per_kwh": "Energy price"
+          "feed_in_price": "Feed-in tariff (default)",
+          "investment": "Shared investment cost",
+          "price_per_kwh": "Energy price",
+          "prior_export": "Export before",
+          "prior_import": "Import before",
+          "start_date": "Counting since"
         },
         "data_description": {
           "base_price": "The monthly base fee of your electricity contract. It is spread proportionally across day, month and year. Empty or 0 if you do not want it counted here.",
           "currency": "The currency code, e.g. EUR or CHF. It is used as the unit of the money sensors.",
           "feed_in_price": "What you are paid per kilowatt hour fed into the grid, e.g. 0.08. Leave empty if you do not export.",
           "investment": "What the system cost in total. Payback progress and the estimated remaining time are derived from it.",
-          "price_per_kwh": "What one kilowatt hour from the grid costs, e.g. 0.34. Without this price no costs are calculated and no money sensors are created."
+          "price_per_kwh": "What one kilowatt hour from the grid costs, e.g. 0.34. Without this price no costs are calculated and no money sensors are created.",
+          "prior_export": "The counterpart: the kilowatt hours exported before that.",
+          "prior_import": "How many kilowatt hours you drew from the grid before the integration started counting. Only for the total; day, month and year are unaffected.",
+          "start_date": "From when to calculate - usually the day of commissioning. Together with the three “before” fields the payback is right from day one."
         },
-        "description": "Everything is derived from the meter readings you entered under “Grid and meter” - not from extrapolated power. Day, month and year start counting the moment you enter a price here; nothing can be computed retroactively.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
+        "description": "Everything is derived from the meter readings you entered under “Grid and meter” - not from extrapolated power. Day, month and year start counting the moment you enter a price here - unless you fill in below since when to count and what the meters already showed before.\n\nWhat a single plant cost belongs to that plant under “Costs of this plant”; only shared costs go here.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Costs and yield"
       },
       "display": {
@@ -481,6 +496,22 @@
         "description": "Current layout: {peak}\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Modules – {plant}"
       },
+      "plant_costs": {
+        "data": {
+          "commissioned": "Commissioned",
+          "feed_in_price": "Different feed-in tariff",
+          "investment": "Investment cost of this plant",
+          "prior_yield": "Yield before"
+        },
+        "data_description": {
+          "commissioned": "Since when this plant has been running. Without this date the payback starts on the day you set up the integration - and the remaining time would be years off.",
+          "feed_in_price": "Only fill this in if this plant gets a different tariff from the rest. Two plants from two years regularly have two rates. Empty: the rate under “Costs and yield” applies.",
+          "investment": "What this plant cost - modules, charge controller, storage, inverter, mounting. Its payback is derived from it.",
+          "prior_yield": "How many kilowatt hours this plant produced before the integration started counting. Usually shown on the inverter. Without it the time before is missing from the payback."
+        },
+        "description": "What this plant cost and since when it has been running. Both count for this plant alone: with several plants each gets its own payback, and the site's is their sum.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
+        "title": "Costs – {plant}"
+      },
       "plant_delete": {
         "data": {
           "confirm": "Really delete"
@@ -495,6 +526,7 @@
           "charger": "Charge controller",
           "inverter": "Inverter",
           "modules": "Modules",
+          "plant_costs": "Costs of this plant",
           "plant_delete": "Delete plant",
           "plant_name": "Name",
           "plants": "Another plant",

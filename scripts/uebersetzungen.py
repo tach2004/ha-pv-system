@@ -85,6 +85,12 @@ SENSOREN: dict[str, T] = {
     "phase_voltage": ("Spannung {phase}", "Voltage {phase}"),
     "phase_pv_power": ("Erzeugung {phase}", "Production {phase}"),
     "plant_battery_time_to_full": ("Ladezeit", "Time to full"),
+    "plant_yield_money": ("Ertrag der Anlage", "Plant yield"),
+    "plant_payback_progress": ("Amortisation der Anlage", "Plant payback progress"),
+    "plant_payback_years": (
+        "Restliche Amortisationszeit der Anlage",
+        "Remaining payback time of the plant",
+    ),
 }
 
 # --------------------------------------------------------------- Kosten
@@ -246,6 +252,11 @@ FELDER: dict[str, T] = {
     "base_price": ("Grundpreis je Monat", "Monthly base fee"),
     "investment": ("Investitionskosten", "Investment cost"),
     "currency": ("Währung", "Currency"),
+    "start_date": ("Zählen seit", "Counting since"),
+    "prior_import": ("Bezug davor", "Import before"),
+    "prior_export": ("Einspeisung davor", "Export before"),
+    "commissioned": ("Inbetriebnahme", "Commissioned"),
+    "prior_yield": ("Ertrag davor", "Yield before"),
 }
 
 HINWEISE: dict[str, T] = {
@@ -362,6 +373,23 @@ FELDNAMEN_JE_SCHRITT: dict[str, dict[str, T]] = {
         "temperature_entity": (
             "Temperatur des Wechselrichters",
             "Inverter temperature",
+        ),
+    },
+    "costs": {
+        "investment": (
+            "Gemeinsame Investitionskosten",
+            "Shared investment cost",
+        ),
+        "feed_in_price": (
+            "Einspeisevergütung (Vorgabe)",
+            "Feed-in tariff (default)",
+        ),
+    },
+    "plant_costs": {
+        "investment": ("Investitionskosten dieser Anlage", "Investment cost of this plant"),
+        "feed_in_price": (
+            "Abweichende Einspeisevergütung",
+            "Different feed-in tariff",
         ),
     },
     "grid": {
@@ -760,7 +788,59 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "a narrower card.",
         ),
     },
+    "plant_costs": {
+        "investment": (
+            "Was diese Anlage gekostet hat - Module, Laderegler, Speicher, "
+            "Wechselrichter, Montage. Daraus entsteht ihre Amortisation.",
+            "What this plant cost - modules, charge controller, storage, "
+            "inverter, mounting. Its payback is derived from it.",
+        ),
+        "commissioned": (
+            "Seit wann diese Anlage läuft. Ohne dieses Datum beginnt die "
+            "Amortisation an dem Tag, an dem du die Integration eingerichtet "
+            "hast - und die Restzeit wäre um Jahre daneben.",
+            "Since when this plant has been running. Without this date the "
+            "payback starts on the day you set up the integration - and the "
+            "remaining time would be years off.",
+        ),
+        "feed_in_price": (
+            "Nur ausfüllen, wenn diese Anlage eine andere Vergütung bekommt "
+            "als der Rest. Zwei Anlagen aus zwei Jahren haben regelmäßig zwei "
+            "Sätze. Leer: Es gilt der Satz unter „Kosten und Ertrag“.",
+            "Only fill this in if this plant gets a different tariff from the "
+            "rest. Two plants from two years regularly have two rates. Empty: "
+            "the rate under “Costs and yield” applies.",
+        ),
+        "prior_yield": (
+            "Wie viele Kilowattstunden diese Anlage erzeugt hat, bevor die "
+            "Integration zu zählen begann. Steht meist am Wechselrichter. "
+            "Ohne diese Angabe fehlt die Zeit davor in der Amortisation.",
+            "How many kilowatt hours this plant produced before the "
+            "integration started counting. Usually shown on the inverter. "
+            "Without it the time before is missing from the payback.",
+        ),
+    },
     "costs": {
+        "start_date": (
+            "Seit wann gerechnet werden soll - meist der Tag der "
+            "Inbetriebnahme. Zusammen mit den drei „davor“-Feldern stimmt die "
+            "Amortisation damit vom ersten Tag an.",
+            "From when to calculate - usually the day of commissioning. "
+            "Together with the three “before” fields the payback is right from "
+            "day one.",
+        ),
+        "prior_import": (
+            "Wie viele Kilowattstunden du aus dem Netz bezogen hast, bevor die "
+            "Integration zu zählen begann. Nur für den Gesamtzeitraum; Tag, "
+            "Monat und Jahr bleiben davon unberührt.",
+            "How many kilowatt hours you drew from the grid before the "
+            "integration started counting. Only for the total; day, month and "
+            "year are unaffected.",
+        ),
+        "prior_export": (
+            "Gegenstück dazu: die eingespeisten Kilowattstunden von davor.",
+            "The counterpart: the kilowatt hours exported before that.",
+        ),
         "price_per_kwh": (
             "Was eine Kilowattstunde aus dem Netz kostet, z. B. 0,34. Ohne "
             "diesen Preis rechnet die Integration keine Kosten und legt auch "
@@ -844,6 +924,10 @@ HAUSFELDER = ["calculate", "power_entity", "energy_entity"]
 ANZEIGEFELDER = ["animate", "show_strings"]
 KOSTENFELDER = [
     "price_per_kwh", "feed_in_price", "base_price", "investment", "currency",
+    "start_date", "prior_import", "prior_export",
+]
+ANLAGENKOSTENFELDER = [
+    "investment", "commissioned", "feed_in_price", "prior_yield",
 ]
 
 OPTIONAL: T = ('\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.', '\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.')
@@ -936,6 +1020,7 @@ def baum(sprache) -> dict:
                         "charger": s(("Laderegler", "Charge controller")),
                         "battery": s(("Batterie", "Battery")),
                         "inverter": s(("Wechselrichter", "Inverter")),
+                        "plant_costs": s(("Kosten dieser Anlage", "Costs of this plant")),
                         "plant_delete": s(("Anlage löschen", "Delete plant")),
                         "plants": s(("Andere Anlage", "Another plant")),
                         "save": s(("Speichern und schließen", "Save and close")),
@@ -1027,6 +1112,26 @@ def baum(sprache) -> dict:
                     "data": _felder(HAUSFELDER, s, "house"),
                     "data_description": _hinweise(HAUSFELDER, s, "house"),
                 },
+                "plant_costs": {
+                    "title": s(("Kosten – {plant}", "Costs – {plant}")),
+                    "description": s(
+                        (
+                            "Was diese Anlage gekostet hat und seit wann sie "
+                            "läuft. Beides zählt nur für sie: Bei mehreren "
+                            "Anlagen bekommt jede ihre eigene Amortisation, "
+                            "und die des Standorts ist ihre Summe."
+                            + OPTIONAL[0],
+                            "What this plant cost and since when it has been "
+                            "running. Both count for this plant alone: with "
+                            "several plants each gets its own payback, and the "
+                            "site's is their sum." + OPTIONAL[1],
+                        )
+                    ),
+                    "data": _felder(ANLAGENKOSTENFELDER, s, "plant_costs"),
+                    "data_description": _hinweise(
+                        ANLAGENKOSTENFELDER, s, "plant_costs"
+                    ),
+                },
                 "costs": {
                     "title": s(("Kosten und Ertrag", "Costs and yield")),
                     "description": s(
@@ -1035,16 +1140,25 @@ def baum(sprache) -> dict:
                             "„Netz und Zähler“ eingetragen hast - nicht aus "
                             "hochgerechneten Leistungen. Tag, Monat und Jahr "
                             "laufen ab dem Zeitpunkt mit, an dem du hier einen "
-                            "Preis einträgst; rückwirkend lässt sich nichts "
-                            "berechnen." + OPTIONAL[0],
+                            "Preis einträgst - es sei denn, du trägst unten "
+                            "ein, seit wann gezählt werden soll und was die "
+                            "Zähler davor schon anzeigten.\n\nWas eine "
+                            "einzelne Anlage gekostet hat, steht bei ihr "
+                            "selbst unter „Kosten dieser Anlage“; hier gehören "
+                            "nur gemeinsame Kosten hinein."
+                            + OPTIONAL[0],
                             "Everything is derived from the meter readings you "
                             "entered under “Grid and meter” - not from "
                             "extrapolated power. Day, month and year start "
-                            "counting the moment you enter a price here; nothing "
-                            "can be computed retroactively." + OPTIONAL[1],
+                            "counting the moment you enter a price here - "
+                            "unless you fill in below since when to count and "
+                            "what the meters already showed before.\n\nWhat a "
+                            "single plant cost belongs to that plant under "
+                            "“Costs of this plant”; only shared costs go here."
+                            + OPTIONAL[1],
                         )
                     ),
-                    "data": _felder(KOSTENFELDER, s),
+                    "data": _felder(KOSTENFELDER, s, "costs"),
                     "data_description": _hinweise(KOSTENFELDER, s, "costs"),
                 },
                 "display": {
