@@ -160,6 +160,79 @@ def test_laderegler_ersetzt_fehlenden_pv_sensor():
     assert daten["plants"][2]["modules"]["power_source"] == "charger"
 
 
+def test_modulwerte_fuellen_den_ladereglereingang():
+    """Dieselbe Stelle, einmal eingetragen: Die Module speisen den Eingang."""
+    aufbau = _aufbau()
+    aufbau["plants"][0]["modules"].update(
+        {"voltage_entity": "sensor.pv1_u", "current_entity": "sensor.pv1_i"}
+    )
+    k, hass = _koordinator(aufbau)
+    hass.states.setzen("sensor.pv1", 640, "W")
+    hass.states.setzen("sensor.pv1_u", 59.9, "V")
+    hass.states.setzen("sensor.pv1_i", 10.7, "A")
+    laderegler = k._berechnen()["plants"][0]["charger"]
+    assert laderegler["input_power"] == 640
+    assert laderegler["input_voltage"] == 59.9
+    assert laderegler["input_current"] == 10.7
+
+
+def test_modulspannung_kommt_vom_laderegler():
+    """Und in die andere Richtung genauso."""
+    aufbau = _aufbau()
+    aufbau["plants"][0]["charger"].update(
+        {
+            "power_entity": "sensor.mppt1_p",
+            "input_voltage_entity": "sensor.mppt1_ein_u",
+            "input_current_entity": "sensor.mppt1_ein_i",
+        }
+    )
+    k, hass = _koordinator(aufbau)
+    hass.states.setzen("sensor.mppt1_p", 620, "W")
+    hass.states.setzen("sensor.mppt1_ein_u", 59.9, "V")
+    hass.states.setzen("sensor.mppt1_ein_i", 10.7, "A")
+    module = k._berechnen()["plants"][0]["modules"]
+    assert module["voltage"] == 59.9
+    assert module["current"] == 10.7
+    assert module["power_source"] == "charger"
+
+
+def test_eigener_modulsensor_gewinnt_gegen_den_laderegler():
+    """Gemessen schlägt abgeleitet - sonst verschwände der eigene Sensor."""
+    aufbau = _aufbau()
+    aufbau["plants"][0]["charger"]["power_entity"] = "sensor.mppt1_p"
+    k, hass = _koordinator(aufbau)
+    hass.states.setzen("sensor.pv1", 640, "W")
+    hass.states.setzen("sensor.mppt1_p", 620, "W")
+    module = k._berechnen()["plants"][0]["modules"]
+    assert module["power"] == 640
+    assert module["power_source"] == "sensor"
+
+
+def test_ohne_laderegler_kommt_die_strangspannung_vom_wechselrichter():
+    """Nur sie: Leistung und DC-Strom sind dort die Wechselstromabgabe."""
+    aufbau = _aufbau()
+    aufbau["plants"][1]["inverter"]["dc_voltage_entity"] = "sensor.wr2_u"
+    k, hass = _koordinator(aufbau)
+    hass.states.setzen("sensor.wr2", 780, "W")
+    hass.states.setzen("sensor.wr2_u", 41.2, "V")
+    module = k._berechnen()["plants"][1]["modules"]
+    assert module["voltage"] == 41.2
+    assert module["power"] is None
+    assert module["current"] is None
+
+
+def test_strangstrom_entsteht_aus_uebernommener_spannung():
+    """Eigene Leistung, Spannung vom Wechselrichter - der Strom folgt daraus."""
+    aufbau = _aufbau()
+    aufbau["plants"][1]["inverter"]["dc_voltage_entity"] = "sensor.wr2_u"
+    k, hass = _koordinator(aufbau)
+    hass.states.setzen("sensor.pv2", 760, "W")
+    hass.states.setzen("sensor.wr2_u", 40.0, "V")
+    module = k._berechnen()["plants"][1]["modules"]
+    assert module["power"] == 760
+    assert module["current"] == 19.0
+
+
 def test_hausverbrauch_und_autarkie():
     """Verbrauch = Wechselrichter + Netz, mit positivem Netz für Bezug."""
     k, hass = _koordinator()

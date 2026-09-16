@@ -247,6 +247,8 @@ FELDER: dict[str, T] = {
     "calculate": ("Hausverbrauch rechnen", "Calculate house consumption"),
     "animate": ("Flusslinien animieren", "Animate flow lines"),
     "show_strings": ("Verschaltung zeichnen", "Draw string layout"),
+    "show_phases": ("Phasen einzeln zeichnen", "Draw phases individually"),
+    "order": ("Platz in der Karte", "Position on the card"),
     "price_per_kwh": ("Arbeitspreis", "Energy price"),
     "feed_in_price": ("Einspeisevergütung", "Feed-in tariff"),
     "base_price": ("Grundpreis je Monat", "Monthly base fee"),
@@ -254,6 +256,7 @@ FELDER: dict[str, T] = {
     "currency": ("Währung", "Currency"),
     "start_date": ("Zählen seit", "Counting since"),
     "prior_import": ("Bezug davor", "Import before"),
+    "prior_price": ("Durchschnittspreis davor", "Average price before"),
     "prior_export": ("Einspeisung davor", "Export before"),
     "commissioned": ("Inbetriebnahme", "Commissioned"),
     "prior_yield": ("Ertrag davor", "Yield before"),
@@ -783,6 +786,14 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "Draws the modules individually, in series and parallel. Off gives "
             "a narrower card.",
         ),
+        "show_phases": (
+            "Drei Phasenlinien zwischen Zähler und Haus, jede mit ihrem "
+            "eigenen Fluss. Aus bleibt eine einzige Wechselstromleitung - "
+            "richtig für eine einphasige Anlage und deutlich flacher.",
+            "Three phase lines between meter and house, each with its own "
+            "flow. Off leaves a single AC line - right for a single-phase "
+            "system and noticeably flatter.",
+        ),
     },
     "plant_costs": {
         "investment": (
@@ -824,6 +835,17 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "do not export, enter 0 or leave it empty.",
         ),
     },
+    "plant_name": {
+        "order": (
+            "Der Platz dieser Anlage in der Karte: 1 steht ganz links. "
+            "Gleiche Zahlen behalten die Reihenfolge, in der sie angelegt "
+            "wurden. Die Sensoren bleiben, wie sie heißen - umsortieren "
+            "benennt nichts um.",
+            "This plant's place on the card: 1 is leftmost. Equal numbers keep "
+            "the order they were created in. Sensor names stay as they are - "
+            "reordering renames nothing.",
+        ),
+    },
     "costs": {
         "prior_import": (
             "Wie viele Kilowattstunden du aus dem Netz bezogen hast, bevor die "
@@ -832,6 +854,16 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "How many kilowatt hours you drew from the grid before the "
             "integration started counting. Only for the total; day, month and "
             "year are unaffected.",
+        ),
+        "prior_price": (
+            "Was die Kilowattstunde im Schnitt gekostet hat, bevor die "
+            "Integration zu zählen begann - Strom war vor drei Jahren nicht "
+            "so teuer wie heute. Gilt nur für die Zeit davor. Leer: Es wird "
+            "mit dem heutigen Preis gerechnet.",
+            "What one kilowatt hour cost on average before the integration "
+            "started counting - electricity three years ago was not priced "
+            "like today. Applies to that earlier time only. Empty: today's "
+            "price is used.",
         ),
         "price_per_kwh": (
             "Was eine Kilowattstunde aus dem Netz kostet, z. B. 0,34. Ohne "
@@ -907,9 +939,10 @@ NETZFELDER = [
     "l3_power_entity", "l3_voltage_entity", "l3_current_entity",
 ]
 HAUSFELDER = ["calculate", "power_entity", "energy_entity"]
-ANZEIGEFELDER = ["animate", "show_strings"]
+ANZEIGEFELDER = ["animate", "show_strings", "show_phases"]
 KOSTENFELDER = [
     "price_per_kwh", "feed_in_price", "base_price", "currency", "prior_import",
+    "prior_price",
 ]
 ANLAGENKOSTENFELDER = [
     "investment", "commissioned", "feed_in_price", "prior_yield",
@@ -1014,7 +1047,8 @@ def baum(sprache) -> dict:
                 },
                 "plant_name": {
                     "title": s(("Name der Anlage", "Plant name")),
-                    "data": _felder(["name"], s),
+                    "data": _felder(["name", "order"], s),
+                    "data_description": _hinweise(["order"], s, "plant_name"),
                 },
                 "plant_delete": {
                     "title": s(("Anlage löschen", "Delete plant")),
@@ -1127,7 +1161,12 @@ def baum(sprache) -> dict:
                             "hochgerechneten Leistungen. Tag, Monat und Jahr "
                             "laufen ab dem Zeitpunkt mit, an dem du hier einen "
                             "Preis einträgst - für die Zeit davor sorgen die "
-                            "Angaben bei der jeweiligen Anlage.\n\nWas eine "
+                            "Angaben bei der jeweiligen Anlage.\n\nDen Preis "
+                            "darfst du jederzeit ändern: Bewertet wird immer "
+                            "nur, was seit der letzten Rechnung dazugekommen "
+                            "ist. Eine Preiserhöhung wirkt ab dem Tag, an dem "
+                            "du sie einträgst, und schreibt die Vergangenheit "
+                            "nicht um.\n\nWas eine "
                             "Anlage gekostet hat und seit wann sie läuft, "
                             "steht bei ihr selbst unter „Kosten dieser "
                             "Anlage“. Die Investition des Standorts ist die "
@@ -1140,7 +1179,11 @@ def baum(sprache) -> dict:
                             "extrapolated power. Day, month and year start "
                             "counting the moment you enter a price here - the "
                             "time before is covered by the figures at each "
-                            "plant.\n\nWhat a plant cost and since when it "
+                            "plant.\n\nYou may change the price at any "
+                            "time: only what has accrued since the last "
+                            "calculation is valued. A price increase applies "
+                            "from the day you enter it and does not rewrite "
+                            "the past.\n\nWhat a plant cost and since when it "
                             "runs belongs to that plant under “Costs of this "
                             "plant”. The site's investment is the sum of its "
                             "plants, its start the earliest commissioning - "

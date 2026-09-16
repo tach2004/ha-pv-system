@@ -129,6 +129,49 @@ def test_zahlen_aus_zeichenketten():
     assert netz["phases"] == 3
 
 
+def test_reihenfolge_bestimmt_den_platz():
+    """Position 1 steht links, egal in welcher Reihenfolge angelegt wurde."""
+    daten = topology.normalisieren(
+        {
+            "plants": [
+                {"id": "b", "name": "Carport", "order": 3},
+                {"id": "a", "name": "Dach", "order": 1},
+                {"id": "c", "name": "Garage", "order": 2},
+            ]
+        }
+    )
+    assert [a["id"] for a in daten["plants"]] == ["a", "c", "b"]
+
+
+def test_ohne_reihenfolge_bleibt_die_anlegereihenfolge():
+    """Wer nichts einstellt, bekommt, was er kennt."""
+    daten = topology.normalisieren(
+        {"plants": [{"id": "a"}, {"id": "b"}, {"id": "c"}]}
+    )
+    assert [a["id"] for a in daten["plants"]] == ["a", "b", "c"]
+    assert [a["order"] for a in daten["plants"]] == [1, 2, 3]
+
+
+def test_gleiche_reihenfolge_entscheidet_der_name():
+    """Zweimal dieselbe Zahl darf die Karte nicht bei jedem Lauf umbauen."""
+    daten = topology.normalisieren(
+        {
+            "plants": [
+                {"id": "b", "name": "Zuletzt", "order": 2},
+                {"id": "a", "name": "Anfang", "order": 2},
+            ]
+        }
+    )
+    assert [a["id"] for a in daten["plants"]] == ["a", "b"]
+
+
+def test_unsinnige_reihenfolge_faellt_auf_den_platz_zurueck():
+    daten = topology.normalisieren(
+        {"plants": [{"id": "a", "order": "links"}, {"id": "b", "order": 0}]}
+    )
+    assert [a["order"] for a in daten["plants"]] == [1, 1]
+
+
 def _alle_tests():
     for name, funktion in sorted(globals().items()):
         if name.startswith("test_") and callable(funktion):

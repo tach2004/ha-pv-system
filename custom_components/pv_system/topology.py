@@ -92,6 +92,7 @@ from .const import (
     CONF_MODULES,
     CONF_MODULES_IN_SERIES,
     CONF_NOMINAL_VOLTAGE,
+    CONF_ORDER,
     CONF_PHASE,
     CONF_PHASE_CURRENT,
     CONF_PHASE_POWER,
@@ -101,12 +102,14 @@ from .const import (
     CONF_POWER_SIGN,
     CONF_PRIOR_EXPORT,
     CONF_PRIOR_IMPORT,
+    CONF_PRIOR_PRICE,
     CONF_PRIOR_YIELD,
     CONF_PV_CURRENT,
     CONF_PV_ENERGY,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_RATED_POWER,
+    CONF_SHOW_PHASES,
     CONF_SHOW_STRINGS,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
@@ -339,6 +342,7 @@ def anlage_normalisieren(roh: dict[str, Any] | None, nummer: int = 1) -> dict[st
         CONF_BATTERY: batterie_normalisieren(roh.get(CONF_BATTERY)),
         CONF_INVERTER: wechselrichter_normalisieren(roh.get(CONF_INVERTER)),
         CONF_COSTS: anlagenkosten_normalisieren(roh.get(CONF_COSTS)),
+        CONF_ORDER: _ganz(roh.get(CONF_ORDER), nummer),
     }
 
 
@@ -379,6 +383,7 @@ def darstellung_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
     return {
         CONF_ANIMATE: bool(roh.get(CONF_ANIMATE, True)),
         CONF_SHOW_STRINGS: bool(roh.get(CONF_SHOW_STRINGS, True)),
+        CONF_SHOW_PHASES: bool(roh.get(CONF_SHOW_PHASES, True)),
     }
 
 
@@ -408,6 +413,7 @@ def kosten_normalisieren(
         CONF_BASE_PRICE: _zahl(roh.get(CONF_BASE_PRICE), None),
         CONF_CURRENCY: str(roh.get(CONF_CURRENCY) or DEFAULT_CURRENCY),
         CONF_PRIOR_IMPORT: _zahl(roh.get(CONF_PRIOR_IMPORT), None),
+        CONF_PRIOR_PRICE: _zahl(roh.get(CONF_PRIOR_PRICE), None),
     }
 
 
@@ -426,6 +432,15 @@ def anlagenkosten_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         CONF_PRIOR_YIELD: _zahl(roh.get(CONF_PRIOR_YIELD), None),
         CONF_PRIOR_EXPORT: _zahl(roh.get(CONF_PRIOR_EXPORT), None),
     }
+
+
+def _ganz(wert: Any, vorgabe: int) -> int:
+    """Eine ganze Zahl ab 1 - sonst die Stelle, an der die Anlage steht."""
+    try:
+        zahl = int(float(wert))
+    except (TypeError, ValueError):
+        return vorgabe
+    return max(1, min(99, zahl))
 
 
 def _datum(wert: Any) -> str | None:
@@ -448,11 +463,16 @@ def normalisieren(optionen: dict[str, Any] | None) -> dict[str, Any]:
     """Die gespeicherten Optionen in die vollständige Struktur überführen."""
     optionen = dict(optionen or {})
     anlagen = optionen.get(CONF_PLANTS) or []
+    # Nach der eingestellten Reihenfolge sortiert, bei Gleichstand nach der
+    # Anlagereihenfolge. Sensoren hängen an der Kennung, nicht am Platz - ein
+    # Umsortieren benennt also nichts um.
+    fertig = [
+        anlage_normalisieren(anlage, nummer)
+        for nummer, anlage in enumerate(anlagen, start=1)
+    ]
+    fertig.sort(key=lambda a: (a[CONF_ORDER], a[CONF_NAME]))
     return {
-        CONF_PLANTS: [
-            anlage_normalisieren(anlage, nummer)
-            for nummer, anlage in enumerate(anlagen, start=1)
-        ],
+        CONF_PLANTS: fertig,
         CONF_GRID: netz_normalisieren(optionen.get(CONF_GRID)),
         CONF_HOUSE: haus_normalisieren(optionen.get(CONF_HOUSE)),
         CONF_DISPLAY: darstellung_normalisieren(optionen.get(CONF_DISPLAY)),

@@ -33,6 +33,21 @@ davor stehen deshalb an der Anlage.
 Der Standort erbt daraus: Seine Investition ist die Summe seiner Anlagen, sein
 Beginn die älteste Inbetriebnahme. Beides zusätzlich eintragen zu können wäre
 nur eine Gelegenheit, sich zu widersprechen.
+
+**Preise ändern sich.** Strom kostete 2023 anderes als heute, und eine Anlage
+amortisiert sich über zwanzig Jahre. Den ganzen Zeitraum mit dem heutigen Preis
+zu bewerten wäre falsch. Deshalb führt der Gesamtzeitraum einen *Geldspeicher*:
+Bei jeder Rechnung wird nur die Differenz zur letzten Rechnung bewertet, mit
+dem Preis, der gerade gilt. Eine Preisänderung wirkt ab dem Tag der Änderung
+und schreibt die Vergangenheit nicht um.
+
+Für die Zeit vor dem ersten Lauf gibt es keine Differenzen, nur Summen. Dafür
+genügt ein Durchschnittspreis - eine Zahl, die man kennt, statt einer Historie,
+die niemand pflegt.
+
+Tag, Monat und Jahr rechnen weiterhin mit dem aktuellen Preis. Über so kurze
+Strecken ändert er sich praktisch nie, und wenn doch, ist die Abweichung
+kleiner als der Aufwand, sie zu vermeiden.
 """
 
 from __future__ import annotations
@@ -159,11 +174,30 @@ class Kostenrechner:
             zeitraeume[periode] = self._geld(
                 mengen, arbeitspreis, verguetung, grundpreis, jetzt
             )
+        # Erst jetzt der Geldspeicher: Er hängt sich an dieselbe Marke wie der
+        # Gesamtzeitraum, und die muss vorher angelegt sein - sonst stünde dort
+        # kein Periodenanfang, und die Amortisation rechnete ab 1970.
+        gespeichert, neu_geld = self._geldspeicher(
+            zaehler, arbeitspreis, verguetung, jetzt
+        )
+        veraendert = veraendert or neu_geld
+
+        # Der Gesamtzeitraum bekommt die mitgeführten Beträge statt der
+        # Hochrechnung mit dem heutigen Preis.
+        zeitraeume[PERIOD_TOTAL] = self._gesamtgeld(
+            zeitraeume[PERIOD_TOTAL], gespeichert, vorher, preise, arbeitspreis,
+            grundpreis, jetzt,
+        )
         if veraendert:
             self._merken()
 
         je_anlage = self._anlagen(
-            anlagen, zeitraeume[PERIOD_TOTAL], arbeitspreis, verguetung, jetzt
+            anlagen,
+            zeitraeume[PERIOD_TOTAL],
+            arbeitspreis,
+            verguetung,
+            jetzt,
+            _zahl(preise.get("prior_price")),
         )
         # Die Rohmengen waren nur für die Aufteilung auf die Anlagen nötig.
         for zeitraum in zeitraeume.values():
@@ -207,6 +241,109 @@ class Kostenrechner:
             "import": bezug,
             "export": einspeisung,
             "own": max(0.0, erzeugt - einspeisung),
+        }
+
+    def _geldspeicher(
+        self,
+        zaehler: dict[str, float | None],
+        preis: float | None,
+        verguetung: float | None,
+        jetzt: datetime,
+    ) -> tuple[dict[str, float], bool]:
+        """Den seit dem ersten Lauf angefallenen Betrag fortschreiben.
+
+        Bewertet wird immer nur die Differenz zur letzten Rechnung - mit dem
+        Preis, der in diesem Augenblick gilt. Wer morgen einen neuen Tarif
+        einträgt, verändert damit nicht, was gestern gekostet hat.
+
+        Ohne Preis wird nichts fortgeschrieben, aber der Zählerstand gemerkt:
+        Sonst käme beim späteren Eintragen eines Preises die ganze Zeit ohne
+        Preis auf einen Schlag dazu.
+        """
+        marke = self._marken.setdefault(PERIOD_TOTAL, {})
+        geld: dict[str, float] = marke.setdefault(
+            "geld", {"cost": 0.0, "revenue": 0.0, "savings": 0.0}
+        )
+        letzte: dict[str, Any] = marke.setdefault("letzte", {})
+
+        veraendert = False
+        for name, satz in (("import", preis), ("export", verguetung), ("own", preis)):
+            stand = _zahl(zaehler.get(name))
+            if stand is None:
+                continue
+            vorher = _zahl(letzte.get(name))
+            letzte[name] = stand
+            if vorher is None:
+                veraendert = True
+                continue
+            # Ein zurückgefallener Zähler bringt keine negative Rechnung.
+            menge = max(0.0, stand - vorher)
+            if menge:
+                veraendert = True
+            if satz is None or not menge:
+                continue
+            feld = {"import": "cost", "export": "revenue", "own": "savings"}[name]
+            geld[feld] = round(geld[feld] + menge * satz, 4)
+        return geld, veraendert
+
+    @staticmethod
+    def _gesamtgeld(
+        zeitraum: dict[str, Any],
+        gespeichert: dict[str, float],
+        vorher: dict[str, float],
+        preise: dict[str, Any],
+        preis: float | None,
+        grundpreis: float,
+        jetzt: datetime,
+    ) -> dict[str, Any]:
+        """Den Gesamtzeitraum aus Geldspeicher und Vorher-Werten bauen.
+
+        Der Durchschnittspreis für die Zeit davor darf abweichen - Strom war
+        vor drei Jahren teurer. Fehlt er, gilt der heutige Preis; das ist die
+        gleiche Näherung wie bisher, aber jetzt eine bewusste.
+        """
+        frueher = _zahl(preise.get("prior_price"))
+        if frueher is None:
+            frueher = preis
+        satz_vorher = _zahl(preise.get("prior_feed_in")) or _zahl(preise.get("feed_in"))
+
+        kosten = None
+        if preis is not None or frueher is not None:
+            anteil = _tage_seit(zeitraum.get("start"), jetzt) / TAGE_JE_MONAT
+            kosten = gespeichert["cost"] + grundpreis * anteil
+            if frueher is not None:
+                kosten += vorher.get("import", 0.0) * frueher
+            kosten = round(kosten, 2)
+
+        erloes = None
+        if satz_vorher is not None or gespeichert["revenue"]:
+            erloes = round(
+                gespeichert["revenue"]
+                + vorher.get("export", 0.0) * (satz_vorher or 0.0),
+                2,
+            )
+        ersparnis = None
+        if frueher is not None or gespeichert["savings"]:
+            ersparnis = round(
+                gespeichert["savings"] + vorher.get("own", 0.0) * (frueher or 0.0), 2
+            )
+
+        ertrag = None
+        if ersparnis is not None or erloes is not None:
+            ertrag = round((ersparnis or 0.0) + (erloes or 0.0), 2)
+
+        return {
+            **zeitraum,
+            "cost": kosten,
+            "revenue": erloes,
+            "savings": ersparnis,
+            "yield": ertrag,
+            "balance": (
+                round(ertrag - kosten, 2)
+                if ertrag is not None and kosten is not None
+                else None
+            ),
+            "prior_price": frueher,
         }
 
     def _mengen(
@@ -324,6 +461,7 @@ class Kostenrechner:
         preis: float | None,
         verguetung: float | None,
         jetzt: datetime,
+        preis_vorher: float | None = None,
     ) -> dict[str, Any]:
         """Ertrag und Amortisation je Anlage, seit ihrer Inbetriebnahme.
 
@@ -366,7 +504,16 @@ class Kostenrechner:
             if satz is None:
                 satz = verguetung
 
-            ersparnis = round(eigen * preis, 2) if preis is not None else None
+            # Was vor dem ersten Lauf lag, wird mit dem Durchschnittspreis von
+            # damals bewertet - der Rest mit dem heutigen.
+            frueher = preis_vorher if preis_vorher is not None else preis
+            eigen_vorher = max(0.0, vorher_erzeugt - vorher_eingespeist)
+            eigen_jetzt = max(0.0, eigen - eigen_vorher)
+            ersparnis = (
+                round(eigen_jetzt * preis + eigen_vorher * (frueher or 0.0), 2)
+                if preis is not None
+                else None
+            )
             erloes = round(eingespeist * satz, 2) if satz is not None else None
             ertrag = None
             if ersparnis is not None or erloes is not None:

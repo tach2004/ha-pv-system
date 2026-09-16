@@ -279,7 +279,7 @@ def beispieldaten() -> dict:
         "totals": daten["totals"],
         "house": daten["house"],
         "costs": daten["costs"],
-        "display": {"animate": True, "show_strings": True},
+        "display": {"animate": True, "show_strings": True, "show_phases": True},
     }
 
 
