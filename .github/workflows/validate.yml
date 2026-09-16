@@ -105,6 +105,8 @@ jobs:
               "_felder_netz",
               "_felder_haus",
               "_felder_darstellung",
+              "_felder_kosten",
+              "_felder_anlagenkosten",
           ):
               cf._mit_vorschlag(getattr(cf, name)(), {})
               print(f"  ok  {name}")

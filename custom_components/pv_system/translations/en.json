@@ -326,25 +326,29 @@
           "currency": "Currency",
           "feed_in_price": "Feed-in tariff (default)",
           "price_per_kwh": "Energy price",
-          "prior_import": "Import before"
+          "prior_import": "Import before",
+          "prior_price": "Average price before"
         },
         "data_description": {
           "base_price": "The monthly base fee of your electricity contract. It is spread proportionally across day, month and year. Empty or 0 if you do not want it counted here.",
           "currency": "The currency code, e.g. EUR or CHF. It is used as the unit of the money sensors.",
           "feed_in_price": "What you are paid per kilowatt hour fed into the grid, e.g. 0.08. Leave empty if you do not export.",
           "price_per_kwh": "What one kilowatt hour from the grid costs, e.g. 0.34. Without this price no costs are calculated and no money sensors are created.",
-          "prior_import": "How many kilowatt hours you drew from the grid before the integration started counting. Only for the total; day, month and year are unaffected."
+          "prior_import": "How many kilowatt hours you drew from the grid before the integration started counting. Only for the total; day, month and year are unaffected.",
+          "prior_price": "What one kilowatt hour cost on average before the integration started counting - electricity three years ago was not priced like today. Applies to that earlier time only. Empty: today's price is used."
         },
-        "description": "Everything is derived from the meter readings you entered under “Grid and meter” - not from extrapolated power. Day, month and year start counting the moment you enter a price here - the time before is covered by the figures at each plant.\n\nWhat a plant cost and since when it runs belongs to that plant under “Costs of this plant”. The site's investment is the sum of its plants, its start the earliest commissioning - nobody needs to enter either again here.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
+        "description": "Everything is derived from the meter readings you entered under “Grid and meter” - not from extrapolated power. Day, month and year start counting the moment you enter a price here - the time before is covered by the figures at each plant.\n\nYou may change the price at any time: only what has accrued since the last calculation is valued. A price increase applies from the day you enter it and does not rewrite the past.\n\nWhat a plant cost and since when it runs belongs to that plant under “Costs of this plant”. The site's investment is the sum of its plants, its start the earliest commissioning - nobody needs to enter either again here.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Costs and yield"
       },
       "display": {
         "data": {
           "animate": "Animate flow lines",
+          "show_phases": "Draw phases individually",
           "show_strings": "Draw string layout"
         },
         "data_description": {
           "animate": "The dots on the lines move with the power. Off if the dashboard stutters on an old tablet.",
+          "show_phases": "Three phase lines between meter and house, each with its own flow. Off leaves a single AC line - right for a single-phase system and noticeably flatter.",
           "show_strings": "Draws the modules individually, in series and parallel. Off gives a narrower card."
         },
         "title": "Appearance"
@@ -532,7 +536,11 @@
       },
       "plant_name": {
         "data": {
-          "name": "Name"
+          "name": "Name",
+          "order": "Position on the card"
+        },
+        "data_description": {
+          "order": "This plant's place on the card: 1 is leftmost. Equal numbers keep the order they were created in. Sensor names stay as they are - reordering renames nothing."
         },
         "title": "Plant name"
       },

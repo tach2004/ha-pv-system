@@ -32,10 +32,10 @@ const PV_VERSION =
 /* ------------------------------------------------------------------ Maße */
 
 const M = {
-  spalte: 236,      // Breite einer Anlagenspalte
-  luecke: 28,       // Abstand zwischen zwei Spalten
+  spalte: 216,      // Breite einer Anlagenspalte
+  luecke: 26,       // Abstand zwischen zwei Spalten
   rand: 16,
-  trunk: 74,        // x-Versatz des senkrechten Hauptstrangs in der Spalte
+  trunk: 52,        // x-Versatz des senkrechten Hauptstrangs in der Spalte
   spaltenkopf: 22,  // Zeile über der Spalte für Name und Ertrag
   modulOben: 58,    // Platz über den Modulen: zwei Kopfzeilen und der Balken
   modulH: 22,       // Höhe eines gezeichneten Moduls
@@ -45,7 +45,6 @@ const M = {
   wrH: 66,
   busAbstand: 20,   // Abstand der Phasenlinien
   zeileLuecke: 34,  // senkrechte Verbindungsstrecke zwischen zwei Zeilen
-  unten: 78,        // Höhe der Zeile mit Netz und Haus
 };
 
 // Mehr als das wird nicht einzeln gezeichnet, sonst wird ein String zur Tapete.
@@ -55,18 +54,30 @@ const MAX_PARALLEL = 4;
 // Breite der Balken im Modul- und im Wechselrichterkasten. Rechts daneben
 // bleibt Platz für die Prozentzahl.
 const MODULBALKEN = M.spalte - 10 - 24 - 46;
-const BATTERIE_B = 132;   // Breite des Batteriekastens
-const KASTEN_UNTEN = 150; // Breite von Netz- und Hauskasten
-const MINDESTBREITE = 2 * KASTEN_UNTEN + 120; // damit beide nebeneinander passen
+const BATTERIE_B = 130;   // Breite des Batteriekastens
 
-// Je eine Senkrechte an beiden Enden, und die drei Phasen kreuzen sie. Ein
-// Fächer mit drei getrennten Steigleitungen war der Versuch, "nicht gebrückt"
-// zu zeigen - er sah aber aus wie drei Hausanschlüsse. Eine Senkrechte mit
-// Knotenpunkten ist das übliche Schaltbild und liest sich sofort richtig:
-// unten die Summe, waagerecht die einzelnen Phasen.
-const STEIG_NETZ = 40;    // x der Senkrechten im Netzkasten
-const STEIG_HAUS = 110;   // x der Senkrechten im Hauskasten
+// Die unterste Zeile: links der Zähler, rechts das Haus, dazwischen die
+// Phasen. Beide sind Klemmkästen - die Phasen enden an ihrer Kante, statt sie
+// zu kreuzen. Das Netz steht darunter und gehört nicht mehr ins Haus.
+const ZAEHLER_B = 108;    // Breite des Zählerkastens
+const HAUS_B = 116;       // Breite des Hauskastens
+const BAND_OBEN = 40;     // Titel und Modell über der ersten Phasenzeile
+const BAND_UNTEN = 16;    // Luft unter der letzten Phasenzeile
+const BAND_MIN = 74;      // damit im Hauskasten vier Zeilen Platz haben
+const NETZ_ABSTAND = 34;  // Länge der Senkrechten vom Zähler zum Netz
+const NETZ_H = 48;        // Höhe der Netzzeile ganz unten
+// Abstand zwischen einem Kasten und dem nächsten Abgriff auf der Phase. Ohne
+// ihn stößt der erste Wechselrichter direkt an den Zähler, und der Abschnitt
+// dazwischen ist zu kurz, um seinen Fluss noch zu zeigen.
+const KLEMM_ABSTAND = 44;
+const MINDESTBREITE = ZAEHLER_B + HAUS_B + 200;
 const WRBALKEN = M.spalte - 54;
+
+// Der Richtungspfeil: ein Winkel, kein gefülltes Dreieck. Ein Winkel wird
+// gestrichen, nicht gefüllt - damit erbt er dieselbe Farbe wie die Flusslinie,
+// über die er liegt, und ein einziger Satz Klassen genügt für beides.
+const PFEIL = "M -3.4 -4.2 L 2.8 0 L -3.4 4.2";
+const PFEIL_MIN = 17;     // kürzere Strecken bekommen keinen Pfeil
 
 /* --------------------------------------------------------------- Helfer */
 
@@ -79,6 +90,20 @@ function zahl(wert) {
 }
 
 /** Leistung als Text: unter 1000 W in W, darüber in kW. */
+/**
+ * Leistung mit Vorzeichen davor.
+ *
+ * Am Netz ist die Richtung die halbe Information: Plus heißt, es kommt etwas
+ * ins Haus, Minus heißt, es geht hinaus. Eine nackte Zahl lässt offen, ob
+ * gerade gekauft oder verkauft wird.
+ */
+function wattVz(wert, sprache) {
+  const n = zahl(wert);
+  if (n === null) return "–";
+  if (Math.abs(n) < 1) return watt(0, sprache);
+  return `${n > 0 ? "+" : "−"}${watt(Math.abs(n), sprache)}`;
+}
+
 function watt(wert, sprache) {
   const n = zahl(wert);
   if (n === null) return "–";
@@ -283,6 +308,7 @@ class PvSystemCard extends HTMLElement {
     return JSON.stringify([
       d.system_id,
       d.display.show_strings,
+      d.display.show_phases,
       d.grid.phases_count,
       // Die beiden Geldkacheln gibt es nur mit hinterlegtem Preis. Ohne diese
       // Zeile bliebe die Karte nach dem Eintragen unverändert, bis jemand das
@@ -344,6 +370,7 @@ class PvSystemCard extends HTMLElement {
     const inhalt = e("div", { class: "inhalt" });
     this._refs = new Map();
     this._flows = new Map();
+    this._pfeile = new Map();
 
     inhalt.appendChild(this._diagramm());
     if (!this._config.compact) inhalt.appendChild(this._kennzahlen());
@@ -374,6 +401,10 @@ class PvSystemCard extends HTMLElement {
         stroke-width: 1.4;
         transition: stroke 120ms ease, filter 120ms ease;
       }
+      /* Der Netzmast hat keinen Kasten - sein Feld ist nur da, um ihn
+         anklickbar zu machen, und zeigt sich erst beim Überfahren. */
+      .block .rahmen.offen { fill: transparent; stroke: transparent; }
+
       .block:hover .rahmen, .block.aktiv .rahmen {
         stroke: var(--primary-color, #03a9f4);
         stroke-width: 2.2;
@@ -413,6 +444,19 @@ class PvSystemCard extends HTMLElement {
       @media (prefers-reduced-motion: reduce) {
         .fluss.an { animation: none; }
       }
+
+      /* Der Richtungspfeil liegt still über der laufenden Linie. Er sagt,
+         wohin es geht - auch dann, wenn das Betriebssystem Animationen
+         abgeschaltet hat oder jemand nur kurz hinschaut. */
+      .pfeil {
+        fill: none;
+        stroke-width: 1.9;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: 0;
+        transition: opacity 200ms ease;
+      }
+      .pfeil.an { opacity: .95; }
 
       .f-solar { stroke: var(--pv-solar, #f5a623); }
       .f-akku  { stroke: var(--pv-akku, #3ec26a); }
@@ -507,6 +551,10 @@ class PvSystemCard extends HTMLElement {
     const d = this._daten;
     const anlagen = d.plants;
     const zeigeStrings = d.display.show_strings !== false;
+    // Ohne Phasen bleibt eine einzige Wechselstromleitung übrig. Die
+    // Wechselrichter hängen dann alle an ihr, und der Zähler zeigt nur noch
+    // die Summe - das ist die Karte für eine einphasige Anlage.
+    const zeigePhasen = d.display.show_phases !== false;
 
     // Zeilen bestimmen: Ein Laderegler bekommt nur dann eine eigene Zeile,
     // wenn ihn wenigstens eine Anlage hat. Sonst bliebe eine leere Spur
@@ -529,33 +577,62 @@ class PvSystemCard extends HTMLElement {
     const yBatterie = hatBatterie ? y : null;
     if (hatBatterie) y += M.kasten + M.zeileLuecke;
     const yWr = y;
-    y += M.wrH + M.zeileLuecke;
+    // Über der ersten Phasenzeile liegt der Kopf der beiden Klemmkästen -
+    // ohne diesen Zuschlag stieße ihre Oberkante an den Wechselrichter.
+    y += M.wrH + M.zeileLuecke + BAND_OBEN;
     const yBus = y;
-    const phasen = Math.min(3, Math.max(1, d.grid.phases_count || 3));
-    y += (phasen - 1) * M.busAbstand + M.zeileLuecke;
-    const yUnten = y;
-    y += M.unten + M.rand;
+    const phasen = zeigePhasen
+      ? Math.min(3, Math.max(1, d.grid.phases_count || 3))
+      : 1;
+    // Der Zähler- und der Hauskasten umschließen die Phasenzeilen: oben Platz
+    // für Titel und Modell, unten etwas Luft, mindestens aber so hoch, dass im
+    // Haus vier Zeilen stehen können.
+    const bandY = yBus - BAND_OBEN;
+    const bandH = Math.max(
+      BAND_OBEN + (phasen - 1) * M.busAbstand + BAND_UNTEN,
+      BAND_MIN
+    );
+    const yNetz = bandY + bandH + NETZ_ABSTAND;
+    y = yNetz + NETZ_H + M.rand;
 
     const spaltenBreite =
       anlagen.length * M.spalte + (anlagen.length - 1) * M.luecke;
-    const breite = Math.max(spaltenBreite, MINDESTBREITE) + 2 * M.rand;
+    // Kein Wechselrichter darf über dem Zähler- oder dem Hauskasten abgreifen:
+    // Seine Leitung käme aus dem Kasten heraus statt aus der Phase. Also
+    // bekommen beide Seiten so viel Platz, dass der äußerste Strang daneben
+    // liegt - und sei die Karte dafür etwas breiter.
+    const randLinks = Math.max(0, ZAEHLER_B + KLEMM_ABSTAND - M.trunk);
+    const randRechts = Math.max(
+      0, HAUS_B + KLEMM_ABSTAND - (M.spalte - M.trunk)
+    );
+    const innen = Math.max(spaltenBreite + randLinks + randRechts, MINDESTBREITE);
+    const breite = innen + 2 * M.rand;
     const hoehe = y;
 
-    // Die Spalten stehen mittig. Bei einer Anlage steht sie damit in der
-    // Mitte zwischen Netz und Haus, bei zweien symmetrisch links und rechts
-    // der Mitte - und bei dreien eine mittig mit je einer daneben. Vorher
-    // klebten sie links, und rechts blieb eine leere Fläche stehen.
-    const startX = M.rand + Math.max(0, (breite - 2 * M.rand - spaltenBreite) / 2);
+    // Die Spalten stehen mittig, solange sie dabei nicht in einen der beiden
+    // Kästen laufen. Bei einer Anlage steht sie damit in der Mitte zwischen
+    // Zähler und Haus, bei zweien symmetrisch links und rechts der Mitte.
+    const startX = Math.max(
+      M.rand + randLinks,
+      Math.min(
+        M.rand + (innen - spaltenBreite) / 2,
+        M.rand + innen - spaltenBreite - randRechts
+      )
+    );
 
-    const netzX = M.rand;
-    const hausX = breite - M.rand - KASTEN_UNTEN;
+    const zaehlerX = M.rand;
+    const hausX = breite - M.rand - HAUS_B;
 
     this._geo = {
-      ySpaltenkopf, yModul, yLaderegler, yBatterie, yWr, yBus, yUnten,
-      modulH, phasen, breite, hoehe, startX, netzX, hausX,
+      ySpaltenkopf, yModul, yLaderegler, yBatterie, yWr, yBus,
+      bandY, bandH, yNetz, modulH, phasen, zeigePhasen,
+      breite, hoehe, startX, zaehlerX, hausX,
+      // Die Senkrechte vom Zähler hinunter zum Netz steht mittig unter dem
+      // Zählerkasten - sie ist der Hausanschluss.
+      netzSteig: zaehlerX + ZAEHLER_B / 2,
       // Wo welcher Wechselrichter auf seiner Phase hängt - daraus entstehen
       // die Abschnitte der Phasenlinien.
-      abgriffe: this._abgriffe(anlagen, startX),
+      abgriffe: this._abgriffe(anlagen, startX, phasen),
     };
 
     const svg = e("svg", {
@@ -598,29 +675,18 @@ class PvSystemCard extends HTMLElement {
    * Punkten fließt immer die Summe dessen, was links davon eingespeist wurde.
    * Genau so rechnet ein Knotenpunkt auch in Wirklichkeit.
    */
-  _abgriffe(anlagen, startX) {
+  _abgriffe(anlagen, startX, phasen) {
     const punkte = [[], [], []];
     anlagen.forEach((anlage, i) => {
       if (!anlage.inverter.enabled) return;
       const nummer = { l1: 0, l2: 1, l3: 2 }[anlage.inverter.phase] || 0;
-      punkte[Math.min(nummer, 2)].push({
+      // Werden die Phasen nicht gezeigt, hängen alle an derselben Leitung.
+      punkte[Math.min(nummer, phasen - 1)].push({
         x: startX + i * (M.spalte + M.luecke) + M.trunk,
         id: anlage.id,
       });
     });
     return punkte.map((liste) => liste.sort((a, b) => a.x - b.x));
-  }
-
-  /**
-   * x der Senkrechten am Netz- bzw. am Hauskasten.
-   *
-   * Für alle drei Phasen dieselbe: Sie treffen sich dort, so wie am
-   * Hausanschluss auch. Die Phase bekommt den Wert erst durch den Knotenpunkt,
-   * nicht durch eine eigene Steigleitung.
-   */
-  _steigX(seite) {
-    const g = this._geo;
-    return seite === "netz" ? g.netzX + STEIG_NETZ : g.hausX + STEIG_HAUS;
   }
 
   _modulHoehe(anlage, zeigeStrings) {
@@ -952,9 +1018,6 @@ class PvSystemCard extends HTMLElement {
     this._leitung(
       leitungen, trunk, g.yWr + M.wrH, trunk, yPhase, `${id}:ac`, "f-solar"
     );
-    leitungen.appendChild(
-      e("circle", { cx: trunk, cy: yPhase, r: 3.4, fill: "var(--pv-netz, #4a8fd4)" })
-    );
   }
 
   /**
@@ -1081,8 +1144,8 @@ class PvSystemCard extends HTMLElement {
 
     for (let i = 0; i < g.phasen; i++) {
       const y = g.yBus + i * M.busAbstand;
-      const links = this._steigX("netz");
-      const rechts = this._steigX("haus");
+      const links = g.zaehlerX + ZAEHLER_B;
+      const rechts = g.hausX;
       // Die Knotenpunkte von links nach rechts. Ein Wechselrichter außerhalb
       // der Strecke - bei vielen Anlagen steht der Zähler unter einer Spalte -
       // erweitert sie einfach.
@@ -1102,21 +1165,21 @@ class PvSystemCard extends HTMLElement {
         this._leitung(leitungen, von, y, bis, y, `bus:${i}:${k}`, "f-netz");
       }
 
-      // Beschriftung links vor der Senkrechten, alle drei untereinander.
-      leitungen.appendChild(
-        e("text", {
-          class: "klein",
-          x: links - 8,
-          y: y + 3.5,
-          "text-anchor": "end",
-          text: `L${i + 1}`,
-        })
-      );
+      // Erst jetzt die Knotenpunkte der Wechselrichter: Vorher lagen sie
+      // unter den Phasenlinien und sahen aus wie Löcher.
+      for (const abgriff of g.abgriffe[i]) {
+        leitungen.appendChild(
+          e("circle", {
+            cx: abgriff.x, cy: y, r: 3.4, fill: "var(--pv-netz, #4a8fd4)",
+          })
+        );
+      }
+
       // Erzeugung auf dieser Phase, über der Linie kurz vor dem Haus.
       this._ref(
         leitungen,
         `phase:${i}`,
-        e("text", { class: "mini rechts", x: rechts - 6, y: y - 5 })
+        e("text", { class: "mini rechts", x: rechts - 8, y: y - 8 })
       );
     }
   }
@@ -1125,68 +1188,120 @@ class PvSystemCard extends HTMLElement {
 
   _untenZeichnen(leitungen, bloecke) {
     const g = this._geo;
-    const netzX = g.netzX;
-    const hausX = g.hausX;
+    const links = g.zaehlerX + ZAEHLER_B;
 
-    // An beiden Enden eine Senkrechte, welche die drei Phasen kreuzt. Der
-    // Knotenpunkt an jeder Kreuzung sagt: Hier hängt diese Phase dran. Die
-    // Senkrechte führt die Summe - am Netz je nach Richtung, am Haus immer
-    // hinein, denn ein Haus speist nicht ein, es verbraucht nur.
-    for (const [seite, name, farbe] of [
-      ["netz", "netz", "var(--pv-netz, #4a8fd4)"],
-      ["haus", "haus", "var(--pv-haus, #9b6ad4)"],
-    ]) {
-      const x = this._steigX(seite);
-      this._leitung(
-        leitungen, x, g.yBus, x, g.yUnten, name, seite === "netz" ? "f-netz" : "f-haus"
-      );
+    /* --- Zähler -------------------------------------------------------- */
+    // Ein Klemmkasten neben den Phasen: Die Leitungen enden an seiner Kante,
+    // statt ihn zu kreuzen. Auf der Höhe jeder Phase steht dort, was diese
+    // Phase am Zähler gerade führt - mit Vorzeichen, so wie das Gerät zählt.
+    const zaehler = this._kasten(
+      bloecke, "grid:", g.zaehlerX, g.bandY, ZAEHLER_B, g.bandH
+    );
+    zaehler.appendChild(
+      e("text", { class: "titel", x: g.zaehlerX + 10, y: g.bandY + 16, text: "Zähler" })
+    );
+    this._ref(
+      zaehler, "grid:zaehler",
+      e("text", { class: "mini", x: g.zaehlerX + 10, y: g.bandY + 28 })
+    );
+    if (g.zeigePhasen) {
       for (let i = 0; i < g.phasen; i++) {
-        leitungen.appendChild(
-          e("circle", {
-            cx: x,
-            cy: g.yBus + i * M.busAbstand,
-            r: 3.4,
-            fill: farbe,
+        const y = g.yBus + i * M.busAbstand;
+        zaehler.appendChild(
+          e("text", {
+            class: "klein", x: g.zaehlerX + 10, y: y + 3.5, text: `L${i + 1}`,
           })
+        );
+        this._ref(
+          zaehler, `meter:${i}`,
+          e("text", {
+            class: "mini rechts", x: g.zaehlerX + ZAEHLER_B - 10, y: y + 3.5,
+          })
+        );
+      }
+    } else {
+      // Ohne Phasenzeilen bliebe der Kasten leer. Dann steht dort die Summe -
+      // dieselbe Zahl wie am Mast, aber an der Stelle, an der sie gemessen
+      // wird, und in Höhe der Leitung, die sie führt.
+      this._ref(
+        zaehler, "meter:0",
+        e("text", {
+          class: "wert rechts", x: g.zaehlerX + ZAEHLER_B - 10, y: g.yBus + 5,
+        })
+      );
+    }
+
+    /* --- Haus ---------------------------------------------------------- */
+    const haus = this._kasten(bloecke, "house:", g.hausX, g.bandY, HAUS_B, g.bandH);
+    haus.appendChild(
+      e("text", { class: "titel", x: g.hausX + 10, y: g.bandY + 16, text: "Haus" })
+    );
+    haus.appendChild(this._hausSymbol(g.hausX + HAUS_B - 40, g.bandY + 4));
+    this._ref(
+      haus, "house:power",
+      e("text", { class: "wert", x: g.hausX + 10, y: g.bandY + 42 })
+    );
+    this._ref(
+      haus, "house:autarkie",
+      e("text", { class: "mini", x: g.hausX + 10, y: g.bandY + 56 })
+    );
+    this._ref(
+      haus, "house:quelle",
+      e("text", { class: "mini", x: g.hausX + 10, y: g.bandY + 68 })
+    );
+
+    /* --- Klemmpunkte an beiden Kästen ---------------------------------- */
+    // Nach den Kästen gezeichnet, damit sie auf der Kante sitzen statt
+    // dahinter zu verschwinden. Sie sagen: Hier ist die Phase angeschlossen.
+    for (let i = 0; i < g.phasen; i++) {
+      const y = g.yBus + i * M.busAbstand;
+      for (const x of [links, g.hausX]) {
+        bloecke.appendChild(
+          e("circle", { cx: x, cy: y, r: 3.4, fill: "var(--pv-netz, #4a8fd4)" })
         );
       }
     }
 
-    const netz = this._kasten(bloecke, "grid:", netzX, g.yUnten, KASTEN_UNTEN, M.unten - 10);
-    netz.appendChild(
-      e("text", { class: "titel", x: netzX + 12, y: g.yUnten + 17, text: "Netz" })
+    /* --- Hausanschluss hinunter zum Netz -------------------------------- */
+    // Zähler und Netz sind zwei verschiedene Dinge: Der Zähler hängt im Haus,
+    // das Netz steht draußen. Dazwischen liegt der Hausanschluss - eine
+    // Leitung, die das Vorzeichen der Summe trägt.
+    this._leitung(
+      leitungen, g.netzSteig, g.bandY + g.bandH, g.netzSteig, g.yNetz, "netz", "f-netz"
     );
-    netz.appendChild(this._mast(netzX + 112, g.yUnten + 12));
+
+    /* --- Netz ----------------------------------------------------------- */
+    // Kein Kasten, nur der Mast: Das Netz ist nicht Teil der Anlage. Ein
+    // unsichtbares Feld macht ihn trotzdem anklickbar.
+    const netz = e("g", {
+      class: "block",
+      "data-ziel": "grid:",
+      tabindex: "0",
+      role: "button",
+    });
+    netz.appendChild(
+      e("rect", {
+        class: "rahmen offen",
+        x: g.netzSteig - 22,
+        y: g.yNetz - 2,
+        width: 172,
+        height: NETZ_H,
+        rx: 12,
+      })
+    );
+    netz.appendChild(this._mast(g.netzSteig - 15, g.yNetz - 4));
+    netz.appendChild(
+      e("text", { class: "titel", x: g.netzSteig + 26, y: g.yNetz + 14, text: "Netz" })
+    );
     this._ref(
       netz, "grid:power",
-      e("text", { class: "wert", x: netzX + 12, y: g.yUnten + 37 })
+      e("text", { class: "wert", x: g.netzSteig + 26, y: g.yNetz + 32 })
     );
     this._ref(
       netz, "grid:richtung",
-      e("text", { class: "mini", x: netzX + 12, y: g.yUnten + 51 })
+      e("text", { class: "mini", x: g.netzSteig + 26, y: g.yNetz + 45 })
     );
-    this._ref(
-      netz, "grid:zaehler",
-      e("text", { class: "mini", x: netzX + 12, y: g.yUnten + 62 })
-    );
-
-    const haus = this._kasten(bloecke, "house:", hausX, g.yUnten, KASTEN_UNTEN, M.unten - 10);
-    haus.appendChild(
-      e("text", { class: "titel", x: hausX + 12, y: g.yUnten + 17, text: "Haus" })
-    );
-    haus.appendChild(this._hausSymbol(hausX + 112, g.yUnten + 16));
-    this._ref(
-      haus, "house:power",
-      e("text", { class: "wert", x: hausX + 12, y: g.yUnten + 37 })
-    );
-    this._ref(
-      haus, "house:autarkie",
-      e("text", { class: "mini", x: hausX + 12, y: g.yUnten + 51 })
-    );
-    this._ref(
-      haus, "house:quelle",
-      e("text", { class: "mini", x: hausX + 12, y: g.yUnten + 62 })
-    );
+    bloecke.appendChild(netz);
   }
 
   /* -------------------------------------------------------------- Symbole */
@@ -1253,6 +1368,23 @@ class PvSystemCard extends HTMLElement {
     const fluss = e("path", { class: `fluss ${farbe}`, d });
     eltern.appendChild(fluss);
     this._flows.set(name, fluss);
+
+    // Der Pfeil sitzt in der Mitte der Strecke und zeigt zunächst von x1,y1
+    // nach x2,y2. Ob er sich später umdreht, entscheidet erst der Messwert -
+    // darum merkt sich die Karte den Grundwinkel gleich mit.
+    const laenge = Math.hypot(x2 - x1, y2 - y1);
+    if (laenge >= PFEIL_MIN) {
+      const winkel = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+      const pfeil = e("path", {
+        class: `pfeil ${farbe}`,
+        d: PFEIL,
+        transform: `translate(${(x1 + x2) / 2} ${(y1 + y2) / 2}) rotate(${winkel.toFixed(1)})`,
+      });
+      pfeil.dataset.mitte = `${(x1 + x2) / 2} ${(y1 + y2) / 2}`;
+      pfeil.dataset.winkel = winkel.toFixed(1);
+      eltern.appendChild(pfeil);
+      this._pfeile.set(name, pfeil);
+    }
     return fluss;
   }
 
@@ -1290,6 +1422,17 @@ class PvSystemCard extends HTMLElement {
       const s = staerke(n, bezug);
       pfad.style.animationDuration = `${(1.6 - s * 1.1).toFixed(2)}s`;
       pfad.style.strokeWidth = (2.4 + s * 2.2).toFixed(1);
+    }
+
+    const pfeil = this._pfeile.get(name);
+    if (!pfeil) return;
+    pfeil.classList.toggle("an", an);
+    if (an) {
+      const grund = Number(pfeil.dataset.winkel);
+      pfeil.setAttribute(
+        "transform",
+        `translate(${pfeil.dataset.mitte}) rotate(${rueckwaerts ? grund + 180 : grund})`
+      );
     }
   }
 
@@ -1452,8 +1595,11 @@ class PvSystemCard extends HTMLElement {
         );
         this._setzen(
           `${id}:battery:temp`,
+          // Ganze Grad: Ein Zehntelgrad Zellentemperatur ist Rauschen, und
+          // die Stelle daneben braucht der Füllstand. Die Detailtabelle
+          // zeigt weiterhin den genauen Wert.
           b.temperature !== null && b.temperature !== undefined
-            ? einheit(b.temperature, "°C", 1, l)
+            ? einheit(b.temperature, "°C", 0, l)
             : ""
         );
         const anteil = Math.max(0, Math.min(100, zahl(b.soc) || 0));
@@ -1493,22 +1639,40 @@ class PvSystemCard extends HTMLElement {
 
     // Erzeugung je Phase
     const phasen = (d.grid && d.grid.phases) || {};
-    ["l1", "l2", "l3"].forEach((p, i) => {
-      const wert = zahl(phasen[p] && phasen[p].pv_power);
-      // Ein Wechselrichter im Standby meldet ein paar Watt in die andere
-      // Richtung. Ein Aufwärtspfeil davor wäre schlicht falsch.
+    if (this._geo && this._geo.zeigePhasen === false) {
+      // Eine einzige Wechselstromleitung: Über ihr steht, was alle
+      // Wechselrichter zusammen abgeben.
+      const alle = zahl(t.inverter_power);
       this._setzen(
-        `phase:${i}`,
-        wert === null || Math.abs(wert) < 10
-          ? ""
-          : `${wert > 0 ? "↑" : "↓"} ${watt(Math.abs(wert), l)}`
+        "phase:0",
+        alle === null || Math.abs(alle) < 10 ? "" : `↑ ${watt(alle, l)}`
       );
-    });
+      this._setzen("meter:0", wattVz(t.grid_power, l));
+    } else {
+      ["l1", "l2", "l3"].forEach((p, i) => {
+        const wert = zahl(phasen[p] && phasen[p].pv_power);
+        // Ein Wechselrichter im Standby meldet ein paar Watt in die andere
+        // Richtung. Ein Aufwärtspfeil davor wäre schlicht falsch.
+        this._setzen(
+          `phase:${i}`,
+          wert === null || Math.abs(wert) < 10
+            ? ""
+            : `${wert > 0 ? "↑" : "↓"} ${watt(Math.abs(wert), l)}`
+        );
+        // Im Zählerkasten steht, was der Zähler auf dieser Phase misst.
+        // Ohne eigenen Phasensensor bleibt die Zeile leer - eine gedrittelte
+        // Summe wäre eine Zahl, die so nirgends gemessen wurde.
+        const gezaehlt = zahl(phasen[p] && phasen[p].power);
+        this._setzen(`meter:${i}`, gezaehlt === null ? "" : wattVz(gezaehlt, l));
+      });
+    }
 
     // Netz: Vorzeichen entscheidet über Farbe und Richtung.
     const netzleistung = zahl(t.grid_power);
     const bezugAktiv = (netzleistung || 0) > 0;
-    this._setzen("grid:power", watt(netzleistung === null ? null : Math.abs(netzleistung), l));
+    // Mit Vorzeichen: Plus heißt, es kommt etwas ins Haus, Minus heißt,
+    // es geht hinaus. Die Zeile darunter sagt dasselbe noch einmal in Worten.
+    this._setzen("grid:power", wattVz(netzleistung, l));
     this._setzen(
       "grid:richtung",
       netzleistung === null
@@ -1539,12 +1703,7 @@ class PvSystemCard extends HTMLElement {
     // Kennzahlenleiste
     this._setzen("kpi:pv", watt(t.pv_power, l));
     this._setzen("kpi:haus", watt(d.house.house_power, l));
-    this._setzen(
-      "kpi:netz",
-      netzleistung === null
-        ? "–"
-        : `${bezugAktiv ? "↓" : "↑"} ${watt(Math.abs(netzleistung), l)}`
-    );
+    this._setzen("kpi:netz", wattVz(netzleistung, l));
     const akkuP = zahl(t.battery_power);
     this._setzen(
       "kpi:akku",
@@ -1588,8 +1747,8 @@ class PvSystemCard extends HTMLElement {
    *
    * Aufsummiert von links nach rechts: Am Zähler kommt der Netzbezug hinzu
    * (negativ, wenn eingespeist wird), an jedem Wechselrichter seine Abgabe.
-   * Was nach dem letzten Knotenpunkt übrig ist, geht ins Haus - und stimmt
-   * damit von selbst mit dem Hausverbrauch auf dieser Phase überein.
+   * Was nach dem letzten Knotenpunkt übrig ist, endet am Hauskasten - und
+   * stimmt damit von selbst mit dem Hausverbrauch auf dieser Phase überein.
    *
    * Beispiel L1 mit 980 W Einspeisung und einem Wechselrichter mit 1820 W:
    * Zwischen Zähler und Wechselrichter fließen 980 W nach links ins Netz,
@@ -1602,17 +1761,17 @@ class PvSystemCard extends HTMLElement {
       leistungJeWr.set(anlage.id, anlage.inverter.enabled ? zahl(anlage.inverter.power) : null);
     }
 
-    let insHaus = 0;
     for (let i = 0; i < g.phasen; i++) {
       const phase = phasen[["l1", "l2", "l3"][i]] || {};
       // Je Phase die eigene Leistung, sonst der Gesamtwert gleichmäßig
       // verteilt - sonst stünden zwei der drei Leitungen still.
-      const netzHier =
-        phase.power !== null && phase.power !== undefined
-          ? zahl(phase.power)
-          : netzleistung === null
-          ? null
-          : netzleistung / g.phasen;
+      const netzHier = !g.zeigePhasen
+        ? netzleistung
+        : phase.power !== null && phase.power !== undefined
+        ? zahl(phase.power)
+        : netzleistung === null
+        ? null
+        : netzleistung / g.phasen;
       const punkte = (this._busPunkte || [])[i] || [];
       const netzIndex = punkte.findIndex((k) => k.art === "netz");
       let summe = 0;
@@ -1629,24 +1788,24 @@ class PvSystemCard extends HTMLElement {
         this._faerben(name, ausDemNetz, zumNetz ? "f-netz" : "f-haus");
         this._fluss(name, summe, 3000, zumNetz);
       }
-
-      insHaus += summe;
     }
 
-    // Die beiden Senkrechten führen die Summe. Am Netz entscheidet das
-    // Vorzeichen über Farbe und Richtung; am Haus geht es immer hinein, denn
-    // ein Haus speist nicht ein.
+    // Der Hausanschluss unter dem Zähler führt die Summe. Das Vorzeichen
+    // entscheidet über Farbe und Richtung: rot und aufwärts bei Bezug, blau
+    // und abwärts bei Einspeisung.
     this._faerben("netz", (netzleistung || 0) > 0);
     this._fluss("netz", netzleistung, 5000, (netzleistung || 0) > 0);
-    this._fluss("haus", insHaus, 5000);
   }
 
   /** Eine Flusslinie zwischen Bezugsfarbe und einer zweiten Farbe umschalten. */
   _faerben(name, bezug, sonst = "f-netz") {
-    const pfad = this._flows.get(name);
-    if (!pfad) return;
-    for (const farbe of ["f-bezug", "f-netz", "f-haus"]) {
-      pfad.classList.toggle(farbe, farbe === (bezug ? "f-bezug" : sonst));
+    // Linie und Pfeil gehören zusammen: Ein roter Pfeil über einer blauen
+    // Linie wäre schlimmer als gar keiner.
+    for (const knoten of [this._flows.get(name), this._pfeile.get(name)]) {
+      if (!knoten) continue;
+      for (const farbe of ["f-bezug", "f-netz", "f-haus"]) {
+        knoten.classList.toggle(farbe, farbe === (bezug ? "f-bezug" : sonst));
+      }
     }
   }
 

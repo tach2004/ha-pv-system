@@ -41,12 +41,23 @@ und einbringt.
 * **Batterien** mit Ladestand, Leistung, Spannung, Temperatur, Zyklen,
   Gesundheitszustand und Restlaufzeit bis zur Entladegrenze.
 * **Smart Meter** mit Gesamtleistung und Leistung, Spannung und Strom je Phase.
-  Am Zähler und am Haus steht je eine Senkrechte, welche die drei Phasen
-  kreuzt; sie führt die Summe. Die Phasen selbst zeigen den Fluss
-  abschnittsweise: zwischen Zähler und Wechselrichter fließt etwas anderes als
-  zwischen Wechselrichter und Haus. Bei 980 W Einspeisung und 1820 W vom
-  Wechselrichter läuft L1 links ins Netz und rechts davon mit 840 W ins Haus –
-  beides gleichzeitig, jedes in seine Richtung.
+  Unten in der Karte stehen drei Dinge nebeneinander, die auch in Wirklichkeit
+  drei Dinge sind: links der **Zähler** als Klemmkasten mit einer Zeile je
+  Phase, rechts das **Haus** als zweiter Klemmkasten, und darunter am
+  Hausanschluss das **Netz** – ein Mast, denn das Netz gehört nicht zur Anlage.
+  Die Phasen laufen dazwischen und zeigen den Fluss abschnittsweise: zwischen
+  Zähler und Wechselrichter fließt etwas anderes als zwischen Wechselrichter
+  und Haus. Bei 980 W Einspeisung und 1820 W vom Wechselrichter läuft L1 links
+  ins Netz und rechts davon mit 840 W ins Haus – beides gleichzeitig, jedes in
+  seine Richtung. Auf jeder Leitung sitzt ein **Richtungspfeil**, der auch
+  dann steht, wenn die Animation aus ist.
+
+  Die Netzleistung steht mit Vorzeichen da: **plus heißt ins Haus, minus ins
+  Netz**. Rot ist Bezug, blau ist Einspeisung – grün bleibt dem Speicher
+  vorbehalten, sonst hieße dieselbe Farbe zweierlei.
+
+  Wer einphasig einspeist, schaltet die Phasen unter *Darstellung* ab: Dann
+  bleibt eine einzige Wechselstromleitung zwischen Zähler und Haus.
 * **Hausverbrauch, Autarkie und Eigenverbrauch** – gemessen, wenn es einen
   Sensor gibt, sonst gerechnet:
 
@@ -58,6 +69,11 @@ und einbringt.
   Ersparnis durch Eigenverbrauch, Ertrag und Bilanz – je für heute, den Monat,
   das Jahr und seit der Inbetriebnahme. Dazu der Momentanwert in Euro je Stunde
   und die Amortisation.
+* **Preise dürfen sich ändern.** Strom kostete 2023 anderes als heute, und eine
+  Anlage rechnet sich über zwanzig Jahre. Der Gesamtzeitraum führt deshalb
+  einen Geldspeicher: Bewertet wird immer nur, was seit der letzten Rechnung
+  dazugekommen ist, mit dem Preis, der gerade gilt. Eine Preiserhöhung wirkt ab
+  dem Tag, an dem du sie einträgst, und schreibt die Vergangenheit nicht um.
 * **Kosten je Anlage**: Investition, Inbetriebnahmedatum und – weil zwei
   Anlagen aus zwei Jahren regelmäßig zwei Sätze haben – eine eigene
   Einspeisevergütung. Jede Anlage bekommt ihre eigene Amortisation; die des
@@ -69,6 +85,16 @@ und einbringt.
   Leistung – und umgekehrt. Fehlt der Strangstrom, entsteht er aus
   Modulleistung und Spannung; fehlt der Ladestrom, aus Ladeleistung und
   Batteriespannung.
+* **Nichts zweimal eintragen**: Die Modulseite und der Eingang des Ladereglers
+  sind dieselbe Stelle in der Anlage – dieselbe Spannung, derselbe Strom,
+  dieselbe Leistung. Es genügt, sie an einer der beiden Stellen einzutragen;
+  die andere übernimmt, was ihr fehlt. Die Ladereglerleistung ist dabei immer
+  die **Abgabe** zur Batterie hin, die Modulleistung sein **Eingang**. Ohne
+  Laderegler hängen die Module am Gleichstromeingang des Wechselrichters –
+  von dort kommt dann die Strangspannung, und mit ihr rechnet sich der
+  Strangstrom aus der Modulleistung. Die Wechselrichterleistung wird bewusst
+  *nicht* übernommen: Das ist die Abgabe auf der Wechselstromseite, und die
+  kann ebenso gut aus der Batterie kommen.
 * **Einheiten werden umgerechnet**: W, kW, MW, Wh, kWh, mV, mA, °F – die
   Summe stimmt, egal wie die Quelle zählt.
 * **Vorzeichen werden festgelegt**, nicht geraten: Du sagst, ob positiv am
@@ -104,7 +130,7 @@ abgefragt. Alles Weitere steht anschließend unter **Konfigurieren**:
 
 ```
 PV-System
-├── Anlagen ──┬── Anlage 1 ──┬── Name
+├── Anlagen ──┬── Anlage 1 ──┬── Name        Name und Platz in der Karte
 │             │              ├── Module      Anzahl, Wp, Verschaltung, Sensoren
 │             │              ├── Laderegler  Systemspannung, Ein-/Ausgang
 │             │              ├── Batterie    Kapazität, Ladestand, Temperatur
@@ -113,9 +139,13 @@ PV-System
 │             └── Anlage 2 ...
 ├── Netz und Zähler          Gesamt- und Phasenleistung, Vorzeichen
 ├── Haus und Verbrauch       gemessen oder gerechnet
-├── Kosten und Ertrag        Arbeitspreis, Vergütung, Grundpreis, Investition
-└── Darstellung              Animation, Verschaltung
+├── Kosten und Ertrag        Arbeitspreis, Vergütung, Grundpreis, Zeit davor
+└── Darstellung              Animation, Verschaltung, Phasen
 ```
+
+Die Reihenfolge der Anlagen in der Karte steht bei jeder Anlage unter *Name*:
+**1** ist ganz links. Die Sensoren hängen an der Kennung der Anlage, nicht an
+ihrem Platz – umsortieren benennt also nichts um und bricht keine Automation.
 
 Jedes Feld trägt einen Hinweistext, der sagt, welcher Sensor gemeint ist und
 was passiert, wenn man es leer lässt. Fast alles darf leer bleiben; nur die
@@ -192,7 +222,7 @@ eine nach Westen zeigt. In der Karte steht deshalb „geschätzt" daneben.
 ### Rückwirkend
 
 Eine Anlage läuft fast immer schon, bevor jemand diese Integration einrichtet.
-Vier Felder holen das nach – drei bei der Anlage, eines am Standort:
+Fünf Felder holen das nach – drei bei der Anlage, zwei am Standort:
 
 | Feld | wo | wofür |
 |---|---|---|
@@ -200,6 +230,11 @@ Vier Felder holen das nach – drei bei der Anlage, eines am Standort:
 | **Ertrag davor** | Anlage | Was der Wechselrichter bis dahin erzeugt hat |
 | **Einspeisung davor** | Anlage | Was davon ins Netz ging – wird mit der Vergütung genau dieser Anlage verrechnet |
 | **Bezug davor** | Standort | Was der Netzzähler bis dahin gezogen hat; einer Anlage lässt sich das nicht zuordnen |
+| **Durchschnittspreis davor** | Standort | Was die Kilowattstunde damals im Schnitt kostete. Leer: Es gilt der heutige Preis |
+
+Für die Zeit vor dem ersten Lauf gibt es keine Differenzen, nur Summen – dafür
+genügt ein Durchschnitt. Eine Zahl, die man kennt, ist besser als eine
+Preishistorie, die niemand pflegt.
 
 Ein Beispiel: eine Anlage, am 05.04.2023 für 1650 € gebaut, hat seither
 2300 kWh erzeugt und nichts eingespeist. Bei 0,34 €/kWh sind das 782 € an

@@ -521,3 +521,70 @@ def test_nach_dem_tageswechsel_stimmt_der_periodenanfang():
     assert ergebnis["periods"]["day"]["start"].startswith("2026-09-21T00:00")
     # Der Monat läuft weiter ab dem ersten Lauf.
     assert ergebnis["periods"]["month"]["start"].startswith("2026-09-20")
+
+
+# --------------------------------------------------- Preise über die Jahre
+
+
+def test_preisaenderung_schreibt_die_vergangenheit_nicht_um():
+    """Der Geldspeicher bewertet jede Differenz mit dem Preis von damals."""
+    r = _rechner()
+    billig = dict(PREISE, price=0.20)
+    r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0}, billig, {})
+    # 100 kWh zu 20 Cent
+    ergebnis = r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, billig, {})
+    assert ergebnis["periods"]["total"]["cost"] == 20.0
+
+    # Ab jetzt 40 Cent - die ersten 100 kWh bleiben bei 20 Cent bewertet.
+    teuer = dict(PREISE, price=0.40)
+    ergebnis = r.rechnen({"import": 150.0, "export": 0.0, "own": 0.0}, teuer, {})
+    assert ergebnis["periods"]["total"]["cost"] == 20.0 + 50 * 0.40
+
+    # Tag, Monat und Jahr rechnen weiter mit dem aktuellen Preis - über so
+    # kurze Strecken ist das richtig genug.
+    assert ergebnis["periods"]["day"]["cost"] == round(150 * 0.40, 2)
+
+
+def test_ohne_preis_laeuft_der_speicher_nicht_los():
+    """Erst ab dem Eintragen wird gerechnet, nicht rückwirkend ab Zählerstand."""
+    r = _rechner()
+    ohne = {"price": None, "feed_in": None, "currency": "EUR"}
+    r.rechnen({"import": 500.0, "export": 0.0, "own": 0.0}, ohne, {})
+    r.rechnen({"import": 520.0, "export": 0.0, "own": 0.0}, ohne, {})
+    # Jetzt kommt ein Preis dazu: Die 520 kWh davor dürfen nicht auf einen
+    # Schlag als Kosten erscheinen.
+    ergebnis = r.rechnen({"import": 525.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    assert ergebnis["periods"]["total"]["cost"] == round(5 * 0.34, 2)
+
+
+def test_durchschnittspreis_fuer_die_zeit_davor():
+    """Strom war 2023 teurer - dafür gibt es eine eigene Zahl."""
+    r = _rechner()
+    anlagen = [
+        {
+            "id": "a1",
+            "investment": 1650.0,
+            "commissioned": "2023-04-05",
+            "prior_yield": 2300.0,
+            "prior_export": 0.0,
+        }
+    ]
+    preise = dict(PREISE, prior_price=0.42, prior_import=1000.0)
+    jetzt = datetime(2026, 9, 16, 12, 0).astimezone()
+    leer = {"import": None, "export": None, "own": None, "anlage:a1": None}
+    ergebnis = r.rechnen(leer, preise, {}, anlagen, jetzt=jetzt)
+
+    # 2300 kWh selbst genutzt zu 42 Cent statt zu 34
+    assert ergebnis["plants"]["a1"]["savings"] == round(2300 * 0.42, 2)
+    assert ergebnis["periods"]["total"]["savings"] == round(2300 * 0.42, 2)
+    # und der Netzbezug von damals ebenfalls
+    assert ergebnis["periods"]["total"]["cost"] == round(1000 * 0.42, 2)
+
+
+def test_ohne_durchschnittspreis_gilt_der_heutige():
+    r = _rechner()
+    anlagen = [{"id": "a1", "prior_yield": 1000.0, "prior_export": 0.0}]
+    jetzt = datetime(2026, 9, 16, 12, 0).astimezone()
+    leer = {"import": None, "export": None, "own": None, "anlage:a1": None}
+    ergebnis = r.rechnen(leer, PREISE, {}, anlagen, jetzt=jetzt)
+    assert ergebnis["plants"]["a1"]["savings"] == round(1000 * 0.34, 2)

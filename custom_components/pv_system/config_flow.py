@@ -103,6 +103,7 @@ from .const import (
     CONF_MODULES,
     CONF_MODULES_IN_SERIES,
     CONF_NOMINAL_VOLTAGE,
+    CONF_ORDER,
     CONF_PHASE,
     CONF_PHASE_CURRENT,
     CONF_PHASE_POWER,
@@ -112,12 +113,14 @@ from .const import (
     CONF_POWER_SIGN,
     CONF_PRIOR_EXPORT,
     CONF_PRIOR_IMPORT,
+    CONF_PRIOR_PRICE,
     CONF_PRIOR_YIELD,
     CONF_PV_CURRENT,
     CONF_PV_ENERGY,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_RATED_POWER,
+    CONF_SHOW_PHASES,
     CONF_SHOW_STRINGS,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
@@ -342,6 +345,7 @@ def _felder_darstellung() -> dict[Any, Any]:
     return {
         vol.Optional(CONF_ANIMATE): bool,
         vol.Optional(CONF_SHOW_STRINGS): bool,
+        vol.Optional(CONF_SHOW_PHASES): bool,
     }
 
 
@@ -362,6 +366,7 @@ def _felder_kosten() -> dict[Any, Any]:
         vol.Optional(CONF_BASE_PRICE): _zahl(0, 1000, "any"),
         vol.Optional(CONF_CURRENCY): _text(),
         vol.Optional(CONF_PRIOR_IMPORT): _zahl(0, 10000000, "any"),
+        vol.Optional(CONF_PRIOR_PRICE): _zahl(0, 10, "any"),
     }
 
 
@@ -584,11 +589,17 @@ class PvSystemOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._anlage[CONF_NAME] = user_input[CONF_NAME]
+            self._anlage[CONF_ORDER] = int(user_input[CONF_ORDER])
             return await self.async_step_plant_menu()
         return self.async_show_form(
             step_id="plant_name",
             data_schema=vol.Schema(
-                {vol.Required(CONF_NAME, default=self._anlage[CONF_NAME]): _text()}
+                {
+                    vol.Required(CONF_NAME, default=self._anlage[CONF_NAME]): _text(),
+                    vol.Required(
+                        CONF_ORDER, default=self._anlage[CONF_ORDER]
+                    ): _zahl(1, 99, 1),
+                }
             ),
         )
 

@@ -25,6 +25,9 @@ CONF_HOUSE: Final = "house"
 CONF_DISPLAY: Final = "display"
 
 CONF_ID: Final = "id"
+# Wo die Anlage in der Karte steht: 1 ganz links. Gleiche Zahlen behalten die
+# Reihenfolge, in der sie angelegt wurden.
+CONF_ORDER: Final = "order"
 CONF_MODULES: Final = "modules"
 CONF_CHARGER: Final = "charger"
 CONF_BATTERY: Final = "battery"
@@ -117,6 +120,7 @@ CONF_HOUSE_CALCULATE: Final = "calculate"
 # ----------------------------------------------------------------- Darstellung
 CONF_ANIMATE: Final = "animate"
 CONF_SHOW_STRINGS: Final = "show_strings"
+CONF_SHOW_PHASES: Final = "show_phases"
 
 # ----------------------------------------------------------------- Kosten
 # Die beiden Preise standen bis 0.0.3 unter "Darstellung". Sie sind dort
@@ -136,6 +140,10 @@ CONF_CURRENCY: Final = "currency"
 CONF_START_DATE: Final = "start_date"
 CONF_PRIOR_IMPORT: Final = "prior_import"
 CONF_PRIOR_EXPORT: Final = "prior_export"
+# Strom kostete vor drei Jahren etwas anderes. Fuer die Zeit vor dem ersten
+# Lauf genuegt ein Durchschnitt - eine Zahl, die man kennt, statt einer
+# Historie, die niemand pflegt.
+CONF_PRIOR_PRICE: Final = "prior_price"
 
 # Je Anlage: Investition, Inbetriebnahme und - weil zwei Anlagen aus zwei
 # Jahren in Deutschland regelmaessig zwei Saetze haben - eine eigene Verguetung.

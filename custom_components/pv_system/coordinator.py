@@ -103,6 +103,7 @@ from .const import (
     CONF_POWER_SIGN,
     CONF_PRIOR_EXPORT,
     CONF_PRIOR_IMPORT,
+    CONF_PRIOR_PRICE,
     CONF_PRIOR_YIELD,
     CONF_PV_CURRENT,
     CONF_PV_ENERGY,
@@ -291,6 +292,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "base": conf[CONF_BASE_PRICE],
                 "currency": conf[CONF_CURRENCY],
                 "prior_import": conf[CONF_PRIOR_IMPORT],
+                "prior_price": conf[CONF_PRIOR_PRICE],
             },
             {
                 "import": netz["import_power"],
@@ -322,23 +324,45 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # ------------------------------------------------------------- Anlage
 
     def _anlage(self, anlage: dict[str, Any]) -> dict[str, Any]:
+        """Eine Anlage zusammensetzen - und die Doppeleingaben auflösen.
+
+        Die Modulseite und der Eingang des Ladereglers sind physikalisch
+        dieselbe Stelle: dieselbe Spannung, derselbe Strom, dieselbe Leistung.
+        Wer beides eintragen müsste, würde dieselbe Sache zweimal pflegen.
+        Deshalb wird in beide Richtungen übernommen, was auf der anderen Seite
+        schon dasteht.
+
+        Fehlt der Laderegler, hängen die Module am Gleichstromeingang des
+        Wechselrichters - dann springt der ein. Eine Batterie kann es auch dann
+        geben: Bei einem Hybrid hängt sie direkt am Wechselrichter.
+        """
         module = self._module(anlage[CONF_MODULES])
-        laderegler = self._laderegler(anlage[CONF_CHARGER], module["power"])
+        laderegler = self._laderegler(anlage[CONF_CHARGER], module)
         batterie = self._batterie(anlage[CONF_BATTERY])
         wechselrichter = self._wechselrichter(anlage[CONF_INVERTER])
 
-        # Ohne eigenen PV-Sensor darf der Laderegler einspringen: Bei einem
-        # Victron MPPT ist dessen Eingangsleistung genau die Modulleistung.
-        # Die Eingangsseite ist hier die richtige - die Ausgangsseite hat den
-        # Wirkungsgrad schon abgezogen.
-        if module["power"] is None and laderegler["input_power"] is not None:
-            module["power"] = laderegler["input_power"]
-            module["power_source"] = "charger"
-            # Strangspannung und -strom kommen dann von derselben Quelle.
-            if module["voltage"] is None:
-                module["voltage"] = laderegler["input_voltage"]
-            if module["current"] is None:
-                module["current"] = laderegler["input_current"]
+        if laderegler["enabled"]:
+            self._modulseite(module, "charger", {
+                "power": laderegler["input_power"],
+                "voltage": laderegler["input_voltage"],
+                "current": laderegler["input_current"],
+            })
+        elif wechselrichter["enabled"] and not batterie["enabled"]:
+            # Ohne Laderegler hängen die Module direkt am Gleichstromeingang
+            # des Wechselrichters - dessen DC-Spannung ist dann die
+            # Strangspannung.
+            #
+            # Übernommen wird allein die Spannung. Die Leistung ist die
+            # Abgabe auf der Wechselstromseite - hängt eine Batterie am selben
+            # Gleichstromkreis, kann sie ebenso gut aus dem Speicher kommen,
+            # und als Modulleistung wäre sie schlicht falsch. Deshalb greift
+            # dieser Zweig nur ohne Batterie. Der DC-Strom scheidet aus
+            # demselben Grund aus: Kaum ein Wechselrichter meldet ihn, er wird
+            # aus eben jener Wechselstromleistung gerechnet - ihn zu übernehmen
+            # hieße, sie durch die Hintertür doch zu übernehmen.
+            self._modulseite(module, "inverter", {
+                "voltage": wechselrichter["dc_voltage"],
+            })
 
         spitze = module["peak_total"]
         if spitze and module["power"] is not None and spitze > 0:
@@ -352,6 +376,27 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "battery": batterie,
             "inverter": wechselrichter,
         }
+
+    def _modulseite(
+        self, module: dict[str, Any], quelle: str, werte: dict[str, float | None]
+    ) -> None:
+        """Was an den Modulen fehlt, von der Gegenseite übernehmen.
+
+        Nur Lücken werden gefüllt: Ein eingetragener Modulsensor gewinnt immer
+        gegen die abgeleitete Zahl. Wo die Leistung von woanders kommt, merkt
+        sich ``power_source`` das - die Karte schreibt es in die Detailtabelle.
+        """
+        for feld in ("power", "voltage", "current"):
+            if module[feld] is None and werte.get(feld) is not None:
+                module[feld] = werte[feld]
+                if feld == "power":
+                    module["power_source"] = quelle
+        # Mit der übernommenen Größe geht die Rechnung von vorhin womöglich
+        # auf: Wer die Modulleistung misst und die Strangspannung vom Gerät
+        # bekommt, hat damit auch den Strangstrom.
+        module["power"], module["voltage"], module["current"] = self._dreieck(
+            module["power"], module["voltage"], module["current"]
+        )
 
     def _module(self, conf: dict[str, Any]) -> dict[str, Any]:
         anzahl = conf[CONF_MODULE_COUNT] or 0
@@ -403,7 +448,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return leistung, spannung, strom
 
     def _laderegler(
-        self, conf: dict[str, Any], modulleistung: float | None
+        self, conf: dict[str, Any], module: dict[str, Any]
     ) -> dict[str, Any]:
         """Der Laderegler, mit beiden Seiten getrennt.
 
@@ -420,9 +465,16 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ein_spannung = units.volt(self.hass, conf[CONF_CHARGER_IN_VOLTAGE])
         ein_strom = units.ampere(self.hass, conf[CONF_CHARGER_IN_CURRENT])
 
-        # Eingangsseite: erst aus sich selbst, dann aus der Modulleistung.
+        # Eingangsseite: Was am Laderegler nicht eingetragen ist, kommt von den
+        # Modulen - es ist dieselbe Stelle in der Anlage. Wer ein MPPT hat,
+        # trägt die Werte also genau einmal ein, egal an welcher der beiden
+        # Stellen.
+        if ein_spannung is None:
+            ein_spannung = module["voltage"]
+        if ein_strom is None:
+            ein_strom = module["current"]
         ein_leistung, ein_spannung, ein_strom = self._dreieck(
-            modulleistung, ein_spannung, ein_strom
+            module["power"], ein_spannung, ein_strom
         )
 
         # Ausgangsseite: erst aus sich selbst, dann aus der Eingangsseite.

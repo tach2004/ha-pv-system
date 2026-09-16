@@ -36,7 +36,7 @@ zu tun ist dafür nichts.
 ## Wenn alles grün ist
 
 1. Ein Release mit einem Tag anlegen, der zur `version` in der
-   `manifest.json` passt – für diese Fassung `v1.0.0`. Ein Tag mit `-beta`
+   `manifest.json` passt – für diese Fassung `v1.1.0`. Ein Tag mit `-beta`
    darin sortiert HACS als Vorabversion ein; die erscheint nur, wenn jemand
    „Vorabversionen anzeigen" einschaltet. Für ein normales Release also ohne.
 2. Bis zur Aufnahme in den HACS-Standardkatalog wird die Integration über
