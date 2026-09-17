@@ -206,10 +206,10 @@
         "name": "Savings this year"
       },
       "self_consumption": {
-        "name": "Self-consumption"
+        "name": "Self-consumption last hour"
       },
       "self_sufficiency": {
-        "name": "Self-sufficiency"
+        "name": "Self-sufficiency last hour"
       },
       "status": {
         "name": "Status",
@@ -343,15 +343,17 @@
       "display": {
         "data": {
           "animate": "Animate flow lines",
+          "sensor_interval": "Measurements at most every",
           "show_phases": "Draw phases individually",
           "show_strings": "Draw string layout"
         },
         "data_description": {
           "animate": "The dots on the lines move with the power. Off if the dashboard stutters on an old tablet.",
+          "sensor_interval": "How often this integration's measurement sensors may write a new value to the database. The card does not depend on it - it reads along directly and stays second by second. 0 means: on every measurement, and that makes the database grow fast.",
           "show_phases": "Three phase lines between meter and house, each with its own flow. Off leaves a single AC line - right for a single-phase system and noticeably flatter.",
           "show_strings": "Draws the modules individually, in series and parallel. Off gives a narrower card."
         },
-        "title": "Appearance"
+        "title": "Appearance and recording"
       },
       "grid": {
         "data": {
@@ -416,7 +418,7 @@
         "description": "Changes are only applied once you pick “Save and close” in the menu.",
         "menu_options": {
           "costs": "Costs and yield",
-          "display": "Appearance",
+          "display": "Appearance and recording",
           "grid": "Grid and meter",
           "house": "House and consumption",
           "plants": "Plants",
@@ -721,6 +723,11 @@
         }
       },
       "name": "Set modules"
+    },
+    "tidy_entities": {
+      "description": "Turns off the sensors that only repeat an entity you configured yourself - module power, charge controller power, grid power and so on. They stay in the device view and can be re-enabled individually; nothing is deleted. Newly set up systems do not need this: there these sensors are off from the start.",
+      "fields": {},
+      "name": "Turn off duplicate sensors"
     }
   },
   "title": "PV-System"

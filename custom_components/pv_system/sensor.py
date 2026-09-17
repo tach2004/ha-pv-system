@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from time import monotonic
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -45,7 +46,9 @@ from .const import (
     ATTR_KEY,
     ATTR_PLANT_ID,
     ATTR_SYSTEM_ID,
+    CONF_DISPLAY,
     CONF_ID,
+    CONF_SENSOR_INTERVAL,
     DOMAIN,
     KEY_BALANCE,
     KEY_COST_RATE,
@@ -68,16 +71,33 @@ CONF_NAME = "name"
 
 # Welche Sensoren von sich aus eingeschaltet sind.
 #
-# Grundsatz: Angelegt wird alles, abgeschaltet ist, was nur eine bereits
-# vorhandene Entität wiederholt. Eine PV-Anlage bringt Spannungen,
-# Temperaturen und Zählerstände ohnehin mit; die hier noch einmal
-# aufzuzeichnen kostet Platz in der Datenbank und bringt keine neue
-# Information. Wer sie braucht, schaltet sie in der Geräteansicht mit einem
-# Klick ein - die Entität existiert, sie zeichnet nur nichts auf.
+# Grundsatz: **Angelegt wird alles, eingeschaltet ist nur, was diese
+# Integration ausrechnet.** Ein Sensor, dessen Wert aus genau der Entität
+# kommt, die du im Dialog eingetragen hast, bleibt aus - er stünde sonst
+# zweimal in Home Assistant und schriebe auch zweimal in die Datenbank.
 #
-# Eingeschaltet bleibt, was diese Integration ausrechnet: Summen über
-# mehrere Anlagen, Ausnutzung, Speicherinhalt, Hausverbrauch, Autarkie.
+# Das ist kein Schönheitsfehler, sondern der Hauptposten: Bei drei Anlagen
+# sind es rund achtzig Entitäten, und ein Netzzähler meldet sich jede
+# Sekunde. Achtzig Zeilen je Sekunde sind über den Tag ein paar Millionen -
+# und ein gutes Gigabyte.
+#
+# Zwei Wege führen dazu:
+#
+# * ``spiegel`` an der Beschreibung: eine Frage an die Konfiguration. Ist die
+#   eigene Quelle dieses Sensors eingetragen, wiederholt er sie nur.
+# * ``entity_registry_enabled_default=False`` fest: Spannungen, Temperaturen
+#   und Zählerstände sind grundsätzlich Wiederholungen.
+#
+# Ausgeschaltet heißt nicht gelöscht. Die Entität steht in der Geräteansicht
+# und lässt sich mit einem Klick einschalten. Für Anlagen, die schon laufen,
+# gibt es zusätzlich den Dienst "Doppelte Sensoren abschalten" - siehe
+# __init__.py.
 SPIEGEL = "wiederholt nur einen eingestellten Sensor"
+
+
+def _gesetzt(*entitaeten: Any) -> bool:
+    """Ist mindestens eine dieser Entitäten eingetragen?"""
+    return any(bool(e) for e in entitaeten)
 
 WATT = UnitOfPower.WATT
 KWH = UnitOfEnergy.KILO_WATT_HOUR
@@ -91,12 +111,20 @@ class PvSensorDescription(SensorEntityDescription):
 
     wert: Callable[[dict[str, Any]], Any]
     extra: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    # Wann dieser Sensor nur eine eingetragene Entität wiederholt. Trifft es
+    # zu, wird er angelegt, bleibt aber abgeschaltet - siehe SPIEGEL oben.
+    spiegel: Callable[[dict[str, Any]], bool] | None = None
     # Der Sensor wird nur angelegt, wenn das hier zutrifft. So entstehen keine
     # leeren Batteriesensoren an einer Anlage ohne Batterie.
     wenn: Callable[[dict[str, Any]], bool] | None = None
 
 
-def _leistung(key: str, wert: Callable[[dict[str, Any]], Any]) -> PvSensorDescription:
+def _leistung(
+    key: str,
+    wert: Callable[[dict[str, Any]], Any],
+    *,
+    spiegel: Callable[[dict[str, Any]], bool] | None = None,
+) -> PvSensorDescription:
     return PvSensorDescription(
         key=key,
         translation_key=key,
@@ -104,6 +132,7 @@ def _leistung(key: str, wert: Callable[[dict[str, Any]], Any]) -> PvSensorDescri
         native_unit_of_measurement=WATT,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
+        spiegel=spiegel,
         wert=wert,
     )
 
@@ -123,7 +152,10 @@ def _prozent(
 
 
 def _energie(
-    key: str, wert: Callable[[dict[str, Any]], Any], *, spiegel: bool = False
+    key: str,
+    wert: Callable[[dict[str, Any]], Any],
+    *,
+    spiegel: bool | Callable[[dict[str, Any]], bool] = False,
 ) -> PvSensorDescription:
     return PvSensorDescription(
         key=key,
@@ -136,7 +168,8 @@ def _energie(
         # deshalb weiterhin die Originalsensoren die bessere Wahl.
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
-        entity_registry_enabled_default=not spiegel,
+        entity_registry_enabled_default=spiegel is not True,
+        spiegel=spiegel if callable(spiegel) else None,
         wert=wert,
     )
 
@@ -168,10 +201,52 @@ def _temperatur(key: str, wert: Callable[[dict[str, Any]], Any]) -> PvSensorDesc
     )
 
 
+def _stunde(
+    key: str,
+    wert: Callable[[dict[str, Any]], Any],
+    icon: str,
+    mengen: tuple[str, ...],
+) -> PvSensorDescription:
+    """Eine Quote über die letzte volle Stunde.
+
+    Die beiden Energiemengen hängen als Attribut daran - damit steht bei der
+    Quote auch, woraus sie entstanden ist. Sie ändern sich nur zur vollen
+    Stunde, kosten also nichts.
+    """
+    return PvSensorDescription(
+        key=key,
+        translation_key=key,
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        icon=icon,
+        wert=wert,
+        extra=lambda d: {
+            "hour_start": d["house"]["hour"]["start"],
+            **{name: d["house"]["hour"][name] for name in mengen},
+        },
+    )
+
+
+def _quellen(kontext: dict[str, Any], block: str, feld: str) -> int:
+    """Wie viele Anlagen für diesen Wert eine Entität mitbringen."""
+    return sum(
+        1
+        for anlage in kontext.get("plants", [])
+        if anlage[block]["entities"].get(feld)
+    )
+
+
 # --------------------------------------------------------------- Standort
 
 STANDORT: tuple[PvSensorDescription, ...] = (
-    _leistung("pv_power", lambda d: d["totals"]["pv_power"]),
+    # Die Summen: Mit mehreren Anlagen rechnet die Integration sie aus, mit
+    # genau einer sind sie die Zahl der Anlage noch einmal.
+    _leistung(
+        "pv_power",
+        lambda d: d["totals"]["pv_power"],
+        spiegel=lambda c: c["totals"]["plant_count"] < 2,
+    ),
     PvSensorDescription(
         key="pv_peak_power",
         translation_key="pv_peak_power",
@@ -190,10 +265,22 @@ STANDORT: tuple[PvSensorDescription, ...] = (
     _prozent(
         "pv_utilisation", lambda d: d["totals"]["pv_utilisation"], "mdi:gauge"
     ),
-    _energie("pv_energy", lambda d: d["totals"]["pv_energy"]),
-    _leistung("inverter_power", lambda d: d["totals"]["inverter_power"]),
+    _energie(
+        "pv_energy",
+        lambda d: d["totals"]["pv_energy"],
+        spiegel=lambda c: _quellen(c, "modules", "energy") < 2,
+    ),
+    _leistung(
+        "inverter_power",
+        lambda d: d["totals"]["inverter_power"],
+        spiegel=lambda c: c["totals"]["plant_count"] < 2,
+    ),
     _prozent("inverter_load", lambda d: d["totals"]["inverter_load"], "mdi:gauge"),
-    _leistung("battery_power", lambda d: d["totals"]["battery_power"]),
+    _leistung(
+        "battery_power",
+        lambda d: d["totals"]["battery_power"],
+        spiegel=lambda c: c["totals"]["battery_count"] < 2,
+    ),
     PvSensorDescription(
         key="battery_soc",
         translation_key="battery_soc",
@@ -201,6 +288,7 @@ STANDORT: tuple[PvSensorDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
+        spiegel=lambda c: c["totals"]["battery_count"] < 2,
         wert=lambda d: d["totals"]["battery_soc"],
         extra=lambda d: {"battery_count": d["totals"]["battery_count"]},
         wenn=lambda c: c["totals"]["battery_count"] > 0,
@@ -225,9 +313,25 @@ STANDORT: tuple[PvSensorDescription, ...] = (
         wert=lambda d: d["totals"]["battery_capacity"],
         wenn=lambda c: c["totals"]["battery_count"] > 0,
     ),
-    _leistung("grid_power", lambda d: d["totals"]["grid_power"]),
-    _leistung("grid_import_power", lambda d: d["totals"]["grid_import"]),
-    _leistung("grid_export_power", lambda d: d["totals"]["grid_export"]),
+    # Am Netz spiegelt jeder Sensor genau dann, wenn seine eigene Entität
+    # eingetragen ist. Ohne Summenzähler rechnet die Integration die Leistung
+    # aus den Phasen, ohne getrennte Zähler die beiden Richtungen aus dem
+    # Vorzeichen - dann ist es ihre eigene Zahl.
+    _leistung(
+        "grid_power",
+        lambda d: d["totals"]["grid_power"],
+        spiegel=lambda c: _gesetzt(c["grid"]["entities"]["power"]),
+    ),
+    _leistung(
+        "grid_import_power",
+        lambda d: d["totals"]["grid_import"],
+        spiegel=lambda c: _gesetzt(c["grid"]["entities"]["import_power"]),
+    ),
+    _leistung(
+        "grid_export_power",
+        lambda d: d["totals"]["grid_export"],
+        spiegel=lambda c: _gesetzt(c["grid"]["entities"]["export_power"]),
+    ),
     _energie("grid_import_energy", lambda d: d["grid"]["import_energy"], spiegel=True),
     _energie("grid_export_energy", lambda d: d["grid"]["export_energy"], spiegel=True),
     PvSensorDescription(
@@ -249,6 +353,7 @@ STANDORT: tuple[PvSensorDescription, ...] = (
         native_unit_of_measurement=WATT,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
+        spiegel=lambda c: _gesetzt(c["house"]["entities"]["power"]),
         wert=lambda d: d["house"]["house_power"],
         extra=lambda d: {"source": d["house"]["house_source"]},
     ),
@@ -259,16 +364,29 @@ STANDORT: tuple[PvSensorDescription, ...] = (
         native_unit_of_measurement=KWH,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
+        # Diesen Sensor gibt es nur mit eingetragener Energie-Entität - er ist
+        # damit immer ihre Wiederholung und bleibt grundsätzlich aus.
+        entity_registry_enabled_default=False,
         wert=lambda d: d["house"]["house_energy"],
         # Nur anlegen, wenn eine Energie-Entität hinterlegt ist. Ohne sie gäbe
         # es einen Zähler, der dauerhaft unbekannt bleibt.
         wenn=lambda c: bool(c["house"]["entities"]["energy"]),
     ),
-    _prozent(
-        "self_sufficiency", lambda d: d["house"]["self_sufficiency"], "mdi:home-lightning-bolt"
+    # Die beiden Quoten als Stundenwert, nicht als Momentaufnahme. Wie viel
+    # Prozent in der Sekunde 13:04:07 aus dem Netz kamen, beantwortet keine
+    # Frage - und schreibt doch bei jeder Messung eine Zeile. Die Karte zeigt
+    # weiterhin den Augenblick; hier steht die letzte volle Stunde.
+    _stunde(
+        "self_sufficiency",
+        lambda d: d["house"]["hour"]["self_sufficiency"],
+        "mdi:home-lightning-bolt",
+        ("house_kwh", "import_kwh"),
     ),
-    _prozent(
-        "self_consumption", lambda d: d["house"]["self_consumption"], "mdi:home-percent"
+    _stunde(
+        "self_consumption",
+        lambda d: d["house"]["hour"]["self_consumption"],
+        "mdi:home-percent",
+        ("yield_kwh", "export_kwh"),
     ),
 )
 
@@ -380,7 +498,14 @@ KOSTEN: tuple[PvSensorDescription, ...] = (
 # --------------------------------------------------------------- je Anlage
 
 ANLAGE: tuple[PvSensorDescription, ...] = (
-    _leistung("plant_pv_power", lambda p: p["modules"]["power"]),
+    # Je Anlage gilt dasselbe wie am Netz: Wer den Sensor einträgt, hat ihn
+    # schon. Ohne ihn rechnet die Integration - aus Spannung mal Strom oder
+    # vom Laderegler her - und dann ist die Zahl ihre eigene.
+    _leistung(
+        "plant_pv_power",
+        lambda p: p["modules"]["power"],
+        spiegel=lambda p: _gesetzt(p["modules"]["entities"]["power"]),
+    ),
     PvSensorDescription(
         key="plant_pv_peak_power",
         translation_key="plant_pv_peak_power",
@@ -418,10 +543,18 @@ ANLAGE: tuple[PvSensorDescription, ...] = (
             "count": p["modules"]["count"],
         },
     ),
-    _leistung("plant_inverter_power", lambda p: p["inverter"]["power"]),
+    _leistung(
+        "plant_inverter_power",
+        lambda p: p["inverter"]["power"],
+        spiegel=lambda p: _gesetzt(p["inverter"]["entities"]["power"]),
+    ),
     _prozent("plant_inverter_load", lambda p: p["inverter"]["load"], "mdi:gauge"),
     _temperatur("plant_inverter_temperature", lambda p: p["inverter"]["temperature"]),
-    _leistung("plant_charger_power", lambda p: p["charger"]["power"]),
+    _leistung(
+        "plant_charger_power",
+        lambda p: p["charger"]["power"],
+        spiegel=lambda p: _gesetzt(p["charger"]["entities"]["power"]),
+    ),
     _spannung("plant_charger_input_voltage", lambda p: p["charger"]["input_voltage"]),
     _spannung("plant_charger_output_voltage", lambda p: p["charger"]["output_voltage"]),
     _temperatur("plant_charger_temperature", lambda p: p["charger"]["temperature"]),
@@ -435,7 +568,13 @@ ANLAGE: tuple[PvSensorDescription, ...] = (
         entity_registry_enabled_default=False,
         wert=lambda p: p["battery"]["soc"],
     ),
-    _leistung("plant_battery_power", lambda p: p["battery"]["power"]),
+    # Das Vorzeichen wird hier vereinheitlicht - plus ist laden. Das ist eine
+    # Umformung, keine neue Messung: Wer den Sensor hat, hat die Zahl.
+    _leistung(
+        "plant_battery_power",
+        lambda p: p["battery"]["power"],
+        spiegel=lambda p: _gesetzt(p["battery"]["entities"]["power"]),
+    ),
     PvSensorDescription(
         key="plant_battery_energy",
         translation_key="plant_battery_energy",
@@ -579,6 +718,51 @@ def _anlage_passt(beschreibung: PvSensorDescription, anlage: dict[str, Any]) -> 
     return True
 
 
+def _ist_spiegel(beschreibung: PvSensorDescription, kontext: dict[str, Any]) -> bool:
+    """Wiederholt dieser Sensor nur, was schon als Entität dasteht?"""
+    if beschreibung.entity_registry_enabled_default is False:
+        return True
+    return bool(beschreibung.spiegel and beschreibung.spiegel(kontext))
+
+
+def spiegel_kennungen(coordinator: PvSystemCoordinator) -> set[str]:
+    """Die Kennungen aller Sensoren, die nur Vorhandenes wiederholen.
+
+    Dieselbe Frage wie beim Anlegen, nur nachträglich gestellt. Eine geänderte
+    Voreinstellung erreicht eine Entität nicht mehr, die es schon gibt: Home
+    Assistant merkt sich beim ersten Anlegen, ob sie ein- oder ausgeschaltet
+    ist, und fragt danach nie wieder. Für Anlagen, die schon laufen, holt sich
+    der Dienst "Doppelte Sensoren abschalten" hier seine Liste.
+    """
+    daten = coordinator.data or {}
+    kennung = coordinator.entry.entry_id
+    gefunden: set[str] = set()
+
+    for beschreibung in (*STANDORT, *KOSTEN):
+        if _ist_spiegel(beschreibung, daten):
+            gefunden.add(f"{kennung}_{beschreibung.key}")
+
+    for anlage in daten.get("plants", []):
+        for beschreibung in ANLAGE:
+            if _ist_spiegel(beschreibung, anlage):
+                gefunden.add(f"{kennung}_{anlage[CONF_ID]}_{beschreibung.key}")
+
+    netz = daten.get("grid", {})
+    for phase in PHASES[: netz.get("phases_count") or 3]:
+        # Leistung und Spannung am Zähler sind immer Wiederholungen; die
+        # Erzeugung nur dann, wenn ein einziger Wechselrichter darauf liegt.
+        gefunden.add(f"{kennung}_phase_{phase}_power")
+        gefunden.add(f"{kennung}_phase_{phase}_voltage")
+        darauf = [
+            a
+            for a in daten.get("plants", [])
+            if a["inverter"]["enabled"] and a["inverter"]["phase"] == phase
+        ]
+        if len(darauf) < 2:
+            gefunden.add(f"{kennung}_phase_{phase}_pv_power")
+    return gefunden
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: PvSystemConfigEntry,
@@ -625,10 +809,37 @@ class PvBasis(CoordinatorEntity[PvSystemCoordinator], SensorEntity):
     """Gemeinsames Verhalten aller Sensoren dieser Integration."""
 
     _attr_has_entity_name = True
+    # Ob dieser Sensor dem eingestellten Takt folgt. Der Statussensor tut es
+    # nicht - siehe dort.
+    _taktgebunden = True
 
     def __init__(self, coordinator: PvSystemCoordinator) -> None:
         super().__init__(coordinator)
         self._entry_id = coordinator.entry.entry_id
+        self._geschrieben: float = 0.0
+
+    def _handle_coordinator_update(self) -> None:
+        """Den Takt einhalten, statt jede Messung weiterzureichen.
+
+        Ein Netzzähler meldet sich jede Sekunde. Jede dieser Meldungen als
+        eigenen Zustand aufzuzeichnen füllt die Datenbank, ohne dass jemand
+        das Ergebnis je ansieht: Die Karte holt ihre Zahlen ohnehin direkt vom
+        Koordinator und bleibt darum sekundengenau, ganz gleich, was hier
+        eingestellt ist.
+
+        Gedrosselt wird alles außer dem Statussensor: Auch ein Geldbetrag
+        ändert sich mit jedem Zählerschritt, und wer die Bezugskosten auf die
+        Sekunde genau braucht, hat ein anderes Problem. Die Langzeitstatistik
+        von Home Assistant rechnet in Fünf-Minuten-Blöcken - ein Takt von
+        dreißig Sekunden liefert ihr zehn Werte je Block.
+        """
+        takt = self.coordinator.config[CONF_DISPLAY][CONF_SENSOR_INTERVAL]
+        if takt and self._taktgebunden:
+            jetzt = monotonic()
+            if jetzt - self._geschrieben < takt:
+                return
+            self._geschrieben = jetzt
+        super()._handle_coordinator_update()
 
     @property
     def _standort_geraet(self) -> DeviceInfo:
@@ -653,6 +864,8 @@ class StandortSensor(PvBasis):
         self.entity_description = beschreibung
         self._attr_unique_id = f"{self._entry_id}_{beschreibung.key}"
         self._attr_device_info = self._standort_geraet
+        if beschreibung.spiegel and beschreibung.spiegel(coordinator.data or {}):
+            self._attr_entity_registry_enabled_default = False
 
     @property
     def native_value(self) -> Any:
@@ -753,6 +966,10 @@ class StatusSensor(PvBasis):
     Verbindung -, kommt sie über dieses Attribut trotzdem zu ihrem Bild.
     """
 
+    # Der Anker der Karte, und ein Wort statt einer Zahl: Er wechselt ein
+    # paar Mal am Tag und gehört dann sofort geschrieben.
+    _taktgebunden = False
+
     _attr_translation_key = "status"
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = ["charging", "discharging", "exporting", "importing", "idle"]
@@ -834,6 +1051,8 @@ class AnlagenSensor(AnlagenKostenSensor, PvBasis):
         anlage = coordinator.data["plants"][nummer]
         self._plant_id = anlage[CONF_ID]
         self._attr_unique_id = f"{self._entry_id}_{self._plant_id}_{beschreibung.key}"
+        if beschreibung.spiegel and beschreibung.spiegel(anlage):
+            self._attr_entity_registry_enabled_default = False
         # Das Gerät ist die ganze Anlage, nicht ihr Dach. Stünde hier der
         # Modulhersteller, läse sich die Geräteliste als "Anlage Soyo, Modell
         # Vertex S 405" - und der Laderegler, die Batterie und der
@@ -916,6 +1135,21 @@ class PhasenSensor(PvBasis):
             self._attr_device_class = SensorDeviceClass.POWER
             self._attr_native_unit_of_measurement = WATT
             self._attr_suggested_display_precision = 0
+        if art == "power":
+            # Diesen Sensor gibt es nur, wenn die Phasenentität eingetragen
+            # ist - er ist damit immer ihre Wiederholung.
+            self._attr_entity_registry_enabled_default = False
+        if art == "pv_power":
+            # Die Erzeugung auf dieser Phase ist eine Summe. Hängt nur ein
+            # Wechselrichter daran, ist die Summe sein eigener Wert.
+            anlagen = (coordinator.data or {}).get("plants", [])
+            darauf = [
+                a
+                for a in anlagen
+                if a["inverter"]["enabled"] and a["inverter"]["phase"] == phase
+            ]
+            if len(darauf) < 2:
+                self._attr_entity_registry_enabled_default = False
         self._attr_state_class = SensorStateClass.MEASUREMENT
 
     @property

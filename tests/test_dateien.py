@@ -193,7 +193,9 @@ def _sensor_schluessel() -> set[str]:
     """Alle translation_keys, die sensor.py anlegt."""
     baum = _baum("sensor.py")
     gefunden: set[str] = set(PHASEN_SCHLUESSEL) | set(KOSTEN_SCHLUESSEL)
-    hilfsfunktionen = {"_leistung", "_prozent", "_energie", "_spannung", "_temperatur"}
+    hilfsfunktionen = {
+        "_leistung", "_prozent", "_energie", "_spannung", "_temperatur", "_stunde",
+    }
     konstanten = _konstanten()
 
     for knoten in ast.walk(baum):
