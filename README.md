@@ -253,7 +253,7 @@ Dutzend, die dauerhaft „unbekannt" anzeigen.
 Fällt ein Zähler zurück – Gerätetausch, ein zurückgesetzter Shelly –, wird die
 Marke neu gesetzt, statt eine negative Differenz auszuweisen.
 
-## Entitäten
+## Entitäten und Datenbank
 
 Je Standort entstehen Summensensoren (PV-Leistung, Spitzenleistung,
 Ausnutzung, Batterieleistung und -ladestand, Netzleistung, Bezug, Einspeisung,
@@ -263,11 +263,57 @@ Anlage und je Phase Leistung, Spannung und Erzeugung.
 Angelegt wird nur, was auch etwas anzeigen kann: Ohne Batterie entstehen keine
 Batteriesensoren, ohne Temperaturfühler kein Temperatursensor.
 
-**Eingeschaltet** ist von sich aus nur, was die Integration ausrechnet.
-Reine Spiegel vorhandener Sensoren – Spannungen, Temperaturen, Netzfrequenz,
-Zählerstände – sind angelegt, aber abgeschaltet: Sie kosten sonst
-Datenbankplatz für Werte, die schon da sind. Ein Klick in der Geräteansicht
-schaltet sie ein. Die Karte zeigt sie ohnehin, sie liest die Originale.
+### Eingeschaltet ist nur, was gerechnet wird
+
+**Ein Sensor, dessen Wert aus genau der Entität kommt, die du im Dialog
+eingetragen hast, bleibt abgeschaltet.** Er stünde sonst zweimal in Home
+Assistant und schriebe auch zweimal in die Datenbank.
+
+Das ist kein Schönheitsfehler, sondern der Hauptposten. Bei drei Anlagen
+entstehen rund achtzig Entitäten; ein Shelly Pro 3EM meldet sich jede Sekunde.
+Achtzig Zeilen je Sekunde sind über den Tag ein paar Millionen – und ein gutes
+Gigabyte.
+
+| bleibt aus | bleibt an |
+|---|---|
+| Modulleistung, Ladereglerleistung, Wechselrichterleistung, Batterieleistung – sofern du den jeweiligen Sensor eingetragen hast | dieselben Werte, wenn die Integration sie rechnet (aus Spannung mal Strom, oder vom Laderegler her) |
+| Netzleistung, Bezug und Einspeisung, Leistung und Spannung je Phase | Ausnutzung, Auslastung, Speicherinhalt, Restlaufzeit, Ladezeit |
+| Hausverbrauch und Hausenergie, wenn gemessen | Hausverbrauch, wenn gerechnet |
+| Spannungen, Temperaturen, Netzfrequenz, Zählerstände | alle Geldbeträge und die Amortisation |
+| Summen über eine einzige Anlage – das ist keine Summe | Summen über mehrere Anlagen |
+| Erzeugung einer Phase mit einem einzigen Wechselrichter | Erzeugung einer Phase mit mehreren |
+
+Abgeschaltet heißt nicht gelöscht: Jede Entität steht in der Geräteansicht und
+lässt sich mit einem Klick einschalten. **Der Karte fehlt nichts** – sie liest
+den Rechenkern direkt und zeigt weiterhin jeden Wert, sekundengenau.
+
+Läuft deine Anlage schon, kommt diese Voreinstellung zu spät: Home Assistant
+entscheidet beim allerersten Anlegen, ob eine Entität ein- oder ausgeschaltet
+ist, und fragt danach nie wieder. Dafür gibt es den Dienst
+`pv_system.tidy_entities` – einmal aufrufen, fertig.
+
+### Takt
+
+Unter *Darstellung und Aufzeichnung* steht, wie oft die Sensoren einen neuen
+Wert schreiben dürfen – **voreingestellt alle 30 Sekunden**. Die Karte hängt
+nicht daran. Wer die Sekunde braucht, trägt 0 ein; wer die Datenbank schonen
+will, 60 oder mehr. Die Langzeitstatistik von Home Assistant rechnet in
+Fünf-Minuten-Blöcken; dreißig Sekunden liefern ihr zehn Werte je Block.
+
+### Autarkie und Eigenverbrauch
+
+Beide gibt es zweimal, und das mit Absicht:
+
+* **in der Karte** als Momentanwert – dort steht er neben allem anderen und
+  sagt, wie die Lage gerade ist;
+* **als Sensor** über die letzte volle Stunde, aus Energien gerechnet statt aus
+  Leistungen.
+
+„Autarkie 100 % um 13:04:07" beantwortet keine Frage und schreibt doch eine
+Zeile. „In der Stunde von 13 bis 14 Uhr kamen 80 % nicht aus dem Netz" ist die
+Zahl, die jemand wissen will. Die beiden Energiemengen, aus denen sie entsteht,
+hängen als Attribut daran. Eine Stunde, in der weniger als 50 Minuten gemessen
+wurde – Neustart, Aussetzer –, wird gar nicht erst veröffentlicht.
 
 ## Dienste
 
@@ -279,6 +325,7 @@ schaltet sie ein. Die Karte zeigt sie ohnehin, sie liest die Originale.
 | `pv_system.set_inverter`  | Nennleistung und Phase                        |
 | `pv_system.add_plant`     | Weitere Anlage anlegen                        |
 | `pv_system.remove_plant`  | Anlage entfernen                              |
+| `pv_system.tidy_entities` | Doppelte Sensoren abschalten                  |
 
 ```yaml
 action: pv_system.set_modules

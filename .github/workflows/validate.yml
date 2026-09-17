@@ -40,6 +40,7 @@ jobs:
         run: |
           python3 tests/test_rechnung.py
           python3 tests/test_topologie.py
+          python3 tests/test_sensoren.py
           python3 tests/test_dateien.py
       - name: Übersetzungen sind aktuell
         run: |

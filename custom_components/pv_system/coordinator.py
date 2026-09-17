@@ -118,6 +118,7 @@ from .const import (
     SIGN_POSITIVE_EXPORT,
 )
 from .kosten import Kostenrechner, eigenverbrauch_kwh
+from .stunde import Stundenwerte
 from .topology import anlagenkosten_normalisieren, normalisieren, quellen
 
 _LOGGER = logging.getLogger(__name__)
@@ -151,6 +152,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.entry = entry
         self.config = normalisieren(dict(entry.options))
         self.kosten = Kostenrechner(hass, entry.entry_id)
+        self.stunden = Stundenwerte(hass, entry.entry_id)
         self._abmelden: list[Any] = []
         self._sammler = Debouncer(
             hass,
@@ -937,12 +939,25 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 100.0 * max(0.0, erzeugung - einspeisung) / erzeugung, 1
             )
 
+        # Dieselben vier Größen noch einmal, diesmal über die Stunde
+        # aufaddiert. Die Karte zeigt weiter den Augenblick; die Sensoren
+        # bekommen die abgeschlossene Stunde - siehe stunde.py.
+        stunde = self.stunden.rechnen(
+            {
+                "house": verbrauch,
+                "import": netz["import_power"],
+                "export": netz["export_power"],
+                "yield": erzeugung,
+            }
+        )
+
         return {
             "house_power": units.rund(verbrauch),
             "house_source": "sensor" if gemessen is not None else "calculated",
             "house_energy": units.rund(units.kwh(self.hass, conf[CONF_HOUSE_ENERGY]), 2),
             "self_sufficiency": autarkie,
             "self_consumption": eigenverbrauch,
+            "hour": stunde,
             # Damit Sensoren und Karte erkennen, was überhaupt hinterlegt ist -
             # dieselbe Form wie bei Netz, Batterie und Wechselrichter.
             "entities": {

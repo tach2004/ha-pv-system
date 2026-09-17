@@ -121,6 +121,11 @@ CONF_HOUSE_CALCULATE: Final = "calculate"
 CONF_ANIMATE: Final = "animate"
 CONF_SHOW_STRINGS: Final = "show_strings"
 CONF_SHOW_PHASES: Final = "show_phases"
+# Wie oft die Messsensoren einen neuen Zustand schreiben duerfen, in Sekunden.
+# 0 heisst: bei jeder Rechnung. Die Karte haengt nicht daran - sie liest den
+# Koordinator direkt und bleibt sekundengenau.
+CONF_SENSOR_INTERVAL: Final = "sensor_interval"
+DEFAULT_SENSOR_INTERVAL: Final = 30
 
 # ----------------------------------------------------------------- Kosten
 # Die beiden Preise standen bis 0.0.3 unter "Darstellung". Sie sind dort
@@ -202,6 +207,7 @@ SERVICE_SET_CHARGER: Final = "set_charger"
 SERVICE_SET_INVERTER: Final = "set_inverter"
 SERVICE_ADD_PLANT: Final = "add_plant"
 SERVICE_REMOVE_PLANT: Final = "remove_plant"
+SERVICE_TIDY_ENTITIES: Final = "tidy_entities"
 
 ATTR_PLANT: Final = "plant"
 ATTR_NAME: Final = "name"

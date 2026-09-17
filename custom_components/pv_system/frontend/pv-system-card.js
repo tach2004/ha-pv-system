@@ -749,16 +749,12 @@ class PvSystemCard extends HTMLElement {
         rx: 12,
       })
     );
-    // Im Kasten steht, was dort hängt: Hersteller und Modell der Module. Der
-    // Name der Anlage gehört über die ganze Spalte - er meint ja auch
-    // Laderegler, Batterie und Wechselrichter mit, nicht nur das Dach.
+    // Nur "Module". Hersteller und Modell standen hier einmal, haben aber
+    // die halbe Kastenbreite gekostet und sagen im Betrieb nichts: Sie ändern
+    // sich nie. Wer sie sucht, tippt den Kasten an - dort stehen sie neben
+    // Neigung und Ausrichtung.
     modulBox.appendChild(
-      e("text", {
-        class: "titel",
-        x: x + 12,
-        y: g.yModul + 16,
-        text: this._modulTitel(anlage),
-      })
+      e("text", { class: "titel", x: x + 12, y: g.yModul + 16, text: "Module" })
     );
     this._ref(
       modulBox,
@@ -1141,6 +1137,7 @@ class PvSystemCard extends HTMLElement {
   _busZeichnen(leitungen) {
     const g = this._geo;
     this._busPunkte = [];
+    const pfeilStelle = this._pfeilstellen();
 
     for (let i = 0; i < g.phasen; i++) {
       const y = g.yBus + i * M.busAbstand;
@@ -1162,7 +1159,9 @@ class PvSystemCard extends HTMLElement {
         leitungen.appendChild(
           e("path", { class: "bus", d: `M ${von} ${y} H ${bis}` })
         );
-        this._leitung(leitungen, von, y, bis, y, `bus:${i}:${k}`, "f-netz");
+        this._leitung(
+          leitungen, von, y, bis, y, `bus:${i}:${k}`, "f-netz", pfeilStelle(von, bis)
+        );
       }
 
       // Erst jetzt die Knotenpunkte der Wechselrichter: Vorher lagen sie
@@ -1182,6 +1181,49 @@ class PvSystemCard extends HTMLElement {
         e("text", { class: "mini rechts", x: rechts - 8, y: y - 8 })
       );
     }
+  }
+
+  /**
+   * Wo die Richtungspfeile auf den Phasen sitzen dürfen.
+   *
+   * Alle Abgriffe aller Phasen zusammen sind die Trennlinien. Zwischen zwei
+   * von ihnen liegt auf jeder Phase genau ein Stück Leitung - setzt man die
+   * Pfeile in die Mitte solcher Lücken, stehen sie über- und untereinander
+   * statt versetzt. Und sie landen nie auf einer der Senkrechten, die von den
+   * Wechselrichtern herunterkommen: Die sind ja gerade die Grenzen.
+   *
+   * Gibt es in einem Abschnitt keine Lücke, die breit genug wäre, bekommt er
+   * keinen Pfeil. Ein Pfeil, der auf einer Kreuzung klebt, sagt weniger als
+   * gar keiner.
+   */
+  _pfeilstellen() {
+    const g = this._geo;
+    const links = g.zaehlerX + ZAEHLER_B;
+    const rechts = g.hausX;
+    const grenzen = [
+      ...new Set([
+        links,
+        rechts,
+        ...g.abgriffe.flat().map((a) => a.x).filter((x) => x > links && x < rechts),
+      ]),
+    ].sort((a, b) => a - b);
+
+    const luecken = [];
+    for (let i = 0; i < grenzen.length - 1; i++) {
+      const breite = grenzen[i + 1] - grenzen[i];
+      if (breite >= PFEIL_MIN) {
+        luecken.push({ von: grenzen[i], bis: grenzen[i + 1], breite });
+      }
+    }
+
+    return (von, bis) => {
+      let beste = null;
+      for (const l of luecken) {
+        if (l.von < von - 0.5 || l.bis > bis + 0.5) continue;
+        if (!beste || l.breite > beste.breite) beste = l;
+      }
+      return beste ? (beste.von + beste.bis) / 2 : null;
+    };
   }
 
   /* --------------------------------------------------------- Netz und Haus */
@@ -1362,25 +1404,33 @@ class PvSystemCard extends HTMLElement {
    * auch nachts als Schaltbild lesbar ist. Nur der farbige darüber wird
    * ein- und ausgeblendet und animiert.
    */
-  _leitung(eltern, x1, y1, x2, y2, name, farbe) {
+  _leitung(eltern, x1, y1, x2, y2, name, farbe, pfeilX) {
     const d = `M ${x1} ${y1} L ${x2} ${y2}`;
     eltern.appendChild(e("path", { class: "leitung", d }));
     const fluss = e("path", { class: `fluss ${farbe}`, d });
     eltern.appendChild(fluss);
     this._flows.set(name, fluss);
 
-    // Der Pfeil sitzt in der Mitte der Strecke und zeigt zunächst von x1,y1
-    // nach x2,y2. Ob er sich später umdreht, entscheidet erst der Messwert -
-    // darum merkt sich die Karte den Grundwinkel gleich mit.
+    // Der Pfeil zeigt zunächst von x1,y1 nach x2,y2. Ob er sich später
+    // umdreht, entscheidet erst der Messwert - darum merkt sich die Karte den
+    // Grundwinkel gleich mit.
+    //
+    // Wo er steht, sagt normalerweise die Mitte der Strecke. ``pfeilX``
+    // überschreibt das mit einer festen Stelle, damit die Pfeile mehrerer
+    // Phasen untereinander stehen; ``null`` heißt: hier keiner.
     const laenge = Math.hypot(x2 - x1, y2 - y1);
-    if (laenge >= PFEIL_MIN) {
+    if (pfeilX !== null && laenge >= PFEIL_MIN) {
+      const anteil =
+        pfeilX === undefined ? 0.5 : (pfeilX - x1) / (x2 - x1 || 1);
+      const mx = x1 + anteil * (x2 - x1);
+      const my = y1 + anteil * (y2 - y1);
       const winkel = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
       const pfeil = e("path", {
         class: `pfeil ${farbe}`,
         d: PFEIL,
-        transform: `translate(${(x1 + x2) / 2} ${(y1 + y2) / 2}) rotate(${winkel.toFixed(1)})`,
+        transform: `translate(${mx} ${my}) rotate(${winkel.toFixed(1)})`,
       });
-      pfeil.dataset.mitte = `${(x1 + x2) / 2} ${(y1 + y2) / 2}`;
+      pfeil.dataset.mitte = `${mx} ${my}`;
       pfeil.dataset.winkel = winkel.toFixed(1);
       eltern.appendChild(pfeil);
       this._pfeile.set(name, pfeil);
@@ -1736,12 +1786,6 @@ class PvSystemCard extends HTMLElement {
     this._detailWerte();
   }
 
-  /** Was im Modulkasten oben links steht. */
-  _modulTitel(anlage) {
-    const m = anlage.modules;
-    return [m.manufacturer, m.model].filter(Boolean).join(" ") || "Module";
-  }
-
   /**
    * Der Fluss auf den drei Phasenlinien.
    *
@@ -2047,6 +2091,25 @@ class PvSystemCard extends HTMLElement {
         ["Energiezähler", einheit(h.house_energy, "kWh", 2, l), h.entities.energy],
         ["Autarkie", prozent(h.self_sufficiency, l)],
         ["Eigenverbrauch", prozent(h.self_consumption, l)],
+        // Die beiden Quoten noch einmal über die letzte volle Stunde - das
+        // ist der Wert, der auch als Sensor in Home Assistant steht. Der
+        // Augenblick darüber schwankt mit jeder Wolke.
+        ...(h.hour && h.hour.start
+          ? [
+              [
+                "Autarkie letzte Stunde",
+                `${prozent(h.hour.self_sufficiency, l)}  ·  ${einheit(
+                  h.hour.house_kwh, "kWh", 2, l
+                )} verbraucht`,
+              ],
+              [
+                "Eigenverbrauch letzte Stunde",
+                `${prozent(h.hour.self_consumption, l)}  ·  ${einheit(
+                  h.hour.yield_kwh, "kWh", 2, l
+                )} erzeugt`,
+              ],
+            ]
+          : []),
         ["Erzeugung AC", watt(t.inverter_power, l)],
         ["Installiert", t.pv_peak ? watt(t.pv_peak, l) : "–"],
         ["Module gesamt", String(t.module_count || 0)],

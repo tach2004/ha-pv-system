@@ -51,8 +51,10 @@ SENSOREN: dict[str, T] = {
     "grid_frequency": ("Netzfrequenz", "Grid frequency"),
     "house_power": ("Hausverbrauch", "House consumption"),
     "house_energy": ("Hausverbrauch Energie", "House consumption energy"),
-    "self_sufficiency": ("Autarkie", "Self-sufficiency"),
-    "self_consumption": ("Eigenverbrauch", "Self-consumption"),
+    # Beide als Stundenwert - der Name sagt es, damit niemand den
+    # Momentanwert erwartet. Den zeigt die Karte.
+    "self_sufficiency": ("Autarkie letzte Stunde", "Self-sufficiency last hour"),
+    "self_consumption": ("Eigenverbrauch letzte Stunde", "Self-consumption last hour"),
     "status": ("Status", "Status"),
     "plant_pv_power": ("PV-Leistung", "PV power"),
     "plant_pv_peak_power": ("Modulleistung", "Module peak power"),
@@ -248,6 +250,7 @@ FELDER: dict[str, T] = {
     "animate": ("Flusslinien animieren", "Animate flow lines"),
     "show_strings": ("Verschaltung zeichnen", "Draw string layout"),
     "show_phases": ("Phasen einzeln zeichnen", "Draw phases individually"),
+    "sensor_interval": ("Messwerte höchstens alle", "Measurements at most every"),
     "order": ("Platz in der Karte", "Position on the card"),
     "price_per_kwh": ("Arbeitspreis", "Energy price"),
     "feed_in_price": ("Einspeisevergütung", "Feed-in tariff"),
@@ -786,6 +789,16 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "Draws the modules individually, in series and parallel. Off gives "
             "a narrower card.",
         ),
+        "sensor_interval": (
+            "Wie oft die Messsensoren dieser Integration einen neuen Wert in "
+            "die Datenbank schreiben dürfen. Die Karte hängt nicht daran - sie "
+            "liest direkt mit und bleibt sekundengenau. 0 heißt: bei jeder "
+            "Messung, und das lässt die Datenbank schnell wachsen.",
+            "How often this integration's measurement sensors may write a new "
+            "value to the database. The card does not depend on it - it reads "
+            "along directly and stays second by second. 0 means: on every "
+            "measurement, and that makes the database grow fast.",
+        ),
         "show_phases": (
             "Drei Phasenlinien zwischen Zähler und Haus, jede mit ihrem "
             "eigenen Fluss. Aus bleibt eine einzige Wechselstromleitung - "
@@ -939,7 +952,7 @@ NETZFELDER = [
     "l3_power_entity", "l3_voltage_entity", "l3_current_entity",
 ]
 HAUSFELDER = ["calculate", "power_entity", "energy_entity"]
-ANZEIGEFELDER = ["animate", "show_strings", "show_phases"]
+ANZEIGEFELDER = ["animate", "show_strings", "show_phases", "sensor_interval"]
 KOSTENFELDER = [
     "price_per_kwh", "feed_in_price", "base_price", "currency", "prior_import",
     "prior_price",
@@ -1004,7 +1017,9 @@ def baum(sprache) -> dict:
                         "grid": s(("Netz und Zähler", "Grid and meter")),
                         "house": s(("Haus und Verbrauch", "House and consumption")),
                         "costs": s(("Kosten und Ertrag", "Costs and yield")),
-                        "display": s(("Darstellung", "Appearance")),
+                        "display": s(
+                            ("Darstellung und Aufzeichnung", "Appearance and recording")
+                        ),
                         "save": s(("Speichern und schließen", "Save and close")),
                     },
                 },
@@ -1195,7 +1210,9 @@ def baum(sprache) -> dict:
                     "data_description": _hinweise(KOSTENFELDER, s, "costs"),
                 },
                 "display": {
-                    "title": s(("Darstellung", "Appearance")),
+                    "title": s(
+                        ("Darstellung und Aufzeichnung", "Appearance and recording")
+                    ),
                     "data": _felder(ANZEIGEFELDER, s),
                     "data_description": _hinweise(ANZEIGEFELDER, s, "display"),
                 },
@@ -1229,6 +1246,29 @@ def baum(sprache) -> dict:
                     k: {"name": s(FELDER[k]), "description": s(HINWEISE.get(k, FELDER[k]))}
                     for k in ["plant", "count", "peak_wp", "series", "parallel", "manufacturer", "model"]
                 },
+            },
+            "tidy_entities": {
+                "name": s(
+                    ("Doppelte Sensoren abschalten", "Turn off duplicate sensors")
+                ),
+                "description": s(
+                    (
+                        "Schaltet die Sensoren ab, die nur eine Entität "
+                        "wiederholen, die du selbst eingetragen hast - "
+                        "Modulleistung, Ladereglerleistung, Netzleistung und "
+                        "so fort. Sie bleiben in der Geräteansicht stehen und "
+                        "lassen sich einzeln zurückholen; gelöscht wird "
+                        "nichts. Neu eingerichtete Anlagen brauchen das nicht: "
+                        "Dort sind diese Sensoren von Anfang an aus.",
+                        "Turns off the sensors that only repeat an entity you "
+                        "configured yourself - module power, charge controller "
+                        "power, grid power and so on. They stay in the device "
+                        "view and can be re-enabled individually; nothing is "
+                        "deleted. Newly set up systems do not need this: there "
+                        "these sensors are off from the start.",
+                    )
+                ),
+                "fields": {},
             },
             "set_battery": {
                 "name": s(("Batterie festlegen", "Set battery")),

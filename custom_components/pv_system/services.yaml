@@ -155,3 +155,9 @@ remove_plant:
       example: West-Dach
       selector:
         text:
+
+tidy_entities:
+  target:
+    entity:
+      integration: pv_system
+      domain: sensor

@@ -5,10 +5,11 @@ ein paar hundert Megabyte zu installieren - und man prüfte am Ende vor allem,
 ob Home Assistant funktioniert. Geprüft werden soll aber die eigene Rechnung:
 Einheiten, Vorzeichen, Summen, Autarkie.
 
-Deshalb stehen hier genau die Namen, die ``units.py``, ``topology.py`` und
-``coordinator.py`` importieren - nicht mehr. Kommt in der Integration ein
-neuer Import dazu, schlägt der Test fehl, und das ist die richtige Reaktion:
-Dann gehört der Name hier ergänzt oder der Import überdacht.
+Deshalb stehen hier genau die Namen, die ``units.py``, ``topology.py``,
+``coordinator.py``, ``kosten.py``, ``stunde.py`` und ``sensor.py`` importieren -
+nicht mehr. Kommt in der Integration ein neuer Import dazu, schlägt der Test
+fehl, und das ist die richtige Reaktion: Dann gehört der Name hier ergänzt oder
+der Import überdacht.
 """
 
 from __future__ import annotations
@@ -190,6 +191,111 @@ class _DatumZeit:
         return datetime.fromtimestamp(wert, timezone.utc)
 
 
+# ------------------------------------------------------------ Sensorplattform
+#
+# Genug von der Sensorwelt, um sensor.py zu laden und zu fragen, welche
+# Entitäten dabei herauskämen - und welche davon eingeschaltet wären. Die
+# Antwort darauf ist der teuerste Posten der ganzen Integration: Jede
+# eingeschaltete Entität schreibt Zeilen in die Datenbank.
+
+
+class SensorDeviceClass(StrEnum):
+    BATTERY = "battery"
+    DURATION = "duration"
+    ENERGY = "energy"
+    ENERGY_STORAGE = "energy_storage"
+    ENUM = "enum"
+    FREQUENCY = "frequency"
+    MONETARY = "monetary"
+    POWER = "power"
+    TEMPERATURE = "temperature"
+    VOLTAGE = "voltage"
+
+
+class SensorStateClass(StrEnum):
+    MEASUREMENT = "measurement"
+    TOTAL = "total"
+    TOTAL_INCREASING = "total_increasing"
+
+
+class EntityCategory(StrEnum):
+    CONFIG = "config"
+    DIAGNOSTIC = "diagnostic"
+
+
+class UnitOfFrequency(StrEnum):
+    HERTZ = "Hz"
+
+
+class UnitOfTime(StrEnum):
+    HOURS = "h"
+    YEARS = "y"
+
+
+@dataclass(frozen=True, kw_only=True)
+class SensorEntityDescription:
+    key: str
+    translation_key: str | None = None
+    device_class: Any = None
+    native_unit_of_measurement: str | None = None
+    state_class: Any = None
+    suggested_display_precision: int | None = None
+    icon: str | None = None
+    entity_category: Any = None
+    entity_registry_enabled_default: bool = True
+    options: list[str] | None = None
+
+
+class DeviceInfo(dict):
+    pass
+
+
+AddEntitiesCallback = Any
+
+
+class SensorEntity:
+    """Nur die Eigenschaften, an denen hier etwas hängt."""
+
+    @property
+    def entity_registry_enabled_default(self) -> bool:
+        # Wie im Original: Das gesetzte Attribut schlägt die Beschreibung.
+        if hasattr(self, "_attr_entity_registry_enabled_default"):
+            return self._attr_entity_registry_enabled_default
+        if hasattr(self, "entity_description"):
+            return self.entity_description.entity_registry_enabled_default
+        return True
+
+    @property
+    def state_class(self) -> Any:
+        if hasattr(self, "_attr_state_class"):
+            return self._attr_state_class
+        if hasattr(self, "entity_description"):
+            return self.entity_description.state_class
+        return None
+
+    @property
+    def unique_id(self) -> str | None:
+        return getattr(self, "_attr_unique_id", None)
+
+    def async_write_ha_state(self) -> None:  # pragma: no cover
+        pass
+
+
+class CoordinatorEntity:
+    def __init__(self, coordinator) -> None:
+        self.coordinator = coordinator
+
+    def __class_getitem__(cls, _item):
+        return cls
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    def _handle_coordinator_update(self) -> None:  # pragma: no cover
+        self.async_write_ha_state()
+
+
 def installieren() -> None:
     """Die Stubs unter den echten Modulnamen in sys.modules hängen."""
     if "homeassistant" in sys.modules:
@@ -208,6 +314,10 @@ def installieren() -> None:
         ATTR_UNIT_OF_MEASUREMENT="unit_of_measurement",
         STATE_UNAVAILABLE="unavailable",
         STATE_UNKNOWN="unknown",
+        PERCENTAGE="%",
+        EntityCategory=EntityCategory,
+        UnitOfFrequency=UnitOfFrequency,
+        UnitOfTime=UnitOfTime,
         UnitOfElectricCurrent=UnitOfElectricCurrent,
         UnitOfElectricPotential=UnitOfElectricPotential,
         UnitOfEnergy=UnitOfEnergy,
@@ -234,6 +344,22 @@ def installieren() -> None:
         DataUpdateCoordinator=DataUpdateCoordinator,
     )
     modul("homeassistant.helpers.storage", Store=Store)
+    modul("homeassistant.components")
+    modul(
+        "homeassistant.components.sensor",
+        SensorDeviceClass=SensorDeviceClass,
+        SensorEntity=SensorEntity,
+        SensorEntityDescription=SensorEntityDescription,
+        SensorStateClass=SensorStateClass,
+    )
+    modul("homeassistant.helpers.device_registry", DeviceInfo=DeviceInfo)
+    modul(
+        "homeassistant.helpers.entity_platform",
+        AddEntitiesCallback=AddEntitiesCallback,
+    )
+    sys.modules["homeassistant.helpers.update_coordinator"].CoordinatorEntity = (
+        CoordinatorEntity
+    )
     modul("homeassistant.util")
     modul("homeassistant.util.dt", **{
         name: getattr(_DatumZeit, name)

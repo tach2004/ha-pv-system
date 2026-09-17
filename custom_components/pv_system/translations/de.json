@@ -206,10 +206,10 @@
         "name": "Ersparnis dieses Jahr"
       },
       "self_consumption": {
-        "name": "Eigenverbrauch"
+        "name": "Eigenverbrauch letzte Stunde"
       },
       "self_sufficiency": {
-        "name": "Autarkie"
+        "name": "Autarkie letzte Stunde"
       },
       "status": {
         "name": "Status",
@@ -343,15 +343,17 @@
       "display": {
         "data": {
           "animate": "Flusslinien animieren",
+          "sensor_interval": "Messwerte höchstens alle",
           "show_phases": "Phasen einzeln zeichnen",
           "show_strings": "Verschaltung zeichnen"
         },
         "data_description": {
           "animate": "Die Punkte auf den Leitungen laufen mit der Leistung mit. Aus, wenn das Dashboard auf einem alten Tablet ruckelt.",
+          "sensor_interval": "Wie oft die Messsensoren dieser Integration einen neuen Wert in die Datenbank schreiben dürfen. Die Karte hängt nicht daran - sie liest direkt mit und bleibt sekundengenau. 0 heißt: bei jeder Messung, und das lässt die Datenbank schnell wachsen.",
           "show_phases": "Drei Phasenlinien zwischen Zähler und Haus, jede mit ihrem eigenen Fluss. Aus bleibt eine einzige Wechselstromleitung - richtig für eine einphasige Anlage und deutlich flacher.",
           "show_strings": "Zeichnet die Module einzeln, in Reihe und parallel. Aus ergibt eine schmalere Karte."
         },
-        "title": "Darstellung"
+        "title": "Darstellung und Aufzeichnung"
       },
       "grid": {
         "data": {
@@ -416,7 +418,7 @@
         "description": "Änderungen werden erst übernommen, wenn du im Menü „Speichern und schließen“ wählst.",
         "menu_options": {
           "costs": "Kosten und Ertrag",
-          "display": "Darstellung",
+          "display": "Darstellung und Aufzeichnung",
           "grid": "Netz und Zähler",
           "house": "Haus und Verbrauch",
           "plants": "Anlagen",
@@ -721,6 +723,11 @@
         }
       },
       "name": "Module festlegen"
+    },
+    "tidy_entities": {
+      "description": "Schaltet die Sensoren ab, die nur eine Entität wiederholen, die du selbst eingetragen hast - Modulleistung, Ladereglerleistung, Netzleistung und so fort. Sie bleiben in der Geräteansicht stehen und lassen sich einzeln zurückholen; gelöscht wird nichts. Neu eingerichtete Anlagen brauchen das nicht: Dort sind diese Sensoren von Anfang an aus.",
+      "fields": {},
+      "name": "Doppelte Sensoren abschalten"
     }
   },
   "title": "PV-System"

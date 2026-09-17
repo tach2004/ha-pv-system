@@ -120,6 +120,7 @@ from .const import (
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_RATED_POWER,
+    CONF_SENSOR_INTERVAL,
     CONF_SHOW_PHASES,
     CONF_SHOW_STRINGS,
     CONF_STRINGS_PARALLEL,
@@ -346,6 +347,7 @@ def _felder_darstellung() -> dict[Any, Any]:
         vol.Optional(CONF_ANIMATE): bool,
         vol.Optional(CONF_SHOW_STRINGS): bool,
         vol.Optional(CONF_SHOW_PHASES): bool,
+        vol.Optional(CONF_SENSOR_INTERVAL): _zahl(0, 600, 5, "s"),
     }
 
 

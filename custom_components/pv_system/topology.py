@@ -109,6 +109,7 @@ from .const import (
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_RATED_POWER,
+    CONF_SENSOR_INTERVAL,
     CONF_SHOW_PHASES,
     CONF_SHOW_STRINGS,
     CONF_STRINGS_PARALLEL,
@@ -122,6 +123,7 @@ from .const import (
     DEFAULT_PHASES,
     DEFAULT_PLANT_NAME,
     DEFAULT_RATED_POWER,
+    DEFAULT_SENSOR_INTERVAL,
     DEFAULT_SYSTEM_VOLTAGE,
     GRID_SIGNS,
     PHASE_L1,
@@ -384,6 +386,9 @@ def darstellung_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         CONF_ANIMATE: bool(roh.get(CONF_ANIMATE, True)),
         CONF_SHOW_STRINGS: bool(roh.get(CONF_SHOW_STRINGS, True)),
         CONF_SHOW_PHASES: bool(roh.get(CONF_SHOW_PHASES, True)),
+        CONF_SENSOR_INTERVAL: _ganz(
+            roh.get(CONF_SENSOR_INTERVAL), DEFAULT_SENSOR_INTERVAL, tiefstens=0, hoechstens=600
+        ),
     }
 
 
@@ -434,13 +439,15 @@ def anlagenkosten_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _ganz(wert: Any, vorgabe: int) -> int:
-    """Eine ganze Zahl ab 1 - sonst die Stelle, an der die Anlage steht."""
+def _ganz(
+    wert: Any, vorgabe: int, *, tiefstens: int = 1, hoechstens: int = 99
+) -> int:
+    """Eine ganze Zahl im erlaubten Bereich - sonst die Vorgabe."""
     try:
         zahl = int(float(wert))
     except (TypeError, ValueError):
         return vorgabe
-    return max(1, min(99, zahl))
+    return max(tiefstens, min(hoechstens, zahl))
 
 
 def _datum(wert: Any) -> str | None:

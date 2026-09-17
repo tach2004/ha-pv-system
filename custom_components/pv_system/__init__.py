@@ -17,7 +17,12 @@ import voluptuous as vol
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+)
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import (
     config_validation as cv,
@@ -66,9 +71,11 @@ from .const import (
     SERVICE_SET_CHARGER,
     SERVICE_SET_INVERTER,
     SERVICE_SET_MODULES,
+    SERVICE_TIDY_ENTITIES,
     SYSTEM_VOLTAGES,
 )
 from .coordinator import PvSystemConfigEntry, PvSystemCoordinator
+from .sensor import spiegel_kennungen
 from .topology import (
     anlage_normalisieren,
     anlage_suchen,
@@ -120,6 +127,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvSystemConfigEntry) -> 
     # vor der ersten Rechnung da sein - sonst würde der laufende Tag beim
     # Neustart auf null zurückgesetzt.
     await coordinator.kosten.async_laden()
+    await coordinator.stunden.async_laden()
     # Vor dem ersten Rechnen anmelden: Sonst fiele ein Messwert, der genau in
     # dieses Fenster fällt, unter den Tisch und die Karte zeigte bis zum
     # Sicherheitsnetz alte Zahlen.
@@ -140,6 +148,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: PvSystemConfigEntry) ->
         # Erst die Marken sichern, dann abbauen: Ein verzögertes Speichern
         # käme sonst nach dem Ende des Eintrags und ginge verloren.
         await entry.runtime_data.kosten.async_speichern()
+        await entry.runtime_data.stunden.async_speichern()
         await entry.runtime_data.async_shutdown()
     return geladen
 
@@ -488,6 +497,43 @@ def _async_register_services(hass: HomeAssistant) -> None:
         ]
         hass.config_entries.async_update_entry(entry, options=daten)
 
+    async def sensoren_aufraeumen(call: ServiceCall) -> ServiceResponse:
+        """Sensoren abschalten, die nur eingetragene Entitäten wiederholen.
+
+        Für eine Anlage, die schon läuft, kommt eine geänderte Voreinstellung
+        zu spät: Home Assistant entscheidet beim allerersten Anlegen, ob eine
+        Entität ein- oder ausgeschaltet ist, und fragt danach nie wieder. Also
+        muss jemand es sagen - dieser Dienst.
+
+        Abgeschaltet wird nur, was gerade eingeschaltet ist und was die
+        Integration heute als Wiederholung ansieht. Gelöscht wird nichts: Jede
+        Entität bleibt in der Geräteansicht stehen und lässt sich mit einem
+        Klick zurückholen. Von selbst passiert nichts - der Dienst läuft nur,
+        wenn jemand ihn aufruft.
+        """
+        entry = _entry(call)
+        coordinator: PvSystemCoordinator = entry.runtime_data
+        kennungen = spiegel_kennungen(coordinator)
+
+        registry = er.async_get(hass)
+        betroffen = [
+            eintrag
+            for eintrag in er.async_entries_for_config_entry(registry, entry.entry_id)
+            if eintrag.unique_id in kennungen and eintrag.disabled_by is None
+        ]
+        for eintrag in betroffen:
+            registry.async_update_entity(
+                eintrag.entity_id,
+                disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+            )
+        _LOGGER.info(
+            "%s: %d doppelte Sensoren abgeschaltet", entry.title, len(betroffen)
+        )
+        return {
+            "disabled": len(betroffen),
+            "entities": sorted(eintrag.entity_id for eintrag in betroffen),
+        }
+
     hass.services.async_register(
         DOMAIN, SERVICE_SET_MODULES, module_setzen, schema=_dienst_schema(MODULE_FELDER)
     )
@@ -517,4 +563,11 @@ def _async_register_services(hass: HomeAssistant) -> None:
         SERVICE_REMOVE_PLANT,
         anlage_entfernen,
         schema=_dienst_schema(ENTFERNEN_FELDER),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_TIDY_ENTITIES,
+        sensoren_aufraeumen,
+        schema=_dienst_schema({}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
