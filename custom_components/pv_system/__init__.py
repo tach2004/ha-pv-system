@@ -67,6 +67,7 @@ from .const import (
     PHASES,
     SERVICE_ADD_PLANT,
     SERVICE_REMOVE_PLANT,
+    SERVICE_RESET_COSTS,
     SERVICE_SET_BATTERY,
     SERVICE_SET_CHARGER,
     SERVICE_SET_INVERTER,
@@ -75,7 +76,7 @@ from .const import (
     SYSTEM_VOLTAGES,
 )
 from .coordinator import PvSystemConfigEntry, PvSystemCoordinator
-from .sensor import spiegel_kennungen
+from .sensor import aufraeumen
 from .topology import (
     anlage_normalisieren,
     anlage_suchen,
@@ -86,7 +87,7 @@ from .websocket import async_register_websocket
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.SENSOR]
 CONF_NAME = "name"
 
 # Diese Integration kennt keine YAML-Konfiguration; eingerichtet wird sie über
@@ -512,27 +513,31 @@ def _async_register_services(hass: HomeAssistant) -> None:
         wenn jemand ihn aufruft.
         """
         entry = _entry(call)
-        coordinator: PvSystemCoordinator = entry.runtime_data
-        kennungen = spiegel_kennungen(coordinator)
-
-        registry = er.async_get(hass)
-        betroffen = [
-            eintrag
-            for eintrag in er.async_entries_for_config_entry(registry, entry.entry_id)
-            if eintrag.unique_id in kennungen and eintrag.disabled_by is None
-        ]
-        for eintrag in betroffen:
-            registry.async_update_entity(
-                eintrag.entity_id,
-                disabled_by=er.RegistryEntryDisabler.INTEGRATION,
-            )
+        abgeschaltet = aufraeumen(hass, entry)
         _LOGGER.info(
-            "%s: %d doppelte Sensoren abgeschaltet", entry.title, len(betroffen)
+            "%s: %d doppelte Sensoren abgeschaltet", entry.title, len(abgeschaltet)
         )
-        return {
-            "disabled": len(betroffen),
-            "entities": sorted(eintrag.entity_id for eintrag in betroffen),
-        }
+        return {"disabled": len(abgeschaltet), "entities": abgeschaltet}
+
+    async def kosten_zuruecksetzen(call: ServiceCall) -> ServiceResponse:
+        """Die gemessenen Kostenzahlen verwerfen und neu anfangen.
+
+        Der Ausweg, wenn die Beträge einmal nicht mehr stimmen - etwa weil vor
+        der Plausibilitätsprüfung ein Zählertausch durchgerutscht ist und seither
+        ein paar tausend Euro zu viel im Gesamtzeitraum stehen. Tag, Monat und
+        Jahr heilen sich beim nächsten Wechsel von selbst; der Gesamtzeitraum
+        trägt den Fehler weiter, bis jemand ihn leert.
+
+        Was in der Konfiguration steht, bleibt: Ertrag davor, Bezug davor, die
+        Inbetriebnahme jeder Anlage. Verloren geht nur das, was seit dem ersten
+        Lauf gemessen wurde.
+        """
+        entry = _entry(call)
+        coordinator: PvSystemCoordinator = entry.runtime_data
+        coordinator.kosten.zuruecksetzen()
+        await coordinator.async_refresh()
+        _LOGGER.warning("%s: Kostenzähler zurückgesetzt", entry.title)
+        return {"reset": True}
 
     hass.services.async_register(
         DOMAIN, SERVICE_SET_MODULES, module_setzen, schema=_dienst_schema(MODULE_FELDER)
@@ -568,6 +573,13 @@ def _async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_TIDY_ENTITIES,
         sensoren_aufraeumen,
+        schema=_dienst_schema({}),
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RESET_COSTS,
+        kosten_zuruecksetzen,
         schema=_dienst_schema({}),
         supports_response=SupportsResponse.OPTIONAL,
     )

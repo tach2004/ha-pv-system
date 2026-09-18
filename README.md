@@ -52,6 +52,11 @@ und einbringt.
   seine Richtung. Auf jeder Leitung sitzt ein **Richtungspfeil**, der auch
   dann steht, wenn die Animation aus ist.
 
+  In beiden Klemmkästen steht je Phase eine Zahl: links, was der Zähler misst,
+  rechts, was auf dieser Phase im Haus bleibt. Die rechte ist gerechnet –
+  Erzeugung auf der Phase plus das, was dort vom Netz kommt. Bei 250 W vom
+  Wechselrichter und 200 W Einspeisung bleiben 50 W im Haus.
+
   Die Netzleistung steht mit Vorzeichen da: **plus heißt ins Haus, minus ins
   Netz**. Rot ist Bezug, blau ist Einspeisung – grün bleibt dem Speicher
   vorbehalten, sonst hieße dieselbe Farbe zweierlei.
@@ -69,6 +74,11 @@ und einbringt.
   Ersparnis durch Eigenverbrauch, Ertrag und Bilanz – je für heute, den Monat,
   das Jahr und seit der Inbetriebnahme. Dazu der Momentanwert in Euro je Stunde
   und die Amortisation.
+* **Überschussverbraucher** – ein Heizstab im Brauchwasserspeicher, eine
+  Wallbox im Überschussladen: Verbraucher, die nur laufen, damit der Überschuss
+  nicht ins Netz geht. Ihre Kilowattstunden sind Hausverbrauch wie jeder
+  andere, aber sie sparen keinen Strom, sondern Gas – und werden deshalb mit
+  ihrem eigenen Wert gerechnet. Siehe unten.
 * **Preise dürfen sich ändern.** Strom kostete 2023 anderes als heute, und eine
   Anlage rechnet sich über zwanzig Jahre. Der Gesamtzeitraum führt deshalb
   einen Geldspeicher: Bewertet wird immer nur, was seit der letzten Rechnung
@@ -219,6 +229,66 @@ nach dem Anteil an der Gesamterzeugung aufgeteilt. Das trifft zu, solange die
 Anlagen zur selben Zeit liefern, und liegt daneben, wenn eine nach Osten und
 eine nach Westen zeigt. In der Karte steht deshalb „geschätzt" daneben.
 
+### Überschussverbraucher
+
+Die Frage, an der sich jede Amortisation entscheidet: **Was ist eine selbst
+genutzte Kilowattstunde wert?**
+
+Normalerweise so viel wie eine gekaufte – sie ersetzt genau die. Nicht so beim
+Heizstab im Brauchwasserspeicher. Der läuft nur, weil sonst Überschuss ins Netz
+ginge; ohne ihn würde das Wasser mit Gas warm. Seine Kilowattstunden ersetzen
+also **kein Strom, sondern Gas**:
+
+    Wert je kWh = Gaspreis je kWh ÷ Wirkungsgrad des Kessels
+
+Bei 0,11 €/kWh und 92 % sind das rund 0,12 € – nicht 0,34 €. Wer 250 kWh in den
+Heizstab schickt, spart damit etwa 30 €, nicht 85. Der Unterschied ist kein
+Rundungsfehler: Er macht in diesem Beispiel die Hälfte der Ersparnis aus.
+
+Unter *Haus und Verbrauch* stehen dafür vier Felder: ein Name, ein
+Leistungssensor (nur für die Karte), ein **Zähler in kWh** und der **Wert je
+kWh**. Bleibt der Wert leer, gilt der Arbeitspreis – dieselbe Rechnung wie
+vorher, und dieselbe zu schöne Zahl.
+
+Und wohin zählt das Ganze sonst?
+
+| Größe | zählt der Heizstab mit? | warum |
+|---|---|---|
+| **Hausverbrauch** | ja | Der Strom fließt hinter dem Zähler. Jeder Hausstromsensor sieht ihn |
+| **Autarkie** | ja | Verbrauch, der nicht aus dem Netz kam – genau das misst die Quote |
+| **Eigenverbrauch** | ja | Erzeugte Energie, die im Haus geblieben ist |
+| **Ersparnis und Amortisation** | mit eigenem Wert | Ersetzt wurde Gas, nicht Strom |
+| **Bezugskosten Tag/Monat** | nein | Es ist kein Netzbezug. Kosten entstehen nur am Zähler |
+
+Bei mehreren Anlagen wird der umgeleitete Anteil nach der Erzeugung aufgeteilt –
+wie die Einspeisung auch, und mit derselben Einschränkung: Es stimmt, solange
+die Anlagen zur selben Zeit liefern.
+
+Zwei Dinge bleiben ehrlich zu sagen. Läuft der Heizstab auch einmal am Netz,
+lässt sich das aus einem Zählerstand nicht herauslesen; gerechnet wird deshalb
+höchstens so viel, wie im selben Zeitraum überhaupt selbst genutzt wurde. Und
+wer die Autarkie ohne solche Verbraucher sehen will, muss sie im Kopf abziehen –
+eine Quote, die nur bei Sonne steigt, schmeichelt sich selbst.
+
+### Wenn der Zähler ein anderer wird
+
+Ein Zählerstand darf wachsen, ein Zähler nicht klammheimlich wechseln. Wer im
+Dialog eine andere Entität einträgt, bekommt einen Stand, der mit dem alten
+nichts zu tun hat – und ohne Prüfung stünde die Differenz als Verbrauch da.
+
+Deshalb wird jeder Stand mit dem vorigen verglichen: Was in der verstrichenen
+Zeit physikalisch nicht durch einen Hausanschluss gepasst hätte, ist kein
+Verbrauch, sondern ein anderer Zähler. Dann wird neu verankert statt gerechnet.
+Die Grenze wächst mit der Zeit – war Home Assistant drei Tage aus, sind sechzig
+Kilowattstunden echt.
+
+Stehen trotzdem einmal unsinnige Beträge da, hilft `pv_system.reset_costs`: Der
+Dienst verwirft alles, was seit dem ersten Lauf gemessen wurde, und fängt bei
+den heutigen Zählerständen neu an. Was in der Konfiguration steht – Ertrag
+davor, Bezug davor, Inbetriebnahme –, bleibt. Tag, Monat und Jahr heilen sich
+ohnehin beim nächsten Wechsel von selbst; nur der Gesamtzeitraum trägt einen
+Fehler weiter.
+
 ### Rückwirkend
 
 Eine Anlage läuft fast immer schon, bevor jemand diese Integration einrichtet.
@@ -287,10 +357,18 @@ Abgeschaltet heißt nicht gelöscht: Jede Entität steht in der Geräteansicht u
 lässt sich mit einem Klick einschalten. **Der Karte fehlt nichts** – sie liest
 den Rechenkern direkt und zeigt weiterhin jeden Wert, sekundengenau.
 
-Läuft deine Anlage schon, kommt diese Voreinstellung zu spät: Home Assistant
-entscheidet beim allerersten Anlegen, ob eine Entität ein- oder ausgeschaltet
-ist, und fragt danach nie wieder. Dafür gibt es den Dienst
-`pv_system.tidy_entities` – einmal aufrufen, fertig.
+**Wer neu einrichtet, braucht nichts zu tun.** Läuft deine Anlage dagegen
+schon, kommt die Voreinstellung zu spät: Home Assistant entscheidet beim
+allerersten Anlegen, ob eine Entität ein- oder ausgeschaltet ist, und fragt
+danach nie wieder. Dafür gibt es auf dem Gerät des Standorts die Schaltfläche
+**„Doppelte Sensoren abschalten"** – einmal drücken, fertig. Wer lieber eine
+Automatisierung schreibt, nimmt `pv_system.tidy_entities`.
+
+Betroffen sind ausschließlich Entitäten dieser Integration. Deine eigenen
+Sensoren rührt sie nicht an – sie sind ja gerade der Grund, warum die Kopien
+überflüssig sind. Abgeschaltet heißt: Die Entität bleibt in der Geräteansicht
+stehen, zeichnet aber nichts mehr auf. Ein Klick holt sie zurück, und dabei
+bleibt es – von selbst schaltet die Integration nie etwas ab.
 
 ### Takt
 
@@ -326,6 +404,7 @@ wurde – Neustart, Aussetzer –, wird gar nicht erst veröffentlicht.
 | `pv_system.add_plant`     | Weitere Anlage anlegen                        |
 | `pv_system.remove_plant`  | Anlage entfernen                              |
 | `pv_system.tidy_entities` | Doppelte Sensoren abschalten                  |
+| `pv_system.reset_costs`   | Gemessene Kostenzahlen verwerfen und neu anfangen |
 
 ```yaml
 action: pv_system.set_modules

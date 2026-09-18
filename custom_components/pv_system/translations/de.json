@@ -18,6 +18,11 @@
     }
   },
   "entity": {
+    "button": {
+      "tidy_entities": {
+        "name": "Doppelte Sensoren abschalten"
+      }
+    },
     "sensor": {
       "balance_day": {
         "name": "Bilanz heute"
@@ -404,11 +409,19 @@
       "house": {
         "data": {
           "calculate": "Hausverbrauch rechnen",
+          "diverter_energy_entity": "Zähler Überschussverbraucher",
+          "diverter_name": "Überschussverbraucher",
+          "diverter_power_entity": "Leistung Überschussverbraucher",
+          "diverter_price": "Wert je kWh",
           "energy_entity": "Verbrauchszähler",
           "power_entity": "Gemessener Hausverbrauch"
         },
         "data_description": {
           "calculate": "Verbrauch = Wechselrichterleistung + Netzleistung. Ein gemessener Hausverbrauch hat Vorrang.",
+          "diverter_energy_entity": "Der Zählerstand dieses Verbrauchers in kWh. Diese Kilowattstunden sind Hausverbrauch wie jeder andere - sie sparen aber keinen Strom, sondern den Brennstoff, mit dem sonst geheizt würde. Deshalb werden sie getrennt bewertet.",
+          "diverter_name": "Wie der Verbraucher in der Karte heißen soll, z. B. „Heizstab“.",
+          "diverter_power_entity": "Was der Überschussverbraucher gerade zieht - der Heizstab im Brauchwasserspeicher, die Wallbox im Überschussladen. Nur für die Anzeige; für die Rechnung zählt der Zähler darunter.",
+          "diverter_price": "Was eine umgeleitete Kilowattstunde wirklich wert ist: der Preis des ersetzten Brennstoffs, geteilt durch den Wirkungsgrad des Kessels. Bei 0,11 €/kWh Gas und 92 % sind das rund 0,12. Leer: Es gilt der Arbeitspreis - und die Anlage rechnet sich reicher, als sie ist.",
           "energy_entity": "Zählerstand des Hausverbrauchs in kWh, falls vorhanden. Er ist der zweite Weg zum Eigenverbrauch, wenn kein Ertragszähler da ist.",
           "power_entity": "Ein gemessener Hausverbrauch, falls vorhanden. Er hat Vorrang vor der Rechnung. Leer lassen ist der Normalfall."
         },
@@ -623,6 +636,11 @@
         }
       },
       "name": "Anlage entfernen"
+    },
+    "reset_costs": {
+      "description": "Verwirft alles, was seit dem ersten Lauf gemessen wurde, und fängt bei den heutigen Zählerständen neu an. Gedacht für den Fall, dass unsinnige Beträge im Gesamtzeitraum stehen - etwa nach einem Zählertausch. Was in der Konfiguration steht, bleibt: Ertrag davor, Bezug davor, Inbetriebnahme. Tag, Monat und Jahr heilen sich ohnehin von selbst.",
+      "fields": {},
+      "name": "Kostenzähler zurücksetzen"
     },
     "set_battery": {
       "description": "Kapazität und Nennspannung einer Batterie ändern.",

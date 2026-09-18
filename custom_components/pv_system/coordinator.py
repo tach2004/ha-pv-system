@@ -58,6 +58,10 @@ from .const import (
     CONF_COSTS,
     CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
+    CONF_DIVERTER_ENERGY,
+    CONF_DIVERTER_NAME,
+    CONF_DIVERTER_POWER,
+    CONF_DIVERTER_PRICE,
     CONF_ENABLED,
     CONF_FEED_IN_PRICE,
     CONF_GRID,
@@ -259,9 +263,13 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         conf = self.config[CONF_COSTS]
         erzeugung = units.first(summen["inverter_energy"], summen["pv_energy"])
+        umleiter = haus.get("diverter") or {}
         zaehler = {
             "import": netz["import_energy"],
             "export": netz["export_energy"],
+            # Was in den Überschussverbraucher ging - ein Teil des
+            # Eigenverbrauchs, aber mit eigenem Wert.
+            "diverted": umleiter.get("energy"),
             "own": eigenverbrauch_kwh(
                 erzeugung,
                 netz["export_energy"],
@@ -295,6 +303,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "currency": conf[CONF_CURRENCY],
                 "prior_import": conf[CONF_PRIOR_IMPORT],
                 "prior_price": conf[CONF_PRIOR_PRICE],
+                "diverted": umleiter.get("price"),
             },
             {
                 "import": netz["import_power"],
@@ -721,6 +730,13 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 p = -p
             if p is not None:
                 phasen_summe.append(p)
+            erzeugung = self._phasen_erzeugung(anlagen, phase)
+            # Was auf dieser Phase im Haus bleibt - dieselbe Rechnung wie für
+            # das ganze Haus, nur eine Etage tiefer: Was die Wechselrichter
+            # hier abgeben, plus das, was hier vom Netz kommt.
+            hier = None
+            if erzeugung is not None or p is not None:
+                hier = max(0.0, (erzeugung or 0.0) + (p or 0.0))
             phasen[phase] = {
                 "power": units.rund(p),
                 "voltage": units.rund(
@@ -729,11 +745,17 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "current": units.rund(
                     units.ampere(self.hass, conf[CONF_PHASE_CURRENT.format(phase=phase)]), 2
                 ),
-                "pv_power": units.rund(self._phasen_erzeugung(anlagen, phase)),
+                "pv_power": units.rund(erzeugung),
+                "house_power": units.rund(hier),
                 "entities": {
                     "power": conf[CONF_PHASE_POWER.format(phase=phase)],
                     "voltage": conf[CONF_PHASE_VOLTAGE.format(phase=phase)],
                     "current": conf[CONF_PHASE_CURRENT.format(phase=phase)],
+                    # Hängt genau ein Wechselrichter an dieser Phase, ist die
+                    # "Erzeugung" sein eigener Sensor - dann darf die Karte
+                    # auch dorthin verweisen. Bei zweien ist es eine Summe,
+                    # und die gehört keinem.
+                    "pv_power": self._phasen_quelle(anlagen, phase),
                 },
             }
 
@@ -772,6 +794,18 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "frequency": conf[CONF_GRID_FREQUENCY],
             },
         }
+
+    @staticmethod
+    def _phasen_quelle(anlagen: list[dict[str, Any]], phase: str) -> str | None:
+        """Die Entität hinter der Erzeugung dieser Phase - wenn es nur eine gibt."""
+        quellen = [
+            anlage["inverter"]["entities"]["power"]
+            for anlage in anlagen
+            if anlage["inverter"]["enabled"]
+            and anlage["inverter"]["phase"] == phase
+            and anlage["inverter"]["entities"]["power"]
+        ]
+        return quellen[0] if len(quellen) == 1 else None
 
     @staticmethod
     def _phasen_erzeugung(anlagen: list[dict[str, Any]], phase: str) -> float | None:
@@ -951,9 +985,28 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             }
         )
 
+        # Der Überschussverbraucher: Seine Kilowattstunden sind Hausverbrauch
+        # wie jeder andere - sie fließen hinter dem Zähler und stehen in jedem
+        # Hausstromsensor mit drin. Getrennt geführt werden sie trotzdem, denn
+        # sie sparen keinen Strom, sondern Gas. Siehe kosten.py.
+        umleiter = {
+            "name": conf[CONF_DIVERTER_NAME],
+            "power": units.rund(units.watt(self.hass, conf[CONF_DIVERTER_POWER])),
+            "energy": units.rund(
+                units.kwh(self.hass, conf[CONF_DIVERTER_ENERGY]), 2
+            ),
+            "price": conf[CONF_DIVERTER_PRICE],
+            "enabled": bool(conf[CONF_DIVERTER_ENERGY] or conf[CONF_DIVERTER_POWER]),
+            "entities": {
+                "power": conf[CONF_DIVERTER_POWER],
+                "energy": conf[CONF_DIVERTER_ENERGY],
+            },
+        }
+
         return {
             "house_power": units.rund(verbrauch),
             "house_source": "sensor" if gemessen is not None else "calculated",
+            "diverter": umleiter,
             "house_energy": units.rund(units.kwh(self.hass, conf[CONF_HOUSE_ENERGY]), 2),
             "self_sufficiency": autarkie,
             "self_consumption": eigenverbrauch,

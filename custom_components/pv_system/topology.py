@@ -55,6 +55,10 @@ from .const import (
     CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
     CONF_DISPLAY,
+    CONF_DIVERTER_ENERGY,
+    CONF_DIVERTER_NAME,
+    CONF_DIVERTER_POWER,
+    CONF_DIVERTER_PRICE,
     CONF_ENABLED,
     CONF_FEED_IN_PRICE,
     CONF_GRID,
@@ -117,6 +121,7 @@ from .const import (
     CONF_TILT,
     DEFAULT_CAPACITY,
     DEFAULT_CURRENCY,
+    DEFAULT_DIVERTER_NAME,
     DEFAULT_MIN_SOC,
     DEFAULT_MODULE_COUNT,
     DEFAULT_MODULE_PEAK,
@@ -377,6 +382,10 @@ def haus_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         CONF_HOUSE_POWER: _entity(roh.get(CONF_HOUSE_POWER)),
         CONF_HOUSE_ENERGY: _entity(roh.get(CONF_HOUSE_ENERGY)),
         CONF_HOUSE_CALCULATE: bool(roh.get(CONF_HOUSE_CALCULATE, True)),
+        CONF_DIVERTER_NAME: roh.get(CONF_DIVERTER_NAME) or DEFAULT_DIVERTER_NAME,
+        CONF_DIVERTER_POWER: _entity(roh.get(CONF_DIVERTER_POWER)),
+        CONF_DIVERTER_ENERGY: _entity(roh.get(CONF_DIVERTER_ENERGY)),
+        CONF_DIVERTER_PRICE: _zahl(roh.get(CONF_DIVERTER_PRICE), None),
     }
 
 

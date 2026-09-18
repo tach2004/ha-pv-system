@@ -763,6 +763,30 @@ def spiegel_kennungen(coordinator: PvSystemCoordinator) -> set[str]:
     return gefunden
 
 
+def aufraeumen(hass: HomeAssistant, entry: PvSystemConfigEntry) -> list[str]:
+    """Doppelte Sensoren abschalten und zurückgeben, welche es waren.
+
+    Gemeinsamer Kern von Dienst und Schaltfläche. Abgeschaltet wird nur, was
+    gerade eingeschaltet ist und was die Integration heute als Wiederholung
+    ansieht; gelöscht wird nichts. Wer eine Entität von Hand wieder
+    einschaltet, behält sie - bis jemand das hier erneut aufruft.
+    """
+    from homeassistant.helpers import entity_registry as er
+
+    kennungen = spiegel_kennungen(entry.runtime_data)
+    registry = er.async_get(hass)
+    betroffen = [
+        eintrag
+        for eintrag in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if eintrag.unique_id in kennungen and eintrag.disabled_by is None
+    ]
+    for eintrag in betroffen:
+        registry.async_update_entity(
+            eintrag.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+        )
+    return sorted(eintrag.entity_id for eintrag in betroffen)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: PvSystemConfigEntry,

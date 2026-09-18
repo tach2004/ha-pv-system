@@ -18,6 +18,11 @@
     }
   },
   "entity": {
+    "button": {
+      "tidy_entities": {
+        "name": "Turn off duplicate sensors"
+      }
+    },
     "sensor": {
       "balance_day": {
         "name": "Balance today"
@@ -404,11 +409,19 @@
       "house": {
         "data": {
           "calculate": "Calculate house consumption",
+          "diverter_energy_entity": "Surplus load meter",
+          "diverter_name": "Surplus load",
+          "diverter_power_entity": "Surplus load power",
+          "diverter_price": "Value per kWh",
           "energy_entity": "Consumption meter",
           "power_entity": "Measured house consumption"
         },
         "data_description": {
           "calculate": "Consumption = inverter power + grid power. A measured value takes precedence.",
+          "diverter_energy_entity": "This load's meter reading in kWh. These kilowatt hours are house consumption like any other - but they do not save electricity, they save the fuel that would otherwise do the heating. That is why they are valued separately.",
+          "diverter_name": "What the load is called on the card, e.g. “immersion heater”.",
+          "diverter_power_entity": "What the surplus load currently draws - the immersion heater in the hot water tank, the wallbox in surplus charging. Display only; the meter below is what counts for the calculation.",
+          "diverter_price": "What one diverted kilowatt hour is really worth: the price of the replaced fuel divided by the boiler's efficiency. At 0.11 €/kWh gas and 92 % that is about 0.12. Empty: the energy price applies - and the system looks better off than it is.",
           "energy_entity": "kWh meter of house consumption, if available. It is the second route to self-consumption when no yield meter exists.",
           "power_entity": "A measured house consumption, if you have one. It takes precedence over the calculation. Empty is the normal case."
         },
@@ -623,6 +636,11 @@
         }
       },
       "name": "Remove plant"
+    },
+    "reset_costs": {
+      "description": "Discards everything measured since the first run and starts again from today's meter readings. Meant for the case where nonsensical amounts end up in the total - after a meter swap, for instance. What is in the configuration stays: yield before, import before, commissioning. Day, month and year heal by themselves anyway.",
+      "fields": {},
+      "name": "Reset cost counters"
     },
     "set_battery": {
       "description": "Change capacity and nominal voltage of a battery.",
