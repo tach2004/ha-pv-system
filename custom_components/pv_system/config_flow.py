@@ -71,12 +71,14 @@ from .const import (
     CONF_CURRENCY_PRICE,
     CONF_CURRENCY_PRICE_ENTITY,
     CONF_DISPLAY,
+    CONF_DIVERTER_EFFICIENCY,
     CONF_DIVERTER_ENERGY,
     CONF_DIVERTER_FUEL,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
     CONF_DIVERTER_PRICE_ENTITY,
+    CONF_DIVERTER_PRICE_UNIT,
     CONF_DIVERTER_SOLAR_ENERGY,
     CONF_DIVERTER_SOLAR_POWER,
     CONF_ENABLED,
@@ -143,6 +145,7 @@ from .const import (
     DEFAULT_NAME,
     DEFAULT_PLANT_NAME,
     DIVERTER_FUELS,
+    DIVERTER_PRICE_UNITS,
     DOMAIN,
     GRID_SIGNS,
     PHASES,
@@ -364,8 +367,12 @@ def _felder_haus() -> dict[Any, Any]:
         vol.Optional(CONF_DIVERTER_SOLAR_POWER): _sensor("power", mehrere=True),
         vol.Optional(CONF_DIVERTER_SOLAR_ENERGY): _sensor("energy", mehrere=True),
         vol.Optional(CONF_DIVERTER_FUEL): _auswahl(DIVERTER_FUELS, "diverter_fuel"),
-        vol.Optional(CONF_DIVERTER_PRICE): _zahl(0, 10, "any"),
+        vol.Optional(CONF_DIVERTER_PRICE): _zahl(0, 10000, "any"),
         vol.Optional(CONF_DIVERTER_PRICE_ENTITY): _sensor(),
+        vol.Optional(CONF_DIVERTER_PRICE_UNIT): _auswahl(
+            DIVERTER_PRICE_UNITS, "diverter_price_unit"
+        ),
+        vol.Optional(CONF_DIVERTER_EFFICIENCY): _zahl(10, 800, 1, "%"),
     }
 
 

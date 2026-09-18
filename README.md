@@ -225,6 +225,21 @@ eingespeist*, sobald ein Ertragszähler eingetragen ist – sonst aus
 Der anteilige Grundpreis steht in der Karte als eigene Zeile. Ohne sie stünde
 an einem Tag ohne Netzbezug ein Betrag, den niemand erklären kann.
 
+**Die Bilanz ist am Anfang negativ, und das ist richtig.** Sie ist kein Gewinn,
+sondern *was der Strom unterm Strich gekostet hat*: Ertrag minus Bezugskosten.
+Wer mehr aus dem Netz holt, als die Anlage einspeist und spart, bleibt im
+Minus – bei den meisten Häusern das ganze Jahr über. Positiv wird sie im
+Tageswert an einem sonnigen Tag, im Jahreswert bei einer sehr großen Anlage.
+Die Frage „lohnt sich die Anlage?" beantwortet nicht die Bilanz, sondern die
+**Amortisation**: Ertrag seit Inbetriebnahme gegen Investition.
+
+**Der Grundpreis läuft über die gemessene Zeit, nicht über die Laufzeit der
+Anlage.** Der Gesamtzeitraum beginnt mit der ältesten Inbetriebnahme – daran
+hängt die Amortisation. Für die Jahre davor ist aber kein Netzentgelt bekannt
+(„Bezug davor" trägt nur den Arbeitspreis), und ein Grundpreis über Jahre, in
+denen nichts gemessen wurde, ist eine erfundene Zahl. Gerechnet wird er
+deshalb ab dem ersten Lauf – und nach einem *Kostenzähler leeren* ab da.
+
 ### Je Anlage
 
 Investition, Inbetriebnahmedatum, eine abweichende Einspeisevergütung und die
@@ -257,48 +272,54 @@ weil Überschuss da ist, und dabei Energie in einen Speicher legt**: warmes
 Wasser, ein Pufferspeicher, eine Autobatterie, ein Hausspeicher hinter dem
 Zähler. Der Kühlschrank gehört nicht dazu – der läuft sowieso.
 
-**Was ersetzt wird, wählst du aus.** Im Feld *Ersetzt* stehen Gas, Heizöl,
-Pellets oder Holz, Fernwärme, Wärmepumpe und „Nichts – es bleibt Strom“.
+**Was ersetzt wird, wählst du aus.** Im Feld *Ersetzt* stehen Erdgas,
+Flüssiggas, Heizöl, Pellets oder Holz, Fernwärme, Wärmepumpe und „Nichts – es
+bleibt Strom“. Die letzte Auswahl ist der Speicherfall: Ein Hausspeicher oder
+ein Auto verbrennt nichts, es verschiebt Strom nach später. Dann ist eine
+Kilowattstunde genau den Arbeitspreis wert, und die Preisfelder werden
+ignoriert.
 
-**Der Preis ist deiner, nicht meiner.** Die Zahlen unten sind nur der Rechenweg
-– einsetzen musst du, was du bezahlst.
+**Du trägst den Preis ein, wie er auf deiner Rechnung steht** – je Liter, je
+Kubikmeter, je Kilogramm, je Tonne oder je Kilowattstunde. Umrechnen ist Arbeit
+der Integration; niemand soll einen Heizwert im Kopf haben müssen.
 
-| Ersetzt | Wert je kWh | Rechenweg |
+Drei Felder gehören zusammen:
+
+| Feld | Was hinein gehört |
+|---|---|
+| **Preis des Ersetzten** | die Zahl von der Rechnung, oder – besser – eine **Entität**, die sie liefert |
+| **… je** | die Einheit, in der abgerechnet wird |
+| **Wirkungsgrad** | was die ersetzte Heizung aus ihrem Brennstoff macht, in Prozent |
+
+Daraus wird:
+
+    Wert je kWh = Preis je Einheit ÷ kWh je Einheit ÷ Wirkungsgrad
+
+Die Heizwerte stecken in der Integration:
+
+| Brennstoff | Einheiten | kWh je Einheit |
 |---|---|---|
-| Erdgas | Gaspreis je kWh ÷ Kesselwirkungsgrad | 0,11 ÷ 0,92 ≈ **0,12** |
-| Flüssiggas | Literpreis ÷ 6,6 kWh/l ÷ Wirkungsgrad | 0,80 ÷ 6,6 ÷ 0,92 ≈ **0,13** |
-| Heizöl | Literpreis ÷ 10 kWh/l ÷ Wirkungsgrad | 1,00 ÷ 10 ÷ 0,9 ≈ **0,11** |
-| Pellets oder Holz | Tonnenpreis ÷ 4800 kWh/t ÷ Wirkungsgrad | 350 ÷ 4800 ÷ 0,9 ≈ **0,08** |
-| Fernwärme | Arbeitspreis des Wärmeliefervertrags | z. B. **0,13** |
-| Wärmepumpe | Arbeitspreis ÷ Jahresarbeitszahl | 0,34 ÷ 3,5 ≈ **0,10** |
-| Nichts – es bleibt Strom | Arbeitspreis; die Preisfelder werden ignoriert | Hausspeicher, Auto |
+| Erdgas | kWh, m³ | 1 · 10 |
+| Flüssiggas | kWh, Liter, kg, m³ | 1 · 6,57 · 12,87 · 25,9 |
+| Heizöl | kWh, Liter, kg, Tonne | 1 · 10 · 11,9 · 11900 |
+| Pellets oder Holz | kWh, kg, Tonne | 1 · 4,8 · 4800 |
+| Fernwärme, Wärmepumpe | kWh | 1 |
 
-Erdgas rechnet die Gasrechnung meist schon in Kilowattstunden ab; steht dort
-nur ein Zählerstand in Kubikmetern, ist die Kilowattstundenzahl ungefähr das
-Zehnfache (Brennwert mal Zustandszahl). Flüssiggas wird in Litern oder
-Kilogramm verkauft und kostet pro Kilowattstunde regelmäßig mehr – deshalb
-steht es als eigene Auswahl da.
+Passt die Einheit nicht zum Brennstoff – Heizöl je Kubikmeter gibt es nicht –,
+wird nichts umgerechnet und es gilt der Arbeitspreis: lieber keine Zahl als eine
+erfundene.
 
-**Auch dieser Preis darf aus einer Entität kommen.** Gas und Öl schwanken am
-Markt wie Strom, und wer einen Preissensor im Haus hat, soll ihn nicht zweimal
-pflegen: Das Feld *Wert je kWh des Ersetzten: Entität statt fester Zahl* hat
-Vorrang vor der festen Zahl daneben. Gemeint ist der Wert **nach**
-Wirkungsgrad – ein Sensor mit dem reinen Gaspreis ist um den Kesselwirkungsgrad
-zu niedrig, dafür genügt ein Template-Sensor, der einmal teilt.
+Beim **Wirkungsgrad** gilt für einen Gasbrennwertkessel rund 92, für einen
+älteren Kessel 80 bis 88, für Fernwärme 100 (übergeben wird Wärme, nicht
+Brennstoff). Die **Wärmepumpe ist der Sonderfall, der alles erklärt**: Dort
+steht die Jahresarbeitszahl mal hundert, bei JAZ 3,5 also 350. Sie macht aus
+einer Kilowattstunde Strom dreieinhalb Kilowattstunden Wärme – ein Heizstab nur
+eine. In einem Haus mit Wärmepumpe ist der Überschuss im Heizstab deshalb rund
+ein Drittel wert, und genau so wenig rechnet die Integration gut.
 
-Die Wärmepumpe ist der Fall, der überrascht: Sie macht aus einer Kilowattstunde
-dreieinhalb. Wer den Überschuss stattdessen in einen Heizstab schickt, macht aus
-einer Kilowattstunde eine – der Heizstab *ersetzt* dort also nur ein Drittel
-seines eigenen Werts. Genau das steht dann im Feld, und genau so wenig rechnet
-die Integration gut.
-
-Bei Gas und 0,12 € statt 0,34 €: Wer 250 kWh in den Heizstab schickt, spart
-damit etwa 30 €, nicht 85. Der Unterschied ist kein Rundungsfehler – er macht in
-diesem Beispiel die Hälfte der Ersparnis aus.
-
-**Mehrere sind erlaubt.** Zwei Heizstäbe an derselben Gasheizung sparen
-denselben Brennstoff; ihre Leistungen und Zähler werden addiert und teilen sich
-einen Wertansatz.
+**Nimm die Entität, wenn es sie gibt.** Gas und Öl schwanken am Markt wie
+Strom; eine feste Zahl ist morgen falsch. Die Entität hat Vorrang und wird
+genauso umgerechnet – sie liefert denselben Preis in derselben Einheit.
 
 #### Wenn der Verbraucher auch mal am Netz hängt
 
@@ -497,8 +518,10 @@ Das ist der Hausanschluss: ein Zähler für alles, was rein- und rausgeht.
 | **Davon aus PV/Batterie: Leistung** | W, mehrere | Der Anteil, der gerade aus der eigenen Anlage kommt. Trennt Sommer- von Winterbetrieb | Alles gilt als Überschuss |
 | **Davon aus PV/Batterie: Zähler** | kWh, mehrere | Dasselbe als Zählerstand. Ist er gesetzt, geht nur er in die Ersparnis ein – der Rest ist Netzbezug zum Arbeitspreis | Alles gilt als Überschuss |
 | **Ersetzt** | Auswahl | Erdgas, Flüssiggas, Heizöl, Pellets, Fernwärme, Wärmepumpe oder „Nichts – es bleibt Strom“. Bei „Strom“ werden die Preisfelder ignoriert | Erdgas |
-| **Wert je kWh des Ersetzten: feste Zahl** | Geld | Was eine umgeleitete kWh wirklich wert ist: Preis des Ersetzten ÷ Wirkungsgrad (bei der Wärmepumpe ÷ JAZ) | Es gilt der Arbeitspreis |
-| **… : Entität statt fester Zahl** | Entität | Für Preise, die am Markt schwanken. Hat Vorrang; gemeint ist der Wert **nach** Wirkungsgrad | Nur die feste Zahl |
+| **Preis des Ersetzten: feste Zahl** | Geld | Der Preis von der Rechnung, **nicht umgerechnet** | Es gilt der Arbeitspreis |
+| **… : je** | Auswahl | kWh, Liter, m³, kg oder Tonne – die Einheit, in der abgerechnet wird | kWh |
+| **… : Entität statt fester Zahl** | Entität | Für Preise, die am Markt schwanken. Hat Vorrang, wird genauso umgerechnet | Nur die feste Zahl |
+| **Wirkungsgrad der ersetzten Heizung** | % | Gasbrennwert rund 92, alter Kessel 80–88, Fernwärme 100, **Wärmepumpe = JAZ × 100** | 100 (nicht umrechnen) |
 
 ### Kosten und Ertrag (Standort)
 

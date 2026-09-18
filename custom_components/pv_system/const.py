@@ -168,6 +168,40 @@ DEFAULT_DIVERTER_FUEL: Final = FUEL_GAS
 # hat, soll ihn nicht zweimal pflegen. Vorrang vor der festen Zahl daneben.
 CONF_DIVERTER_PRICE_ENTITY: Final = "diverter_price_entity"
 
+# Eingetragen wird der Preis so, wie er auf der Rechnung steht: je Liter, je
+# Kubikmeter, je Kilogramm, je Tonne oder je Kilowattstunde. Umrechnen ist
+# Arbeit der Integration - niemand soll einen Heizwert im Kopf haben muessen,
+# und ein Preissensor liefert ohnehin die Einheit seines Marktes.
+CONF_DIVERTER_PRICE_UNIT: Final = "diverter_price_unit"
+UNIT_KWH: Final = "kwh"
+UNIT_LITER: Final = "liter"
+UNIT_M3: Final = "m3"
+UNIT_KG: Final = "kg"
+UNIT_TON: Final = "ton"
+DIVERTER_PRICE_UNITS: Final = [UNIT_KWH, UNIT_LITER, UNIT_M3, UNIT_KG, UNIT_TON]
+DEFAULT_DIVERTER_PRICE_UNIT: Final = UNIT_KWH
+
+# Wie viele Kilowattstunden in einer Einheit stecken. Je Brennstoff, weil ein
+# Liter Heizoel und ein Liter Fluessiggas nicht dasselbe sind.
+#
+# Die Zahlen sind die ueblichen Heizwerte; sie schwanken je nach Qualitaet um
+# ein paar Prozent. Wer es genauer braucht, traegt den Preis gleich je
+# Kilowattstunde ein - dann rechnet hier niemand mehr.
+HEIZWERT: Final[dict[str, dict[str, float]]] = {
+    FUEL_GAS: {UNIT_KWH: 1.0, UNIT_M3: 10.0},
+    FUEL_LPG: {UNIT_KWH: 1.0, UNIT_LITER: 6.57, UNIT_KG: 12.87, UNIT_M3: 25.9},
+    FUEL_OIL: {UNIT_KWH: 1.0, UNIT_LITER: 10.0, UNIT_KG: 11.9, UNIT_TON: 11900.0},
+    FUEL_PELLETS: {UNIT_KWH: 1.0, UNIT_KG: 4.8, UNIT_TON: 4800.0},
+    FUEL_DISTRICT: {UNIT_KWH: 1.0},
+    FUEL_HEATPUMP: {UNIT_KWH: 1.0},
+}
+
+# Wirkungsgrad in Prozent. Ein Gaskessel macht aus 100 kWh Gas rund 92 kWh
+# Waerme; eine Waermepumpe macht aus 100 kWh Strom 350 kWh Waerme, ihre
+# Jahresarbeitszahl mal hundert. Dieselbe Zahl, dasselbe Rechnen.
+CONF_DIVERTER_EFFICIENCY: Final = "diverter_efficiency"
+DEFAULT_DIVERTER_EFFICIENCY: Final = 100.0
+
 # ----------------------------------------------------------------- Darstellung
 CONF_ANIMATE: Final = "animate"
 CONF_SHOW_STRINGS: Final = "show_strings"

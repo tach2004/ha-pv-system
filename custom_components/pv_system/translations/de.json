@@ -412,12 +412,14 @@
       "house": {
         "data": {
           "calculate": "Hausverbrauch rechnen",
+          "diverter_efficiency": "Wirkungsgrad der ersetzten Heizung",
           "diverter_energy_entity": "Zähler Überschussverbraucher",
           "diverter_fuel": "Ersetzt",
           "diverter_name": "Überschussverbraucher",
           "diverter_power_entity": "Leistung Überschussverbraucher",
-          "diverter_price": "Wert je kWh des Ersetzten: feste Zahl",
-          "diverter_price_entity": "Wert je kWh des Ersetzten: Entität statt fester Zahl",
+          "diverter_price": "Preis des Ersetzten: feste Zahl",
+          "diverter_price_entity": "Preis des Ersetzten: Entität statt fester Zahl",
+          "diverter_price_unit": "Preis des Ersetzten: je",
           "diverter_solar_energy_entity": "Davon aus PV/Batterie: Zähler",
           "diverter_solar_power_entity": "Davon aus PV/Batterie: Leistung",
           "energy_entity": "Verbrauchszähler",
@@ -425,12 +427,14 @@
         },
         "data_description": {
           "calculate": "Verbrauch = Wechselrichterleistung + Netzleistung. Ein gemessener Hausverbrauch hat Vorrang.",
+          "diverter_efficiency": "Wie viel Wärme die **ersetzte** Heizung aus ihrem Brennstoff macht, in Prozent. Sie braucht mehr als eine Kilowattstunde Brennstoff für eine Kilowattstunde Wärme - genau darum geht es.\n\n• Gasbrennwertkessel: rund **92**\n• Älterer Gas- oder Ölkessel: **80** bis **88**\n• Pelletkessel: rund **90**\n• Fernwärme: **100** - übergeben wird Wärme, nicht Brennstoff\n• **Wärmepumpe: die Jahresarbeitszahl mal hundert.** Bei JAZ 3,5 also 350. Sie macht aus einer Kilowattstunde Strom dreieinhalb Kilowattstunden Wärme - ein Heizstab nur eine. Deshalb ist der Überschuss in einem Haus mit Wärmepumpe deutlich weniger wert, und das soll die Rechnung auch sagen.\n\n100 heißt: nicht umrechnen.",
           "diverter_energy_entity": "kWh-Zähler dieser Verbraucher. **Mehrere sind erlaubt** - sie werden addiert.\n\nDiese Kilowattstunden fließen wirklich im Haus. Ob sie Geld sparen, hängt davon ab, was sie ersetzen: Wer damit statt mit Gas heizt, spart Gas und nicht Strom - deshalb werden sie in der Ersparnis getrennt bewertet, mit den beiden Feldern weiter unten.\n\nLeer: Der Überschuss zählt wie jeder andere Eigenverbrauch.",
           "diverter_fuel": "Was dieser Verbraucher ersetzt. Davon hängt ab, was eine umgeleitete Kilowattstunde wert ist.\n\nErdgas, Flüssiggas, Öl, Pellets, Fernwärme oder Wärmepumpe: Der Wert ist der Preis dieses Brennstoffs je kWh - siehe die Felder darunter.\n\n„Nichts - es bleibt Strom“: Ein Hausspeicher oder ein Auto verbrennt nichts, es verschiebt Strom nach später. Dann ist eine Kilowattstunde genau den Arbeitspreis wert, und die Felder darunter werden ignoriert.",
           "diverter_name": "Wie der Verbraucher in der Karte heißen soll, z. B. „Heizstab“.",
           "diverter_power_entity": "Was die Überschussverbraucher gerade ziehen - der Heizstab im Brauchwasserspeicher, die Wallbox im Überschussladen, der Pufferspeicher der Wärmepumpe. **Mehrere sind erlaubt**; sie werden addiert.\n\nGemeint ist alles, was nur läuft, **weil** Überschuss da ist, und dabei Energie in einen Speicher legt - warmes Wasser, eine Autobatterie, ein Pufferspeicher. Ein Kühlschrank gehört nicht dazu: Der läuft sowieso.\n\nDiese Leistung wird vom Hausverbrauch abgezogen und ergibt den **Grundverbrauch** - das, was dein Haushalt ohne den Überschuss gebraucht hätte. Autarkie und Eigenverbrauch rechnen weiter auf dem **ganzen** Hausverbrauch; der Grundverbrauch steht daneben, weil nur er von Monat zu Monat vergleichbar ist.",
-          "diverter_price": "Was **eine Kilowattstunde des Ersetzten** kostet, geteilt durch den Wirkungsgrad. Dein Preis, nicht irgendeiner - die Zahlen hier sind nur Rechenwege:\n\n• **Erdgas** 0,11 €/kWh ÷ 0,92 Kessel → rund **0,12**. Die Gasrechnung weist kWh aus; Kubikmeter mal Brennwert (rund 10) ergibt kWh.\n• **Flüssiggas** 0,80 €/l ÷ 6,6 kWh/l ÷ 0,92 → rund **0,13**\n• **Heizöl** 1,00 €/l ÷ 10 kWh/l ÷ 0,9 → rund **0,11**\n• **Pellets** 350 €/t ÷ 4800 kWh/t ÷ 0,9 → rund **0,08**\n• **Fernwärme**: der Arbeitspreis deines Wärmevertrags\n• **Wärmepumpe**: Arbeitspreis ÷ Jahresarbeitszahl, bei 0,34 € und JAZ 3,5 → rund **0,10**. Sie macht aus einer Kilowattstunde dreieinhalb - ein Heizstab nur eine.\n\nLeer: Es gilt der Arbeitspreis, und die Anlage rechnet sich reicher, als sie ist.",
-          "diverter_price_entity": "Eine Entität, die diesen Wert liefert - für alles, was am Markt schwankt. Gas und Öl tun das wie Strom, und wer den Preis ohnehin schon als Sensor im Haus hat, soll ihn nicht zweimal pflegen.\n\nSie hat Vorrang vor der festen Zahl darüber; meldet sie gerade nichts Brauchbares, gilt wieder die Zahl. **Achtung:** Gemeint ist der Wert je kWh *nach* Wirkungsgrad. Ein Sensor, der den reinen Gaspreis liefert, ist um den Kesselwirkungsgrad zu niedrig - dafür genügt ein Vorlagensensor, der einmal teilt.",
+          "diverter_price": "Der Preis, **wie er auf deiner Rechnung steht** - nicht umgerechnet. Umrechnen ist Arbeit der Integration: Wie viele Kilowattstunden in einem Liter, einem Kubikmeter oder einer Tonne stecken, weiß sie, und den Wirkungsgrad fragt sie darunter ab.\n\nWelche Einheit gemeint ist, sagst du im Feld daneben. Erdgas wird meist je kWh oder je m³ abgerechnet, Flüssiggas je Liter oder Kilogramm, Heizöl je Liter, Pellets je Tonne, Fernwärme je kWh.\n\nWeil sich das ständig ändert, ist das Feld darunter meistens das bessere: eine Entität, die den Preis liefert.\n\nLeer: Es gilt der Arbeitspreis, und die Anlage rechnet sich reicher, als sie ist.",
+          "diverter_price_entity": "Eine Entität, die diesen Preis liefert - **der bessere Weg für alles, was am Markt schwankt.** Gas und Öl tun das wie Strom; eine feste Zahl ist morgen falsch.\n\nSie hat Vorrang vor der festen Zahl darüber; meldet sie gerade nichts Brauchbares, gilt wieder die Zahl. Gemeint ist derselbe Preis in derselben Einheit - umgerechnet wird auch hier automatisch.",
+          "diverter_price_unit": "Worauf sich der Preis bezieht - **genau so, wie er abgerechnet wird**. Die Integration rechnet daraus Kilowattstunden:\n\n• Erdgas: je kWh oder je m³ (rund 10 kWh je m³)\n• Flüssiggas: je Liter (6,57 kWh), je kg (12,87 kWh)\n• Heizöl: je Liter (10 kWh), je kg (11,9 kWh)\n• Pellets: je kg (4,8 kWh) oder je Tonne (4800 kWh)\n• Fernwärme und Wärmepumpe: je kWh\n\nPasst die Einheit nicht zum Brennstoff - Heizöl je Kubikmeter gibt es nicht -, wird nichts umgerechnet und es gilt der Arbeitspreis. Lieber keine Zahl als eine erfundene.\n\nDie Heizwerte sind die üblichen; je nach Qualität schwanken sie um ein paar Prozent. Wer es genauer braucht, trägt den Preis gleich je Kilowattstunde ein.",
           "diverter_solar_energy_entity": "Dasselbe als kWh-Zähler: die Kilowattstunden des Verbrauchers, die aus PV oder Batterie kamen. **Mehrere sind erlaubt.**\n\nIst er gesetzt, geht nur dieser Zähler in die Ersparnis ein - der Rest ist ganz normaler Netzbezug zum Arbeitspreis.",
           "diverter_solar_power_entity": "**Nur wenn du es getrennt messen kannst.** Der Teil der Leistung oben, der gerade aus PV oder Batterie kommt.\n\nWarum das zählt: Ein Heizstab heizt im Juli mit Überschuss und im Januar mit Netzstrom. Dieselbe Kilowattstunde ist einmal geschenkte Energie und einmal eine Rechnung über den vollen Arbeitspreis. Nur der Teil, der aus der eigenen Anlage kam, wird mit dem Preis des Ersetzten bewertet.\n\nLeer: Es gilt, was der Name sagt - alles kam aus Überschuss. Für einen echten Überschussregler stimmt das auch.",
           "energy_entity": "Ein kWh-Zähler über **alles, was im Haus verbraucht wurde** - Netzbezug *und* selbst genutzter Solarstrom zusammen. Nicht der Bezugszähler: Der steht unter „Netz und Zähler“ und zählt nur, was aus dem Netz kam.\n\nWozu: Er ist der zweite Weg zum Eigenverbrauch. Normalerweise rechnet die Integration „erzeugt minus eingespeist“; hast du keinen Ertragszähler, greift stattdessen „verbraucht minus bezogen“ - und dafür wird er gebraucht.\n\nLeer: völlig in Ordnung, solange deine Anlagen einen Ertragszähler haben.",
@@ -629,6 +633,15 @@
         "lpg": "Flüssiggas",
         "oil": "Heizöl",
         "pellets": "Pellets oder Holz"
+      }
+    },
+    "diverter_price_unit": {
+      "options": {
+        "kg": "Kilogramm",
+        "kwh": "Kilowattstunde (kWh)",
+        "liter": "Liter",
+        "m3": "Kubikmeter (m³)",
+        "ton": "Tonne"
       }
     },
     "grid_sign": {
