@@ -25,6 +25,7 @@ from . import units
 from .const import (
     CONF_AZIMUTH,
     CONF_BASE_PRICE,
+    CONF_BASE_PRICE_ENTITY,
     CONF_BATTERY,
     CONF_BATTERY_CHARGED,
     CONF_BATTERY_CURRENT,
@@ -58,12 +59,14 @@ from .const import (
     CONF_COSTS,
     CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
+    CONF_CURRENCY_PRICE_ENTITY,
     CONF_DIVERTER_ENERGY,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
     CONF_ENABLED,
     CONF_FEED_IN_PRICE,
+    CONF_FEED_IN_PRICE_ENTITY,
     CONF_GRID,
     CONF_GRID_EXPORT_ENERGY,
     CONF_GRID_EXPORT_POWER,
@@ -297,9 +300,17 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self.kosten.rechnen(
             zaehler,
             {
-                "price": conf[CONF_CURRENCY_PRICE],
-                "feed_in": conf[CONF_FEED_IN_PRICE],
-                "base": conf[CONF_BASE_PRICE],
+                # Die Entität hat Vorrang: Wer einen dynamischen Tarif hat,
+                # trägt die feste Zahl nur als Rückfall ein.
+                "price": self._preis(
+                    conf[CONF_CURRENCY_PRICE_ENTITY], conf[CONF_CURRENCY_PRICE]
+                ),
+                "feed_in": self._preis(
+                    conf[CONF_FEED_IN_PRICE_ENTITY], conf[CONF_FEED_IN_PRICE]
+                ),
+                "base": self._preis(
+                    conf[CONF_BASE_PRICE_ENTITY], conf[CONF_BASE_PRICE]
+                ),
                 "currency": conf[CONF_CURRENCY],
                 "prior_import": conf[CONF_PRIOR_IMPORT],
                 "prior_price": conf[CONF_PRIOR_PRICE],
@@ -795,6 +806,21 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             },
         }
 
+    def _preis(self, entitaet: str | None, fest: float | None) -> float | None:
+        """Ein Preis aus einer Entität, sonst die eingetragene Zahl.
+
+        Ohne Einheitenumrechnung: Ein Preissensor meldet €/kWh, und was das
+        für eine Währung ist, weiß nur der Mensch davor. Meldet er gerade
+        nichts Brauchbares - ein Tarifabruf hängt, der Sensor ist
+        "unavailable" -, gilt die feste Zahl. Lieber mit dem alten Preis
+        rechnen als gar nicht.
+        """
+        if entitaet:
+            wert = units.raw(self.hass, entitaet)
+            if wert is not None:
+                return wert
+        return fest
+
     @staticmethod
     def _phasen_quelle(anlagen: list[dict[str, Any]], phase: str) -> str | None:
         """Die Entität hinter der Erzeugung dieser Phase - wenn es nur eine gibt."""
@@ -951,11 +977,27 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         verbrauch = units.first(gemessen, gerechnet)
 
+        # Die Autarkie rechnet auf dem Grundverbrauch, nicht auf allem. Ein
+        # Heizstab läuft nur, *weil* Überschuss da ist - ihn mitzuzählen hieße,
+        # die Quote mit dem eigenen Erfolg zu füttern: Je mehr man wegheizt,
+        # desto autarker sieht man aus. Der Grundverbrauch fragt das, was
+        # gemeint ist: Wie viel von dem, was das Haus wirklich braucht, kam
+        # nicht aus dem Netz?
+        umleiterleistung = units.add(
+            *(units.watt(self.hass, e) for e in conf[CONF_DIVERTER_POWER])
+        )
+        bezugsgroesse = verbrauch
+        if verbrauch is not None and umleiterleistung:
+            bezugsgroesse = max(0.0, verbrauch - umleiterleistung)
+
         autarkie = None
-        if verbrauch is not None and verbrauch > 0:
+        if bezugsgroesse is not None and bezugsgroesse > 0:
             bezug = netz["import_power"] or 0.0
             autarkie = round(
-                100.0 * max(0.0, min(verbrauch, verbrauch - bezug)) / verbrauch, 1
+                100.0
+                * max(0.0, min(bezugsgroesse, bezugsgroesse - bezug))
+                / bezugsgroesse,
+                1,
             )
 
         # Bezugsgröße für den Eigenverbrauch ist die erzeugte Leistung am Modul,
@@ -978,7 +1020,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # bekommen die abgeschlossene Stunde - siehe stunde.py.
         stunde = self.stunden.rechnen(
             {
-                "house": verbrauch,
+                "house": bezugsgroesse,
                 "import": netz["import_power"],
                 "export": netz["export_power"],
                 "yield": erzeugung,
@@ -991,11 +1033,13 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # sie sparen keinen Strom, sondern Gas. Siehe kosten.py.
         umleiter = {
             "name": conf[CONF_DIVERTER_NAME],
-            "power": units.rund(units.watt(self.hass, conf[CONF_DIVERTER_POWER])),
+            "power": units.rund(umleiterleistung),
             "energy": units.rund(
-                units.kwh(self.hass, conf[CONF_DIVERTER_ENERGY]), 2
+                units.add(*(units.kwh(self.hass, e) for e in conf[CONF_DIVERTER_ENERGY])),
+                2,
             ),
             "price": conf[CONF_DIVERTER_PRICE],
+            "count": len(conf[CONF_DIVERTER_POWER]) + len(conf[CONF_DIVERTER_ENERGY]),
             "enabled": bool(conf[CONF_DIVERTER_ENERGY] or conf[CONF_DIVERTER_POWER]),
             "entities": {
                 "power": conf[CONF_DIVERTER_POWER],
@@ -1003,8 +1047,17 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             },
         }
 
+        # Der Grundverbrauch: was das Haus gebraucht hätte, ohne dass jemand
+        # Überschuss in warmes Wasser gesteckt hat. Das ist die Zahl, die man
+        # von Monat zu Monat vergleicht - der Hausverbrauch darüber schwankt
+        # mit der Sonne, nicht mit dem Haushalt.
+        grund = verbrauch
+        if verbrauch is not None and umleiterleistung:
+            grund = max(0.0, verbrauch - umleiterleistung)
+
         return {
             "house_power": units.rund(verbrauch),
+            "base_power": units.rund(grund),
             "house_source": "sensor" if gemessen is not None else "calculated",
             "diverter": umleiter,
             "house_energy": units.rund(units.kwh(self.hass, conf[CONF_HOUSE_ENERGY]), 2),

@@ -220,6 +220,62 @@ def test_der_status_folgt_keinem_takt():
     assert len(geschrieben) == 5
 
 
+# --------------------------------------------------- Grundverbrauch und Preise
+
+
+def test_grundverbrauch_zieht_die_ueberschussverbraucher_ab():
+    """Der Heizstab gehört zum Hausverbrauch, aber nicht zum Bedarf."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab1", "sensor.stab2"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.stab1", 900, "W")
+    hass.states.setzen("sensor.stab2", 600, "W")
+    hass.states.setzen("sensor.netz", 100, "W")
+    entry = ha_stubs.ConfigEntry("Zuhause", aufbau)
+    daten = PvSystemCoordinator(hass, entry)._berechnen()
+
+    haus = daten["house"]
+    assert haus["house_power"] == 2000.0
+    # Zwei Heizstäbe werden addiert.
+    assert haus["diverter"]["power"] == 1500.0
+    assert haus["base_power"] == 500.0
+    # Die Autarkie rechnet auf dem Grundverbrauch: 500 W Bedarf, 100 W vom Netz.
+    assert haus["self_sufficiency"] == 80.0
+
+
+def test_ohne_ueberschussverbraucher_bleibt_alles_wie_vorher():
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.netz", 100, "W")
+    entry = ha_stubs.ConfigEntry("Zuhause", _aufbau())
+    haus = PvSystemCoordinator(hass, entry)._berechnen()["house"]
+    assert haus["base_power"] == haus["house_power"] == 2000.0
+    assert haus["self_sufficiency"] == 95.0
+
+
+def test_der_preis_darf_aus_einer_entitaet_kommen():
+    """Ein dynamischer Tarif ändert sich stündlich - von Hand geht das nicht."""
+    aufbau = _aufbau(
+        costs={"price_per_kwh": 0.34, "price_entity": "sensor.tarif"}
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.tarif", 0.21)
+    entry = ha_stubs.ConfigEntry("Zuhause", aufbau)
+    k = PvSystemCoordinator(hass, entry)
+    assert k._preis("sensor.tarif", 0.34) == 0.21
+
+    # Meldet die Entität nichts Brauchbares, gilt wieder die feste Zahl.
+    hass.states.setzen("sensor.tarif", "unavailable")
+    assert k._preis("sensor.tarif", 0.34) == 0.34
+    assert k._preis(None, 0.34) == 0.34
+
+
 # ------------------------------------------------------------- Stundenwerte
 
 

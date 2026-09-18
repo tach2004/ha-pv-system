@@ -328,18 +328,24 @@
       "costs": {
         "data": {
           "base_price": "Grundpreis je Monat",
+          "base_price_entity": "Grundpreis aus Entität",
           "currency": "Währung",
+          "feed_in_entity": "Vergütung aus Entität",
           "feed_in_price": "Einspeisevergütung (Vorgabe)",
+          "price_entity": "Arbeitspreis aus Entität",
           "price_per_kwh": "Arbeitspreis",
-          "prior_import": "Bezug davor",
+          "prior_import": "Stand des Bezugszählers bei Einrichtung",
           "prior_price": "Durchschnittspreis davor"
         },
         "data_description": {
           "base_price": "Der monatliche Grundpreis deines Stromvertrags. Er wird anteilig auf Tag, Monat und Jahr verteilt. Leer oder 0, wenn er dich hier nicht interessiert.",
+          "base_price_entity": "Dasselbe für den Grundpreis.",
           "currency": "Das Währungskürzel, z. B. EUR oder CHF. Es wird als Einheit an den Geldsensoren geführt.",
+          "feed_in_entity": "Dasselbe für die Einspeisevergütung.",
           "feed_in_price": "Was du je eingespeister Kilowattstunde vergütet bekommst, z. B. 0,08. Leer lassen, wenn du nicht einspeist.",
+          "price_entity": "Eine Entität, die den Arbeitspreis liefert - für dynamische Tarife. Sie hat Vorrang vor der festen Zahl darüber; meldet sie gerade nichts, gilt wieder die Zahl. Leer: nur die feste Zahl.",
           "price_per_kwh": "Was eine Kilowattstunde aus dem Netz kostet, z. B. 0,34. Ohne diesen Preis rechnet die Integration keine Kosten und legt auch keine Geldsensoren an.",
-          "prior_import": "Wie viele Kilowattstunden du aus dem Netz bezogen hast, bevor die Integration zu zählen begann. Nur für den Gesamtzeitraum; Tag, Monat und Jahr bleiben davon unberührt.",
+          "prior_import": "**Der Stand deines Bezugszählers an dem Tag, an dem du diese Integration eingerichtet hast.** Eine einmalige Zahl, die du einmal abliest und dann nie wieder anfasst - kein Sensor.\n\nBeispiel: Dein Bezugszähler steht heute bei 5000 kWh, und du richtest heute ein. Dann trägst du 5000 ein.\n\nWozu: Die Integration zählt ab heute nur noch Differenzen. Ohne diese Zahl begänne der Gesamtzeitraum bei null Bezugskosten, und die Bilanz sähe besser aus, als sie ist. Tag, Monat und Jahr rührt sie nicht an.\n\nLeer: Der Gesamtzeitraum beginnt heute. Das ist richtig, wenn du nur ab jetzt rechnen willst.",
           "prior_price": "Was die Kilowattstunde im Schnitt gekostet hat, bevor die Integration zu zählen begann - Strom war vor drei Jahren nicht so teuer wie heute. Gilt nur für die Zeit davor. Leer: Es wird mit dem heutigen Preis gerechnet."
         },
         "description": "Gerechnet wird aus den Zählerständen, die du unter „Netz und Zähler“ eingetragen hast - nicht aus hochgerechneten Leistungen. Tag, Monat und Jahr laufen ab dem Zeitpunkt mit, an dem du hier einen Preis einträgst - für die Zeit davor sorgen die Angaben bei der jeweiligen Anlage.\n\nDen Preis darfst du jederzeit ändern: Bewertet wird immer nur, was seit der letzten Rechnung dazugekommen ist. Eine Preiserhöhung wirkt ab dem Tag, an dem du sie einträgst, und schreibt die Vergangenheit nicht um.\n\nWas eine Anlage gekostet hat und seit wann sie läuft, steht bei ihr selbst unter „Kosten dieser Anlage“. Die Investition des Standorts ist die Summe seiner Anlagen, sein Beginn die älteste Inbetriebnahme - beides muss hier niemand noch einmal eintragen.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
@@ -383,10 +389,10 @@
           "power_sign": "Vorzeichen der Leistung"
         },
         "data_description": {
-          "export_energy_entity": "Der Einspeisezähler in kWh. Grundlage für den Einspeiseerlös.",
+          "export_energy_entity": "Das Gegenstück: ein kWh-Zähler, der nur steigt und zählt, was ins Netz gegangen ist.\n\nDaraus entsteht der Einspeiseerlös. Bei mehreren Anlagen wird er nach dem Anteil an der Erzeugung aufgeteilt - messen kann man das nicht, am Hausanschluss hängt ein Zähler für alle.\n\nLeer: kein Erlös. Wer nie einspeist, lässt es leer.",
           "export_power_entity": "Gegenstück zur Bezugsleistung - ebenfalls nur bei getrennten Zählern nötig.",
           "frequency_entity": "Ein Feld genügt: Im Verbundnetz haben alle drei Phasen dieselbe Frequenz - sie sind starr miteinander gekoppelt. Ein Wert je Phase wäre dreimal dieselbe Zahl.",
-          "import_energy_entity": "Der Bezugszähler in kWh. Aus ihm entstehen die Bezugskosten für Tag, Monat und Jahr - ohne ihn bleibt die Kostenrechnung leer.",
+          "import_energy_entity": "**Der wichtigste Zähler der ganzen Integration.** Ein kWh-Zähler, der nur steigt und zählt, was du aus dem Netz geholt hast - in Home Assistant meist eine „Riemannsumme“ über die Bezugsleistung deines Zählers.\n\nDaraus entsteht alles Geld: Bezugskosten für Tag, Monat, Jahr und gesamt. Die Integration merkt sich seinen Stand beim ersten Lauf und rechnet ab da nur noch Differenzen - der Zähler darf also längst laufen, sein heutiger Stand kostet nichts.\n\nLeer: keine Bezugskosten, keine Bilanz, keine Amortisation.",
           "import_power_entity": "Nur nötig, wenn dein Zähler Bezug und Einspeisung getrennt meldet statt als eine Zahl mit Vorzeichen.",
           "l1_current_entity": "Strom auf L1 in A. Rein informativ.",
           "l1_power_entity": "Leistung auf L1. Leer lassen, wenn du nur den Summenzähler hast - dann zeichnet die Karte die Phasen nicht einzeln.",
@@ -418,12 +424,12 @@
         },
         "data_description": {
           "calculate": "Verbrauch = Wechselrichterleistung + Netzleistung. Ein gemessener Hausverbrauch hat Vorrang.",
-          "diverter_energy_entity": "Der Zählerstand dieses Verbrauchers in kWh. Diese Kilowattstunden sind Hausverbrauch wie jeder andere - sie sparen aber keinen Strom, sondern den Brennstoff, mit dem sonst geheizt würde. Deshalb werden sie getrennt bewertet.",
+          "diverter_energy_entity": "kWh-Zähler dieser Verbraucher. **Mehrere sind erlaubt** - sie werden addiert.\n\nDiese Kilowattstunden fließen wirklich im Haus, sie sparen aber keinen Strom, sondern den Brennstoff, mit dem sonst geheizt würde. Deshalb werden sie in der Ersparnis getrennt bewertet - mit dem Feld darunter.\n\nLeer: Der Überschuss zählt wie jeder andere Eigenverbrauch, und die Anlage rechnet sich reicher, als sie ist.",
           "diverter_name": "Wie der Verbraucher in der Karte heißen soll, z. B. „Heizstab“.",
-          "diverter_power_entity": "Was der Überschussverbraucher gerade zieht - der Heizstab im Brauchwasserspeicher, die Wallbox im Überschussladen. Nur für die Anzeige; für die Rechnung zählt der Zähler darunter.",
+          "diverter_power_entity": "Was die Überschussverbraucher gerade ziehen - der Heizstab im Brauchwasserspeicher, die Wallbox im Überschussladen. **Mehrere sind erlaubt**; zwei Heizstäbe an derselben Gasheizung werden addiert.\n\nDiese Leistung wird vom Hausverbrauch abgezogen und ergibt den **Grundverbrauch** - das, was dein Haushalt wirklich braucht. Auf ihn beziehen sich auch Autarkie und Eigenverbrauch.",
           "diverter_price": "Was eine umgeleitete Kilowattstunde wirklich wert ist: der Preis des ersetzten Brennstoffs, geteilt durch den Wirkungsgrad des Kessels. Bei 0,11 €/kWh Gas und 92 % sind das rund 0,12. Leer: Es gilt der Arbeitspreis - und die Anlage rechnet sich reicher, als sie ist.",
-          "energy_entity": "Zählerstand des Hausverbrauchs in kWh, falls vorhanden. Er ist der zweite Weg zum Eigenverbrauch, wenn kein Ertragszähler da ist.",
-          "power_entity": "Ein gemessener Hausverbrauch, falls vorhanden. Er hat Vorrang vor der Rechnung. Leer lassen ist der Normalfall."
+          "energy_entity": "Ein kWh-Zähler über **alles, was im Haus verbraucht wurde** - Netzbezug *und* selbst genutzter Solarstrom zusammen. Nicht der Bezugszähler: Der steht unter „Netz und Zähler“ und zählt nur, was aus dem Netz kam.\n\nWozu: Er ist der zweite Weg zum Eigenverbrauch. Normalerweise rechnet die Integration „erzeugt minus eingespeist“; hast du keinen Ertragszähler, greift stattdessen „verbraucht minus bezogen“ - und dafür wird er gebraucht.\n\nLeer: völlig in Ordnung, solange deine Anlagen einen Ertragszähler haben.",
+          "power_entity": "Nur, wenn du den Hausverbrauch **misst** - etwa mit einem zweiten Zähler hinter dem Hausanschluss. In Watt, kein Zählerstand.\n\nNormalerweise leer lassen: Dann rechnet die Integration ihn aus Netzleistung plus Wechselrichterabgabe, und das ist bei einer Netzparallelanlage genauso richtig."
         },
         "title": "Haus und Verbrauch"
       },
@@ -435,7 +441,8 @@
           "grid": "Netz und Zähler",
           "house": "Haus und Verbrauch",
           "plants": "Anlagen",
-          "save": "Speichern und schließen"
+          "save": "Speichern und schließen",
+          "tidy": "Doppelte Sensoren"
         },
         "title": "PV-System"
       },
@@ -514,15 +521,15 @@
           "commissioned": "Inbetriebnahme",
           "feed_in_price": "Abweichende Einspeisevergütung",
           "investment": "Investitionskosten dieser Anlage",
-          "prior_export": "Einspeisung davor",
-          "prior_yield": "Ertrag davor"
+          "prior_export": "Davon eingespeist bei Einrichtung",
+          "prior_yield": "Stand des Ertragszählers bei Einrichtung"
         },
         "data_description": {
           "commissioned": "Seit wann diese Anlage läuft. Ohne dieses Datum beginnt die Amortisation an dem Tag, an dem du die Integration eingerichtet hast - und die Restzeit wäre um Jahre daneben.",
           "feed_in_price": "Nur ausfüllen, wenn diese Anlage eine andere Vergütung bekommt als der Rest. Zwei Anlagen aus zwei Jahren haben regelmäßig zwei Sätze. Leer: Es gilt der Satz unter „Kosten und Ertrag“.",
           "investment": "Was diese Anlage gekostet hat - Module, Laderegler, Speicher, Wechselrichter, Montage. Daraus entsteht ihre Amortisation.",
-          "prior_export": "Wie viel davon ins Netz ging. Diese Kilowattstunden zählen nicht als Ersparnis, sondern werden mit der Vergütung dieser Anlage verrechnet. Wer nicht einspeist, trägt 0 ein oder lässt es leer.",
-          "prior_yield": "Wie viele Kilowattstunden diese Anlage erzeugt hat, bevor die Integration zu zählen begann. Steht meist am Wechselrichter. Ohne diese Angabe fehlt die Zeit davor in der Amortisation."
+          "prior_export": "**Wie viel von „Stand des Ertragszählers“ ins Netz gegangen ist** - ebenfalls zum Einrichtungstag, ebenfalls einmalig.\n\nWozu: Der Rest (Ertrag minus Einspeisung) gilt als selbst genutzt und wird mit dem Arbeitspreis bewertet; die eingespeiste Hälfte mit der Vergütung **dieser** Anlage. Zwei Anlagen aus zwei Jahren haben regelmäßig zwei Sätze - deshalb steht das hier und nicht am Standort.\n\nLeer oder 0: Alles davor zählt als selbst genutzt. Wer nie eingespeist hat, ist damit richtig.",
+          "prior_yield": "**Der Stand des Ertragszählers dieser Anlage an dem Tag, an dem du die Integration eingerichtet hast.** Steht meist am Wechselrichter. Eine einmalige Zahl, kein Sensor.\n\nBeispiel: Die Anlage läuft seit 2024 und hat 2300 kWh erzeugt, du richtest heute ein - dann 2300.\n\nWozu: Diese Kilowattstunden zählen zum Ertrag dieser Anlage und damit zu **ihrer Amortisation**. Ohne sie sähe eine Anlage aus dem Jahr 2024 aus, als hätte sie gerade erst angefangen. Nur der Gesamtzeitraum; Tag, Monat und Jahr bleiben unberührt."
         },
         "description": "Was diese Anlage gekostet hat und seit wann sie läuft. Beides zählt nur für sie: Bei mehreren Anlagen bekommt jede ihre eigene Amortisation, und die des Standorts ist ihre Summe.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
         "title": "Kosten – {plant}"
@@ -565,6 +572,13 @@
         },
         "description": "Eingerichtet sind {count} Anlagen. Welche möchtest du bearbeiten?",
         "title": "Anlagen"
+      },
+      "tidy": {
+        "data": {
+          "tidy_confirm": "Ja, diese Sensoren abschalten"
+        },
+        "description": "Diese Integration legt für jeden Wert einen Sensor an. Kommt der Wert aus genau der Entität, die du selbst eingetragen hast, steht er damit zweimal in Home Assistant - und schreibt auch zweimal in die Datenbank.\n\nNeu eingerichtete Anlagen brauchen das nicht: Dort sind diese Sensoren von Anfang an aus. Nötig ist es nur einmal, wenn du vor Fassung 1.1.1 eingerichtet hast.\n\nBetroffen sind ausschließlich Entitäten dieser Integration. Gelöscht wird nichts: Jede bleibt in der Geräteansicht stehen und lässt sich mit einem Klick zurückholen.\n\n{liste}",
+        "title": "Doppelte Sensoren abschalten"
       }
     }
   },
