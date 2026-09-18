@@ -528,8 +528,51 @@ class PvSystemCard extends HTMLElement {
         border-radius: 10px;
         padding: 8px 10px;
       }
-      .kennzahl .k { font-size: 11px; color: var(--secondary-text-color, #727272); }
-      .kennzahl .v { font-size: 16px; font-weight: 700; }
+      .kennzahl .k {
+        font-size: 11px; color: var(--secondary-text-color, #727272);
+        display: flex; align-items: center; justify-content: space-between; gap: 4px;
+      }
+      .kennzahl .kname {
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      /* Nicht umbrechen: Lieber eine Zahl abgeschnitten als eine Kachel, die
+         plötzlich doppelt so hoch ist und das Raster darunter verschiebt. */
+      .kennzahl .v {
+        font-size: 16px; font-weight: 700;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      /* Eine Spur kleiner als die Beschriftung: Hier stehen bis zu zwei Zahlen
+         nebeneinander, und die Kachelbreite ist gesetzt. */
+      .kennzahl .v2 {
+        font-size: 10px; color: var(--secondary-text-color, #727272);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .kennzahl .v2:empty { display: none; }
+
+      /* Das kleine „i“ - in HTML als Kreis, im SVG als eigenes Zeichen. Es
+         steht überall dort, wo ein Klick etwas öffnet, und nirgendwo sonst. */
+      .info {
+        flex: none;
+        width: 13px; height: 13px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 9px; font-weight: 700; font-style: italic;
+        line-height: 1;
+        border: 1px solid var(--secondary-text-color, #727272);
+        color: var(--secondary-text-color, #727272);
+        opacity: .6;
+      }
+      svg .info-kreis {
+        fill: none;
+        stroke: var(--secondary-text-color, #727272);
+        stroke-width: 1;
+        opacity: .55;
+      }
+      svg .info-zeichen {
+        font-size: 9px; font-weight: 700; font-style: italic;
+        fill: var(--secondary-text-color, #727272);
+        text-anchor: middle;
+        opacity: .75;
+      }
 
       .detail { margin-top: 10px; }
       .detail-karte {
@@ -782,6 +825,7 @@ class PvSystemCard extends HTMLElement {
         y: g.ySpaltenkopf + 13,
       })
     );
+    this._infoZeichen(kopf, x + M.spalte - 12, g.ySpaltenkopf + 9);
     bloecke.appendChild(kopf);
 
     /* --- Module ------------------------------------------------------- */
@@ -801,6 +845,7 @@ class PvSystemCard extends HTMLElement {
         rx: 12,
       })
     );
+    this._infoZeichen(modulBox, x + M.spalte - 13, g.yModul + 3);
     // Nur "Module". Hersteller und Modell standen hier einmal, haben aber
     // die halbe Kastenbreite gekostet und sagen im Betrieb nichts: Sie ändern
     // sich nie. Wer sie sucht, tippt den Kasten an - dort stehen sie neben
@@ -1342,29 +1387,30 @@ class PvSystemCard extends HTMLElement {
       haus, "house:quoten",
       e("text", { class: "mini", x: g.hausX + 10, y: g.bandY + 30 })
     );
-    // Die Phasenwerte stehen links, zur Leitung hin: "L1  840 W" liest sich in
-    // der Richtung, aus der der Strom kommt. Rechts wird dadurch Platz frei -
-    // dort steht das Haus.
+    // Die Phasenwerte stehen links, zur Leitung hin, mit einem Pfeil dazwischen:
+    // "L1 → 840 W" liest sich in der Richtung, in die der Strom fließt, und
+    // sagt gleich mit, dass es um einen Zufluss geht und nicht um einen Namen.
+    // Rechts wird dadurch Platz frei - dort steht das Haus.
     const zeilen = g.zeigePhasen ? g.phasen : 1;
     for (let i = 0; i < zeilen; i++) {
       const y = g.yBus + i * M.busAbstand;
       if (g.zeigePhasen) {
         haus.appendChild(
           e("text", {
-            class: "klein", x: g.hausX + 10, y: y + 3.5, text: `L${i + 1}`,
+            class: "klein", x: g.hausX + 10, y: y + 3.5, text: `L${i + 1} \u2192`,
           })
         );
       }
       this._ref(
         haus, `haus:${i}`,
-        e("text", { class: "mini", x: g.hausX + (g.zeigePhasen ? 32 : 10), y: y + 3.5 })
+        e("text", { class: "mini", x: g.hausX + (g.zeigePhasen ? 40 : 10), y: y + 3.5 })
       );
     }
     haus.appendChild(
       this._hausSymbol(
-        g.hausX + HAUS_B - 34,
-        g.yBus + ((zeilen - 1) * M.busAbstand) / 2 - 11,
-        24
+        g.hausX + HAUS_B - 44,
+        g.yBus + ((zeilen - 1) * M.busAbstand) / 2 - 14,
+        30
       )
     );
     // Unter den Phasen, nur wenn es Überschussverbraucher gibt: links, was
@@ -1485,8 +1531,24 @@ class PvSystemCard extends HTMLElement {
     g.appendChild(
       e("rect", { class: "rahmen", x, y, width: breite, height: hoehe, rx: 12 })
     );
+    this._infoZeichen(g, x + breite - 3, y + 3);
     eltern.appendChild(g);
     return g;
+  }
+
+  /**
+   * Ein kleines „i“ in der Ecke: Hier öffnet ein Klick eine Tabelle.
+   *
+   * Der Rahmen beim Überfahren sagte das nur denen, die eine Maus haben - auf
+   * dem Telefon musste man es wissen oder herumtippen. Es steht bewusst nicht
+   * am Netzmast: Der ist kein Kasten, sondern ein Symbol, und ein Kreis neben
+   * einem Strommast sieht aus wie ein Bauteil.
+   */
+  _infoZeichen(eltern, x, y) {
+    eltern.appendChild(e("circle", { class: "info-kreis", cx: x, cy: y, r: 5.5 }));
+    eltern.appendChild(
+      e("text", { class: "info-zeichen", x, y: y + 3.2, text: "i" })
+    );
   }
 
   /**
@@ -1582,13 +1644,16 @@ class PvSystemCard extends HTMLElement {
 
   _kennzahlen() {
     const box = e("div", { class: "kennzahlen" });
+    // Von links nach rechts in der Reihenfolge, in der man danach fragt:
+    // erst was hereinkommt und hinausgeht, dann wie gut das zusammenpasst,
+    // dann was fest verbaut ist, dann das Geld.
     const felder = [
+      ["netz", "Netz"],
       ["pv", "Erzeugung"],
       ["haus", "Verbrauch"],
-      ["netz", "Netz"],
-      ["akku", "Speicher"],
       ["autarkie", "Autarkie"],
       ["peak", "Installiert"],
+      ["akku", "Speicher"],
     ];
     // Die beiden Geldkacheln nur, wenn ein Preis hinterlegt ist - sonst
     // stünden dort zwei Striche ohne Aussicht, je etwas anzuzeigen.
@@ -1605,10 +1670,24 @@ class PvSystemCard extends HTMLElement {
         tabindex: geldkachel ? "0" : null,
         role: geldkachel ? "button" : null,
       });
-      z.appendChild(e("div", { class: "k", text: beschriftung }));
+      const kopf = e("div", { class: "k" });
+      const name = e("span", { class: "kname", text: beschriftung });
+      kopf.appendChild(name);
+      this._refs.set(`kpi:${schluessel}:name`, name);
+      // Das kleine „i“ sagt: Hier steckt mehr dahinter. Ohne Zeichen musste
+      // man raten, welche Kachel sich öffnen lässt und welche nur dasteht.
+      if (geldkachel) kopf.appendChild(e("span", { class: "info", text: "i" }));
+      z.appendChild(kopf);
       const wert = e("div", { class: "v", text: "–" });
       z.appendChild(wert);
       this._refs.set(`kpi:${schluessel}`, wert);
+      // Eine zweite, kleinere Zeile für das, was sonst umbrechen würde: beim
+      // Speicher die Kapazität, bei der Autarkie der Eigenverbrauch. Die
+      // Kachelbreite bleibt dieselbe - auf dem Telefon stehen sonst plötzlich
+      // zwei Kacheln je Zeile statt drei.
+      const zusatz = e("div", { class: "v2", text: "" });
+      z.appendChild(zusatz);
+      this._refs.set(`kpi:${schluessel}:zusatz`, zusatz);
       box.appendChild(z);
     }
     return box;
@@ -1876,18 +1955,34 @@ class PvSystemCard extends HTMLElement {
     this._setzen("kpi:pv", watt(t.pv_power, l));
     this._setzen("kpi:haus", watt(d.house.house_power, l));
     this._setzen("kpi:netz", wattVz(netzleistung, l));
+    // Drei Zahlen nebeneinander passen nicht in eine Kachel - das Watt rutschte
+    // in die zweite Zeile und schob alles darunter weg. Also der Ladestand
+    // groß, Leistung und eingebaute Kapazität klein darunter. Die Kachel
+    // bleibt so breit wie alle anderen: Auf dem Telefon entscheidet das
+    // darüber, ob zwei oder drei Kacheln in eine Zeile passen.
     const akkuP = zahl(t.battery_power);
-    this._setzen(
-      "kpi:akku",
-      t.battery_count
-        ? `${prozent(t.battery_soc, l)}${
-            akkuP === null || Math.abs(akkuP) <= 10
-              ? ""
-              : ` · ${akkuP > 0 ? "+" : "−"}${watt(Math.abs(akkuP), l)}`
-          }`
-        : "–"
-    );
+    const akkuKap = zahl(t.battery_capacity);
+    this._setzen("kpi:akku", t.battery_count ? prozent(t.battery_soc, l) : "–");
+    const akkuZeile = [];
+    if (akkuP !== null && Math.abs(akkuP) > 10) {
+      akkuZeile.push(`${akkuP > 0 ? "+" : "−"}${watt(Math.abs(akkuP), l)}`);
+    }
+    if (akkuKap) {
+      akkuZeile.push(
+        `${akkuKap.toLocaleString(l, {
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 1,
+        })} kWh`
+      );
+    }
+    this._setzen("kpi:akku:zusatz", t.battery_count ? akkuZeile.join(" · ") : "");
     this._setzen("kpi:autarkie", prozent(d.house.self_sufficiency, l));
+    this._setzen(
+      "kpi:autarkie:zusatz",
+      d.house.self_consumption === null || d.house.self_consumption === undefined
+        ? ""
+        : `Eigen ${prozent(d.house.self_consumption, l)}`
+    );
     this._setzen(
       "kpi:peak",
       t.pv_peak
@@ -2218,12 +2313,18 @@ class PvSystemCard extends HTMLElement {
         ["Verbrauch", watt(h.house_power, l), h.entities.power],
         ["Ermittelt", h.house_source === "sensor" ? "gemessen" : "gerechnet"],
         // Der Grundverbrauch: das Haus ohne die Verbraucher, die nur laufen,
-        // weil Überschuss da ist. Auf ihn beziehen sich auch die Quoten.
+        // weil Überschuss da ist.
         ...(h.diverter && h.diverter.enabled
           ? [["Grundverbrauch", watt(h.base_power, l)]]
           : []),
         ["Energiezähler", einheit(h.house_energy, "kWh", 2, l), h.entities.energy],
         ["Autarkie", prozent(h.self_sufficiency, l)],
+        // Dieselbe Quote ohne den Überschussverbraucher. Nicht weil die andere
+        // falsch wäre - sie ist es nicht -, sondern weil nur diese von Monat
+        // zu Monat vergleichbar ist.
+        ...(h.diverter && h.diverter.enabled
+          ? [["Autarkie Grundverbrauch", prozent(h.base_self_sufficiency, l)]]
+          : []),
         ["Eigenverbrauch", prozent(h.self_consumption, l)],
         ...(h.diverter && h.diverter.enabled
           ? [
@@ -2246,6 +2347,15 @@ class PvSystemCard extends HTMLElement {
               ],
             ]
           : []),
+        // Die Aufteilung, wenn jemand sie messen kann: Was aus der eigenen
+        // Anlage kam, ist die Ersparnis wert; der Rest ist ganz normaler
+        // Netzbezug, den dieser Verbraucher verursacht hat.
+        ...(h.diverter && h.diverter.split
+          ? [
+              [`${h.diverter.name} aus PV/Batterie`, watt(h.diverter.solar_power, l)],
+              [`${h.diverter.name} aus dem Netz`, watt(h.diverter.grid_power, l)],
+            ]
+          : []),
         // Die beiden Quoten noch einmal über die letzte volle Stunde - das
         // ist der Wert, der auch als Sensor in Home Assistant steht. Der
         // Augenblick darüber schwankt mit jeder Wolke.
@@ -2257,6 +2367,16 @@ class PvSystemCard extends HTMLElement {
                   h.hour.house_kwh, "kWh", 2, l
                 )} verbraucht`,
               ],
+              ...(h.diverter && h.diverter.enabled
+                ? [
+                    [
+                      "davon Grundverbrauch",
+                      `${prozent(h.hour.base_self_sufficiency, l)}  ·  ${einheit(
+                        h.hour.base_kwh, "kWh", 2, l
+                      )}`,
+                    ],
+                  ]
+                : []),
               [
                 "Eigenverbrauch letzte Stunde",
                 `${prozent(h.hour.self_consumption, l)}  ·  ${einheit(

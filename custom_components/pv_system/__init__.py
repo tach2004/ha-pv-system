@@ -87,7 +87,7 @@ from .websocket import async_register_websocket
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR]
 CONF_NAME = "name"
 
 # Diese Integration kennt keine YAML-Konfiguration; eingerichtet wird sie über

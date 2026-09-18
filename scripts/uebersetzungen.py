@@ -182,6 +182,21 @@ AUSWAHL: dict[str, dict[str, T]] = {
         "positive_charge": ("Positiv = laden", "Positive = charging"),
         "positive_discharge": ("Positiv = entladen", "Positive = discharging"),
     },
+    "diverter_fuel": {
+        "gas": ("Gas", "Gas"),
+        "oil": ("Heizöl", "Heating oil"),
+        "pellets": ("Pellets oder Holz", "Pellets or wood"),
+        "district": ("Fernwärme", "District heating"),
+        "heatpump": ("Wärmepumpe", "Heat pump"),
+        "electricity": (
+            "Nichts - es bleibt Strom (Speicher, Auto)",
+            "Nothing - it stays electricity (storage, car)",
+        ),
+    },
+    "base_price_unit": {
+        "month": ("je Monat", "per month"),
+        "year": ("je Jahr", "per year"),
+    },
 }
 
 # --------------------------------------------------------------- Felder
@@ -207,6 +222,10 @@ FELDER: dict[str, T] = {
     "tidy_confirm": (
         "Ja, diese Sensoren abschalten",
         "Yes, turn these sensors off",
+    ),
+    "reset_confirm": (
+        "Ja, die gemessenen Kostenzahlen verwerfen",
+        "Yes, discard the measured cost figures",
     ),
     "system_voltage": ("Systemspannung", "System voltage"),
     "max_current": ("Maximaler Ladestrom", "Maximum charge current"),
@@ -254,15 +273,31 @@ FELDER: dict[str, T] = {
     "diverter_name": ("Überschussverbraucher", "Surplus load"),
     "diverter_power_entity": ("Leistung Überschussverbraucher", "Surplus load power"),
     "diverter_energy_entity": ("Zähler Überschussverbraucher", "Surplus load meter"),
-    "diverter_price": ("Wert je kWh", "Value per kWh"),
+    "diverter_solar_power_entity": (
+        "Davon aus PV/Batterie: Leistung",
+        "Of that from PV/battery: power",
+    ),
+    "diverter_solar_energy_entity": (
+        "Davon aus PV/Batterie: Zähler",
+        "Of that from PV/battery: meter",
+    ),
+    "diverter_fuel": ("Ersetzt", "Replaces"),
+    "diverter_price": (
+        "Wert je kWh des Ersetzten",
+        "Value per kWh of what is replaced",
+    ),
     "animate": ("Flusslinien animieren", "Animate flow lines"),
     "show_strings": ("Verschaltung zeichnen", "Draw string layout"),
     "show_phases": ("Phasen einzeln zeichnen", "Draw phases individually"),
     "sensor_interval": ("Messwerte höchstens alle", "Measurements at most every"),
     "order": ("Platz in der Karte", "Position on the card"),
-    "price_per_kwh": ("Arbeitspreis", "Energy price"),
-    "feed_in_price": ("Einspeisevergütung", "Feed-in tariff"),
-    "base_price": ("Grundpreis je Monat", "Monthly base fee"),
+    "price_per_kwh": ("Arbeitspreis: feste Zahl je kWh", "Energy price: fixed per kWh"),
+    "feed_in_price": (
+        "Einspeisevergütung: feste Zahl je kWh",
+        "Feed-in tariff: fixed per kWh",
+    ),
+    "base_price": ("Grundpreis: feste Zahl", "Base fee: fixed amount"),
+    "base_price_unit": ("Grundpreis: Zeitraum dazu", "Base fee: period it covers"),
     "investment": ("Investitionskosten", "Investment cost"),
     "currency": ("Währung", "Currency"),
     "start_date": ("Zählen seit", "Counting since"),
@@ -270,9 +305,18 @@ FELDER: dict[str, T] = {
         "Stand des Bezugszählers bei Einrichtung",
         "Import meter reading at setup",
     ),
-    "price_entity": ("Arbeitspreis aus Entität", "Energy price from entity"),
-    "feed_in_entity": ("Vergütung aus Entität", "Feed-in tariff from entity"),
-    "base_price_entity": ("Grundpreis aus Entität", "Base fee from entity"),
+    "price_entity": (
+        "Arbeitspreis: Entität statt fester Zahl",
+        "Energy price: entity instead of fixed number",
+    ),
+    "feed_in_entity": (
+        "Einspeisevergütung: Entität statt fester Zahl",
+        "Feed-in tariff: entity instead of fixed number",
+    ),
+    "base_price_entity": (
+        "Grundpreis: Entität statt fester Zahl",
+        "Base fee: entity instead of fixed number",
+    ),
     "prior_price": ("Durchschnittspreis davor", "Average price before"),
     "prior_export": (
         "Davon eingespeist bei Einrichtung",
@@ -812,44 +856,105 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
         "diverter_power_entity": (
             "Was die Überschussverbraucher gerade ziehen - der Heizstab im "
-            "Brauchwasserspeicher, die Wallbox im Überschussladen. **Mehrere "
-            "sind erlaubt**; zwei Heizstäbe an derselben Gasheizung werden "
-            "addiert.\n\nDiese Leistung wird vom Hausverbrauch abgezogen und "
-            "ergibt den **Grundverbrauch** - das, was dein Haushalt wirklich "
-            "braucht. Auf ihn beziehen sich auch Autarkie und Eigenverbrauch.",
+            "Brauchwasserspeicher, die Wallbox im Überschussladen, der "
+            "Pufferspeicher der Wärmepumpe. **Mehrere sind erlaubt**; sie "
+            "werden addiert.\n\nGemeint ist alles, was nur läuft, **weil** "
+            "Überschuss da ist, und dabei Energie in einen Speicher legt - "
+            "warmes Wasser, eine Autobatterie, ein Pufferspeicher. Ein "
+            "Kühlschrank gehört nicht dazu: Der läuft sowieso.\n\nDiese "
+            "Leistung wird vom Hausverbrauch abgezogen und ergibt den "
+            "**Grundverbrauch** - das, was dein Haushalt ohne den Überschuss "
+            "gebraucht hätte. Autarkie und Eigenverbrauch rechnen weiter auf "
+            "dem **ganzen** Hausverbrauch; der Grundverbrauch steht daneben, "
+            "weil nur er von Monat zu Monat vergleichbar ist.",
             "What the surplus loads currently draw - the immersion heater in "
-            "the hot water tank, the wallbox in surplus charging. **Several "
-            "are allowed**; two heating rods on the same gas boiler are added "
-            "up.\n\nThis power is subtracted from house consumption to give "
-            "the **base load** - what your household really needs. "
-            "Self-sufficiency and self-consumption refer to it too.",
+            "the hot water tank, the wallbox in surplus charging, the heat "
+            "pump's buffer tank. **Several are allowed**; they are added "
+            "up.\n\nThis means everything that only runs **because** there is "
+            "surplus and puts energy into a store - hot water, a car battery, "
+            "a buffer tank. A fridge does not count: it runs anyway.\n\nThis "
+            "power is subtracted from house consumption to give the **base "
+            "load** - what your household would have used without the surplus. "
+            "Self-sufficiency and self-consumption still use the **whole** "
+            "house consumption; the base load stands beside it because only it "
+            "is comparable from month to month.",
         ),
         "diverter_energy_entity": (
             "kWh-Zähler dieser Verbraucher. **Mehrere sind erlaubt** - sie "
             "werden addiert.\n\nDiese Kilowattstunden fließen wirklich im "
-            "Haus, sie sparen aber keinen Strom, sondern den Brennstoff, mit "
-            "dem sonst geheizt würde. Deshalb werden sie in der Ersparnis "
-            "getrennt bewertet - mit dem Feld darunter.\n\nLeer: Der "
-            "Überschuss zählt wie jeder andere Eigenverbrauch, und die Anlage "
-            "rechnet sich reicher, als sie ist.",
+            "Haus. Ob sie Geld sparen, hängt davon ab, was sie ersetzen: Wer "
+            "damit statt mit Gas heizt, spart Gas und nicht Strom - deshalb "
+            "werden sie in der Ersparnis getrennt bewertet, mit den beiden "
+            "Feldern weiter unten.\n\nLeer: Der Überschuss zählt wie jeder "
+            "andere Eigenverbrauch.",
             "kWh counters of these loads. **Several are allowed** - they are "
-            "added up.\n\nThese kilowatt hours really do flow in the house, "
-            "but they save no electricity, they save the fuel that would "
-            "otherwise do the heating. That is why they are valued separately "
-            "in the savings - with the field below.\n\nEmpty: the surplus "
-            "counts like any other self-consumption, and the system looks "
-            "better off than it is.",
+            "added up.\n\nThese kilowatt hours really do flow in the house. "
+            "Whether they save money depends on what they replace: heating "
+            "with them instead of gas saves gas, not electricity - so they are "
+            "valued separately in the savings, with the two fields further "
+            "down.\n\nEmpty: the surplus counts like any other "
+            "self-consumption.",
+        ),
+        "diverter_solar_power_entity": (
+            "**Nur wenn du es getrennt messen kannst.** Der Teil der Leistung "
+            "oben, der gerade aus PV oder Batterie kommt.\n\nWarum das "
+            "zählt: Ein Heizstab heizt im Juli mit Überschuss und im Januar "
+            "mit Netzstrom. Dieselbe Kilowattstunde ist einmal geschenkte "
+            "Energie und einmal eine Rechnung über den vollen Arbeitspreis. "
+            "Nur der Teil, der aus der eigenen Anlage kam, wird mit dem Preis "
+            "des Ersetzten bewertet.\n\nLeer: Es gilt, was der Name sagt - "
+            "alles kam aus Überschuss. Für einen echten Überschussregler "
+            "stimmt das auch.",
+            "**Only if you can measure it separately.** The part of the power "
+            "above that is currently coming from PV or battery.\n\nWhy it "
+            "matters: an immersion heater runs on surplus in July and on grid "
+            "power in January. The same kilowatt hour is free energy once and "
+            "a full-price bill the next time. Only the part that came from "
+            "your own system is valued with the price of what it "
+            "replaces.\n\nEmpty: what the name says applies - all of it came "
+            "from surplus. For a true surplus controller that is correct.",
+        ),
+        "diverter_solar_energy_entity": (
+            "Dasselbe als kWh-Zähler: die Kilowattstunden des Verbrauchers, "
+            "die aus PV oder Batterie kamen. **Mehrere sind erlaubt.**\n\n"
+            "Ist er gesetzt, geht nur dieser Zähler in die Ersparnis ein - der "
+            "Rest ist ganz normaler Netzbezug zum Arbeitspreis.",
+            "The same as a kWh counter: the load's kilowatt hours that came "
+            "from PV or battery. **Several are allowed.**\n\nIf set, only "
+            "this counter feeds the savings - the remainder is ordinary grid "
+            "consumption at the energy price.",
+        ),
+        "diverter_fuel": (
+            "Was dieser Verbraucher ersetzt. Davon hängt ab, was eine "
+            "umgeleitete Kilowattstunde wert ist.\n\nGas, Öl, Pellets, "
+            "Fernwärme oder Wärmepumpe: Der Wert ist der Preis dieses "
+            "Brennstoffs - siehe das Feld darunter.\n\n„Nichts - es bleibt "
+            "Strom“: Ein Hausspeicher oder ein Auto verbrennt nichts, es "
+            "verschiebt Strom nach später. Dann ist eine Kilowattstunde genau "
+            "den Arbeitspreis wert, und das Feld darunter wird ignoriert.",
+            "What this load replaces. It decides what one diverted kilowatt "
+            "hour is worth.\n\nGas, oil, pellets, district heating or heat "
+            "pump: the value is the price of that fuel - see the field "
+            "below.\n\n\u201cNothing - it stays electricity\u201d: a home "
+            "battery or a car burns nothing, it moves electricity to later. "
+            "Then a kilowatt hour is worth exactly the energy price, and the "
+            "field below is ignored.",
         ),
         "diverter_price": (
-            "Was eine umgeleitete Kilowattstunde wirklich wert ist: der Preis "
-            "des ersetzten Brennstoffs, geteilt durch den Wirkungsgrad des "
-            "Kessels. Bei 0,11 €/kWh Gas und 92 % sind das rund 0,12. Leer: Es "
-            "gilt der Arbeitspreis - und die Anlage rechnet sich reicher, als "
-            "sie ist.",
-            "What one diverted kilowatt hour is really worth: the price of the "
-            "replaced fuel divided by the boiler's efficiency. At 0.11 €/kWh "
-            "gas and 92 % that is about 0.12. Empty: the energy price applies "
-            "- and the system looks better off than it is.",
+            "Was eine Kilowattstunde des **Ersetzten** kostet, geteilt durch "
+            "den Wirkungsgrad.\n\nGas 0,11 €/kWh bei 92 % Kesselwirkungsgrad "
+            "→ rund 0,12. Heizöl 1,00 €/l ÷ 10 kWh/l ÷ 0,9 → rund 0,11. "
+            "Wärmepumpe: Arbeitspreis ÷ Jahresarbeitszahl, bei 0,34 € und JAZ "
+            "3,5 → rund 0,10 - eine Wärmepumpe macht aus einer Kilowattstunde "
+            "eben dreieinhalb.\n\nLeer: Es gilt der Arbeitspreis, und die "
+            "Anlage rechnet sich reicher, als sie ist.",
+            "What one kilowatt hour of the **replaced** energy costs, divided "
+            "by the efficiency.\n\nGas 0.11 €/kWh at 92 % boiler efficiency "
+            "→ about 0.12. Heating oil 1.00 €/l ÷ 10 kWh/l ÷ 0.9 → about 0.11. "
+            "Heat pump: energy price ÷ seasonal performance factor, at 0.34 € "
+            "and SPF 3.5 → about 0.10 - a heat pump turns one kilowatt hour "
+            "into three and a half.\n\nEmpty: the energy price applies, and "
+            "the system looks better off than it is.",
         ),
         "power_entity": (
             "Nur, wenn du den Hausverbrauch **misst** - etwa mit einem zweiten "
@@ -1033,8 +1138,12 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "The same for the feed-in tariff.",
         ),
         "base_price_entity": (
-            "Dasselbe für den Grundpreis.",
-            "The same for the base fee.",
+            "Dasselbe für den Grundpreis. Achtung: Was diese Entität liefert, "
+            "wird mit dem Zeitraum darüber gedeutet - steht dort „je Jahr“, "
+            "gilt das auch für die Entität.",
+            "The same for the base fee. Note: what this entity provides is "
+            "read with the period above - if that says “per year”, it applies "
+            "to the entity too.",
         ),
         "price_per_kwh": (
             "Was eine Kilowattstunde aus dem Netz kostet, z. B. 0,34. Ohne "
@@ -1051,12 +1160,27 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "Leave empty if you do not export.",
         ),
         "base_price": (
-            "Der monatliche Grundpreis deines Stromvertrags. Er wird anteilig "
-            "auf Tag, Monat und Jahr verteilt. Leer oder 0, wenn er dich hier "
-            "nicht interessiert.",
-            "The monthly base fee of your electricity contract. It is spread "
-            "proportionally across day, month and year. Empty or 0 if you do "
-            "not want it counted here.",
+            "Der Grundpreis deines Stromvertrags - Zähler- und Netzentgelt, "
+            "alles, was unabhängig vom Verbrauch anfällt. **Ob die Zahl für "
+            "einen Monat oder ein Jahr gilt, sagst du im Feld darunter.**\n\n"
+            "Er wird anteilig auf Tag, Monat und Jahr verteilt. Leer oder 0, "
+            "wenn er dich hier nicht interessiert.",
+            "The base fee of your electricity contract - meter and network "
+            "charges, everything that is due regardless of consumption. "
+            "**Whether the number is for a month or a year is set in the field "
+            "below.**\n\nIt is spread proportionally across day, month and "
+            "year. Empty or 0 if you do not want it counted here.",
+        ),
+        "base_price_unit": (
+            "Auf welchen Zeitraum sich die Zahl darüber bezieht. Viele "
+            "Verträge weisen den Grundpreis je Jahr aus, viele Rechnungen je "
+            "Monat - beides ist richtig, es muss nur hier stehen. Gerechnet "
+            "wird intern immer mit dem Monat; „je Jahr“ wird durch zwölf "
+            "geteilt.",
+            "Which period the number above refers to. Many contracts state the "
+            "base fee per year, many bills per month - both are fine, it just "
+            "has to be said here. Internally the monthly figure is used; “per "
+            "year” is divided by twelve.",
         ),
         "currency": (
             "Das Währungskürzel, z. B. EUR oder CHF. Es wird als Einheit an "
@@ -1112,13 +1236,14 @@ NETZFELDER = [
 HAUSFELDER = [
     "calculate", "power_entity", "energy_entity",
     "diverter_name", "diverter_power_entity", "diverter_energy_entity",
-    "diverter_price",
+    "diverter_solar_power_entity", "diverter_solar_energy_entity",
+    "diverter_fuel", "diverter_price",
 ]
 ANZEIGEFELDER = ["animate", "show_strings", "show_phases", "sensor_interval"]
 KOSTENFELDER = [
     "price_per_kwh", "price_entity",
     "feed_in_price", "feed_in_entity",
-    "base_price", "base_price_entity",
+    "base_price", "base_price_unit", "base_price_entity",
     "currency", "prior_import", "prior_price",
 ]
 ANLAGENKOSTENFELDER = [
@@ -1183,6 +1308,9 @@ def baum(sprache) -> dict:
                         "costs": s(("Kosten und Ertrag", "Costs and yield")),
                         "tidy": s(
                             ("Doppelte Sensoren", "Duplicate sensors")
+                        ),
+                        "reset": s(
+                            ("Kostenzähler leeren", "Clear cost counters")
                         ),
                         "display": s(
                             ("Darstellung und Aufzeichnung", "Appearance and recording")
@@ -1408,6 +1536,47 @@ def baum(sprache) -> dict:
                     ),
                     "data": _felder(["tidy_confirm"], s),
                 },
+                "reset": {
+                    "title": s(
+                        ("Kostenzähler leeren", "Clear cost counters")
+                    ),
+                    "description": s(
+                        (
+                            "Der Ausweg, wenn die Beträge einmal nicht mehr "
+                            "stimmen - typischerweise nach einem Zählertausch "
+                            "oder wenn im Bezugszählerfeld kurz die falsche "
+                            "Entität stand. Tag, Monat und Jahr heilen sich "
+                            "beim nächsten Wechsel von selbst; der "
+                            "Gesamtzeitraum trägt den Fehler weiter, bis "
+                            "jemand ihn leert.\n\n**Was bleibt:** alles, was "
+                            "in der Konfiguration steht - Bezug davor, Preis "
+                            "davor, Ertrag davor, Investition und "
+                            "Inbetriebnahme jeder Anlage. **Was weg ist:** "
+                            "alles, was seit dem ersten Lauf gemessen wurde. "
+                            "Rückgängig machen kann man das nicht.\n\n"
+                            "Dasselbe tut der Dienst `pv_system.reset_costs`; "
+                            "in den Entwicklerwerkzeugen verlangt er "
+                            "allerdings ein Ziel.\n\n**Im Gesamtzeitraum "
+                            "steht gerade:**\n\n{stand}",
+                            "The way out when the amounts no longer add up - "
+                            "typically after a meter swap, or when the wrong "
+                            "entity briefly sat in the import meter field. "
+                            "Day, month and year heal themselves at the next "
+                            "rollover; the total period carries the error "
+                            "until somebody clears it.\n\n**What stays:** "
+                            "everything that is in the configuration - import "
+                            "before, price before, yield before, investment "
+                            "and commissioning of each plant. **What is "
+                            "gone:** everything measured since the first run. "
+                            "This cannot be undone.\n\nThe service "
+                            "`pv_system.reset_costs` does the same; in the "
+                            "developer tools it does require a target "
+                            "though.\n\n**The total period currently "
+                            "reads:**\n\n{stand}",
+                        )
+                    ),
+                    "data": _felder(["reset_confirm"], s),
+                },
                 "display": {
                     "title": s(
                         ("Darstellung und Aufzeichnung", "Appearance and recording")
@@ -1422,13 +1591,6 @@ def baum(sprache) -> dict:
             for name, werte in AUSWAHL.items()
         },
         "entity": {
-            "button": {
-                "tidy_entities": {
-                    "name": s(
-                        ("Doppelte Sensoren abschalten", "Turn off duplicate sensors")
-                    )
-                }
-            },
             "sensor": {
                 key: (
                     {"name": s(text), "state": {z: s(t) for z, t in STATUS_ZUSTAENDE.items()}}

@@ -49,7 +49,10 @@ MINDESTZEIT = timedelta(minutes=50)
 MINDESTMENGE = 0.01
 
 # Welche Leistungen aufaddiert werden - und wie das Feld in der Stunde heißt.
-GROESSEN = ("house", "import", "export", "yield")
+# "base" und "base_import" sind dasselbe Paar noch einmal, nur ohne den
+# Überschussverbraucher: Die Autarkie darüber ist die von Monat zu Monat
+# vergleichbare, weil sie nicht mit der Sonne schwankt.
+GROESSEN = ("house", "base", "import", "base_import", "export", "yield")
 
 
 class Stundenwerte:
@@ -159,14 +162,18 @@ class Stundenwerte:
 
         verbrauch = self._lauf["house"]
         bezug = self._lauf["import"]
+        grund = self._lauf["base"]
+        grundbezug = self._lauf["base_import"]
         erzeugung = self._lauf["yield"]
         einspeisung = self._lauf["export"]
 
         self._fertig = {
             "self_sufficiency": _quote(verbrauch, verbrauch - bezug),
+            "base_self_sufficiency": _quote(grund, grund - grundbezug),
             "self_consumption": _quote(erzeugung, erzeugung - einspeisung),
             "start": self._beginn,
             "house_kwh": round(verbrauch, 3),
+            "base_kwh": round(grund, 3),
             "import_kwh": round(bezug, 3),
             "export_kwh": round(einspeisung, 3),
             "yield_kwh": round(erzeugung, 3),
@@ -176,9 +183,11 @@ class Stundenwerte:
 def _leer() -> dict[str, Any]:
     return {
         "self_sufficiency": None,
+        "base_self_sufficiency": None,
         "self_consumption": None,
         "start": None,
         "house_kwh": None,
+        "base_kwh": None,
         "import_kwh": None,
         "export_kwh": None,
         "yield_kwh": None,

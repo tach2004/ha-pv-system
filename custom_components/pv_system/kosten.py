@@ -318,6 +318,9 @@ class Kostenrechner:
             "price": arbeitspreis,
             "feed_in": verguetung,
             "base_price": grundpreis or None,
+            # Der Wertansatz des Überschussverbrauchers - None heißt: Es gilt
+            # der Arbeitspreis, weil nichts anderes ersetzt wird.
+            "diverted_price": umleitpreis,
             "investment": investition,
             "configured": arbeitspreis is not None or verguetung is not None,
             "periods": zeitraeume,

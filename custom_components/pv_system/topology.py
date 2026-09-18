@@ -16,12 +16,14 @@ from typing import Any
 from uuid import uuid4
 
 from .const import (
+    BASE_PRICE_UNITS,
     BATTERY_SIGNS,
     CHEMISTRIES,
     CONF_ANIMATE,
     CONF_AZIMUTH,
     CONF_BASE_PRICE,
     CONF_BASE_PRICE_ENTITY,
+    CONF_BASE_PRICE_UNIT,
     CONF_BATTERY,
     CONF_BATTERY_CHARGED,
     CONF_BATTERY_CURRENT,
@@ -58,9 +60,12 @@ from .const import (
     CONF_CURRENCY_PRICE_ENTITY,
     CONF_DISPLAY,
     CONF_DIVERTER_ENERGY,
+    CONF_DIVERTER_FUEL,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
+    CONF_DIVERTER_SOLAR_ENERGY,
+    CONF_DIVERTER_SOLAR_POWER,
     CONF_ENABLED,
     CONF_FEED_IN_PRICE,
     CONF_FEED_IN_PRICE_ENTITY,
@@ -122,8 +127,10 @@ from .const import (
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
     CONF_TILT,
+    DEFAULT_BASE_PRICE_UNIT,
     DEFAULT_CAPACITY,
     DEFAULT_CURRENCY,
+    DEFAULT_DIVERTER_FUEL,
     DEFAULT_DIVERTER_NAME,
     DEFAULT_MIN_SOC,
     DEFAULT_MODULE_COUNT,
@@ -133,6 +140,7 @@ from .const import (
     DEFAULT_RATED_POWER,
     DEFAULT_SENSOR_INTERVAL,
     DEFAULT_SYSTEM_VOLTAGE,
+    DIVERTER_FUELS,
     GRID_SIGNS,
     PHASE_L1,
     PHASES,
@@ -408,6 +416,12 @@ def haus_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         # denselben Brennstoff und teilen sich deshalb einen Wertansatz.
         CONF_DIVERTER_POWER: _entitaeten(roh.get(CONF_DIVERTER_POWER)),
         CONF_DIVERTER_ENERGY: _entitaeten(roh.get(CONF_DIVERTER_ENERGY)),
+        # Der Teil davon, der aus PV oder Batterie kam. Leer heisst: alles.
+        CONF_DIVERTER_SOLAR_POWER: _entitaeten(roh.get(CONF_DIVERTER_SOLAR_POWER)),
+        CONF_DIVERTER_SOLAR_ENERGY: _entitaeten(roh.get(CONF_DIVERTER_SOLAR_ENERGY)),
+        CONF_DIVERTER_FUEL: _auswahl(
+            roh.get(CONF_DIVERTER_FUEL), DIVERTER_FUELS, DEFAULT_DIVERTER_FUEL
+        ),
         CONF_DIVERTER_PRICE: _zahl(roh.get(CONF_DIVERTER_PRICE), None),
     }
 
@@ -448,6 +462,9 @@ def kosten_normalisieren(
             roh.get(CONF_FEED_IN_PRICE, frueher.get(CONF_FEED_IN_PRICE)), None
         ),
         CONF_BASE_PRICE: _zahl(roh.get(CONF_BASE_PRICE), None),
+        CONF_BASE_PRICE_UNIT: _auswahl(
+            roh.get(CONF_BASE_PRICE_UNIT), BASE_PRICE_UNITS, DEFAULT_BASE_PRICE_UNIT
+        ),
         CONF_CURRENCY: str(roh.get(CONF_CURRENCY) or DEFAULT_CURRENCY),
         CONF_PRIOR_IMPORT: _zahl(roh.get(CONF_PRIOR_IMPORT), None),
         CONF_PRIOR_PRICE: _zahl(roh.get(CONF_PRIOR_PRICE), None),
@@ -571,7 +588,12 @@ def quellen(daten: dict[str, Any]) -> set[str]:
         if wert := haus.get(feld):
             gefunden.add(wert)
     # Die Überschussverbraucher sind Listen - es dürfen mehrere sein.
-    for feld in (CONF_DIVERTER_POWER, CONF_DIVERTER_ENERGY):
+    for feld in (
+        CONF_DIVERTER_POWER,
+        CONF_DIVERTER_ENERGY,
+        CONF_DIVERTER_SOLAR_POWER,
+        CONF_DIVERTER_SOLAR_ENERGY,
+    ):
         gefunden.update(haus.get(feld) or [])
 
     # Preise dürfen aus Entitäten kommen. Ändert sich der Tarif, soll die

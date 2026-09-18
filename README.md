@@ -75,10 +75,13 @@ und einbringt.
   das Jahr und seit der Inbetriebnahme. Dazu der Momentanwert in Euro je Stunde
   und die Amortisation.
 * **Überschussverbraucher** – ein Heizstab im Brauchwasserspeicher, eine
-  Wallbox im Überschussladen: Verbraucher, die nur laufen, damit der Überschuss
-  nicht ins Netz geht. Ihre Kilowattstunden sind Hausverbrauch wie jeder
-  andere, aber sie sparen keinen Strom, sondern Gas – und werden deshalb mit
-  ihrem eigenen Wert gerechnet. Siehe unten.
+  Wallbox im Überschussladen, ein Pufferspeicher: alles, was nur läuft, damit
+  der Überschuss nicht ins Netz geht, und dabei Energie in einen Speicher legt.
+  Ihre Kilowattstunden sind Hausverbrauch wie jeder andere, ersetzen aber nicht
+  Strom, sondern Gas, Öl, Pellets, Fernwärme oder Wärmepumpenwärme – **was,
+  wählst du aus** – und werden deshalb mit ihrem eigenen Wert gerechnet. Wer
+  messen kann, wie viel davon aus PV und Batterie kam, trägt auch das ein: Der
+  Rest ist dann ganz normaler Netzbezug. Siehe unten.
 * **Preise dürfen sich ändern.** Strom kostete 2023 anderes als heute, und eine
   Anlage rechnet sich über zwanzig Jahre. Der Gesamtzeitraum führt deshalb
   einen Geldspeicher: Bewertet wird immer nur, was seit der letzten Rechnung
@@ -150,6 +153,8 @@ PV-System
 ├── Netz und Zähler          Gesamt- und Phasenleistung, Vorzeichen
 ├── Haus und Verbrauch       gemessen oder gerechnet
 ├── Kosten und Ertrag        Arbeitspreis, Vergütung, Grundpreis, Zeit davor
+├── Doppelte Sensoren        Kopien abschalten, mit Liste vorher
+├── Kostenzähler leeren      Notausgang, wenn die Bilanz nicht stimmt
 └── Darstellung              Animation, Verschaltung, Phasen
 ```
 
@@ -182,8 +187,16 @@ Im Abschnitts-Layout meldet die Karte ihre Größe über `getGridOptions`: volle
 Breite als Vorgabe, mindestens sechs Spalten, Höhe nach Inhalt. Über den
 Layout-Regler lässt sich beides ändern.
 
-Ein Klick auf einen Block öffnet die Einzelheiten darunter. Werte mit
-gepunkteter Unterstreichung führen zur Original-Entität.
+Ein Klick auf einen Block öffnet die Einzelheiten darunter. Wo das geht, sitzt
+ein kleines **ⓘ** in der Ecke – auf dem Telefon sagt sonst nichts, welcher
+Kasten sich öffnen lässt. Werte mit gepunkteter Unterstreichung führen zur
+Original-Entität.
+
+Die Kennzahlenleiste steht von links nach rechts in der Reihenfolge, in der man
+danach fragt: **Netz · Erzeugung · Verbrauch · Autarkie · Installiert ·
+Speicher**, und – sobald ein Arbeitspreis hinterlegt ist – **Ertrag heute ·
+Kosten heute**. Die Autarkiekachel trägt den Eigenverbrauch klein darunter, die
+Speicherkachel Leistung und eingebaute Kapazität.
 
 Ein vollständiges Beispiel-Dashboard liegt in
 [dashboards/pv-system.yaml](dashboards/pv-system.yaml).
@@ -237,33 +250,69 @@ genutzte Kilowattstunde wert?**
 Normalerweise so viel wie eine gekaufte – sie ersetzt genau die. Nicht so beim
 Heizstab im Brauchwasserspeicher. Der läuft nur, weil sonst Überschuss ins Netz
 ginge; ohne ihn würde das Wasser mit Gas warm. Seine Kilowattstunden ersetzen
-also **kein Strom, sondern Gas**:
+also **kein Strom, sondern Gas**.
 
-    Wert je kWh = Gaspreis je kWh ÷ Wirkungsgrad des Kessels
+Gemeint ist damit nicht nur der Heizstab. Gemeint ist **alles, was nur läuft,
+weil Überschuss da ist, und dabei Energie in einen Speicher legt**: warmes
+Wasser, ein Pufferspeicher, eine Autobatterie, ein Hausspeicher hinter dem
+Zähler. Der Kühlschrank gehört nicht dazu – der läuft sowieso.
 
-Bei 0,11 €/kWh und 92 % sind das rund 0,12 € – nicht 0,34 €. Wer 250 kWh in den
-Heizstab schickt, spart damit etwa 30 €, nicht 85. Der Unterschied ist kein
-Rundungsfehler: Er macht in diesem Beispiel die Hälfte der Ersparnis aus.
+**Was ersetzt wird, wählst du aus.** Im Feld *Ersetzt* stehen Gas, Heizöl,
+Pellets oder Holz, Fernwärme, Wärmepumpe und „Nichts – es bleibt Strom“.
 
-Unter *Haus und Verbrauch* stehen dafür vier Felder: ein Name, ein
-Leistungssensor (nur für die Karte), ein **Zähler in kWh** und der **Wert je
-kWh**. Bleibt der Wert leer, gilt der Arbeitspreis – dieselbe Rechnung wie
-vorher, und dieselbe zu schöne Zahl.
+| Ersetzt | Wert je kWh | Beispiel |
+|---|---|---|
+| Gas | Gaspreis ÷ Kesselwirkungsgrad | 0,11 ÷ 0,92 ≈ **0,12** |
+| Heizöl | Literpreis ÷ 10 kWh/l ÷ Wirkungsgrad | 1,00 ÷ 10 ÷ 0,9 ≈ **0,11** |
+| Pellets | Tonnenpreis ÷ 4800 kWh/t ÷ Wirkungsgrad | 350 ÷ 4800 ÷ 0,9 ≈ **0,08** |
+| Fernwärme | Arbeitspreis des Wärmeliefervertrags | z. B. **0,13** |
+| Wärmepumpe | Arbeitspreis ÷ Jahresarbeitszahl | 0,34 ÷ 3,5 ≈ **0,10** |
+| Nichts – es bleibt Strom | Arbeitspreis; das Feld wird ignoriert | Hausspeicher, Auto |
+
+Die Wärmepumpe ist der Fall, der überrascht: Sie macht aus einer Kilowattstunde
+dreieinhalb. Wer den Überschuss stattdessen in einen Heizstab schickt, macht aus
+einer Kilowattstunde eine – der Heizstab *ersetzt* dort also nur ein Drittel
+seines eigenen Werts. Genau das steht dann im Feld, und genau so wenig rechnet
+die Integration gut.
+
+Bei Gas und 0,12 € statt 0,34 €: Wer 250 kWh in den Heizstab schickt, spart
+damit etwa 30 €, nicht 85. Der Unterschied ist kein Rundungsfehler – er macht in
+diesem Beispiel die Hälfte der Ersparnis aus.
 
 **Mehrere sind erlaubt.** Zwei Heizstäbe an derselben Gasheizung sparen
 denselben Brennstoff; ihre Leistungen und Zähler werden addiert und teilen sich
 einen Wertansatz.
 
-Und wohin zählt das Ganze sonst?
+#### Wenn der Verbraucher auch mal am Netz hängt
 
-| Größe | zählt der Heizstab mit? | warum |
+Ein Heizstab heizt im Juli mit Überschuss und im Januar mit Netzstrom. Dieselbe
+Kilowattstunde ist einmal geschenkte Energie und einmal eine Rechnung über den
+vollen Arbeitspreis – aus einem einzigen Zählerstand ist das nicht zu erkennen.
+
+Wer es **trennen kann**, trägt die beiden zusätzlichen Felder ein: *Davon aus
+PV/Batterie* als Leistung und/oder als Zähler. Viele Überschussregler liefern so
+einen Wert von sich aus. Dann gilt:
+
+* Nur der Anteil aus PV oder Batterie wird mit dem Preis des Ersetzten bewertet.
+* Der Rest ist ganz normaler Netzbezug zum Arbeitspreis – er kostet Geld, statt
+  welches zu sparen.
+
+Wer es **nicht trennen kann**, lässt die Felder leer. Dann gilt, was der Name
+sagt: Alles kam aus Überschuss. Für einen echten Überschussregler stimmt das
+auch. Als Notbremse rechnet die Integration ohnehin nie mehr um, als im selben
+Zeitraum überhaupt selbst genutzt wurde.
+
+#### Wohin zählt das Ganze?
+
+| Größe | zählt der Verbraucher mit? | warum |
 |---|---|---|
 | **Hausverbrauch** | ja | Der Strom fließt hinter dem Zähler. Jeder Hausstromsensor sieht ihn, und die Pfeile in der Karte müssen aufgehen |
 | **Grundverbrauch** | nein | Genau dafür gibt es ihn: das Haus ohne die Verbraucher, die nur bei Überschuss laufen |
-| **Autarkie** | nein | Sie rechnet auf dem Grundverbrauch |
-| **Eigenverbrauch** | ja | Er fragt nach der *erzeugten* Energie, nicht nach dem Bedarf: Wie viel davon blieb im Haus? |
-| **Ersparnis und Amortisation** | mit eigenem Wert | Ersetzt wurde Gas, nicht Strom |
-| **Bezugskosten Tag/Monat** | nein | Es ist kein Netzbezug. Kosten entstehen nur am Zähler |
+| **Autarkie** | ja | Sie fragt nach dem Netz, nicht nach dem Zweck – siehe unten |
+| **Autarkie Grundverbrauch** | nein | Dieselbe Rechnung ohne ihn, damit sich Monate vergleichen lassen |
+| **Eigenverbrauch** | ja | Er fragt nach der *erzeugten* Energie: Wie viel davon blieb im Haus? |
+| **Ersparnis und Amortisation** | mit eigenem Wert | Ersetzt wurde Gas, Öl, Wärme … – nur nicht Strom |
+| **Bezugskosten Tag/Monat** | nur der Netzanteil | Kosten entstehen am Zähler. Was aus Überschuss kam, steht dort nicht |
 
 ### Grundverbrauch
 
@@ -278,20 +327,9 @@ Das Problem am Hausverbrauch ist, dass er zwei Fragen gleichzeitig beantwortet:
 Deshalb beide: **Hausverbrauch** ist alles, **Grundverbrauch** ist das Haus ohne
 Überschussverbraucher. Im Hauskasten steht der eine oben, der andere unten.
 
-Die **Autarkie rechnet auf dem Grundverbrauch**, und das ist kein Detail: Eine
-Quote, die steigt, weil man mehr Überschuss wegheizt, misst nicht die Anlage,
-sondern lobt sich selbst. „90 % autark“ heißt jetzt: Von dem, was das Haus
-wirklich brauchte, kamen 90 % nicht aus dem Netz.
-
 Bei mehreren Anlagen wird der umgeleitete Anteil nach der Erzeugung aufgeteilt –
 wie die Einspeisung auch, und mit derselben Einschränkung: Es stimmt, solange
 die Anlagen zur selben Zeit liefern.
-
-Zwei Dinge bleiben ehrlich zu sagen. Läuft der Heizstab auch einmal am Netz,
-lässt sich das aus einem Zählerstand nicht herauslesen; gerechnet wird deshalb
-höchstens so viel, wie im selben Zeitraum überhaupt selbst genutzt wurde. Und
-wer die Autarkie ohne solche Verbraucher sehen will, muss sie im Kopf abziehen –
-eine Quote, die nur bei Sonne steigt, schmeichelt sich selbst.
 
 ### Wenn der Zähler ein anderer wird
 
@@ -321,6 +359,17 @@ behält damit ihren Sinn – nur die Wochen dazwischen fehlen.
 
 Ruf ihn auf, wenn im Gesamtzeitraum Zahlen stehen, die es nicht geben kann.
 Sonst nie.
+
+**Der bequemere Weg: Konfigurieren → Kostenzähler leeren.** Dort steht vorher,
+was gerade in der Bilanz steht, und ohne Haken passiert nichts. Der Dienst
+bleibt für Automatisierungen – in den Entwicklerwerkzeugen verlangt er
+allerdings ein Ziel, weil er einen Standort braucht:
+
+```yaml
+action: pv_system.reset_costs
+target:
+  entity_id: sensor.pv_system_status
+```
 
 ### Rückwirkend
 
@@ -407,20 +456,24 @@ Das ist der Hausanschluss: ein Zähler für alles, was rein- und rausgeht.
 | **Leistung** | W | Nur wenn du den Hausverbrauch **misst**. Hat dann Vorrang vor der Rechnung | Wird gerechnet – der Normalfall |
 | **Verbrauchszähler** | kWh | Alles, was im Haus verbraucht wurde: Netzbezug **und** selbst genutzter Solarstrom. **Nicht** der Bezugszähler. Zweiter Weg zum Eigenverbrauch (`verbraucht − bezogen`), wenn keine Anlage einen Ertragszähler hat | In Ordnung, solange ein Ertragszähler da ist |
 | **Überschussverbraucher** | Text | Name in der Karte, z. B. „Heizstab“ | „Überschuss“ |
-| **Leistung Überschussverbraucher** | W, mehrere | Was sie gerade ziehen. Wird vom Hausverbrauch abgezogen → **Grundverbrauch**. Autarkie und Eigenverbrauch beziehen sich darauf | Kein Grundverbrauch, Quoten wie bisher |
-| **Zähler Überschussverbraucher** | kWh, mehrere | Diese kWh werden in der Ersparnis mit dem Feld darunter bewertet statt mit dem Arbeitspreis | Überschuss zählt wie normaler Eigenverbrauch |
-| **Wert je kWh** | Geld | Was eine umgeleitete kWh wirklich wert ist: Brennstoffpreis ÷ Kesselwirkungsgrad | Es gilt der Arbeitspreis |
+| **Leistung Überschussverbraucher** | W, mehrere | Was sie gerade ziehen. Wird vom Hausverbrauch abgezogen → **Grundverbrauch** | Kein Grundverbrauch |
+| **Zähler Überschussverbraucher** | kWh, mehrere | Diese kWh werden in der Ersparnis mit dem Preis des Ersetzten bewertet statt mit dem Arbeitspreis | Überschuss zählt wie normaler Eigenverbrauch |
+| **Davon aus PV/Batterie: Leistung** | W, mehrere | Der Anteil, der gerade aus der eigenen Anlage kommt. Trennt Sommer- von Winterbetrieb | Alles gilt als Überschuss |
+| **Davon aus PV/Batterie: Zähler** | kWh, mehrere | Dasselbe als Zählerstand. Ist er gesetzt, geht nur er in die Ersparnis ein – der Rest ist Netzbezug zum Arbeitspreis | Alles gilt als Überschuss |
+| **Ersetzt** | Auswahl | Gas, Heizöl, Pellets, Fernwärme, Wärmepumpe oder „Nichts – es bleibt Strom“. Bei „Strom“ wird das Feld darunter ignoriert | Gas |
+| **Wert je kWh des Ersetzten** | Geld | Was eine umgeleitete kWh wirklich wert ist: Preis des Ersetzten ÷ Wirkungsgrad (bei der Wärmepumpe ÷ JAZ) | Es gilt der Arbeitspreis |
 
 ### Kosten und Ertrag (Standort)
 
 | Feld | Einheit | Was passiert damit | Leer? |
 |---|---|---|---|
-| **Arbeitspreis** | Geld/kWh | Bewertet Bezug und Eigenverbrauch. **Ohne ihn entsteht keine einzige Geldentität** | Keine Kosten, keine Amortisation |
-| **Arbeitspreis aus Entität** | Entität | Für dynamische Tarife. Hat Vorrang; meldet sie nichts Brauchbares, gilt wieder die feste Zahl | Nur die feste Zahl |
-| **Einspeisevergütung** | Geld/kWh | Bewertet die Einspeisung. Je Anlage überschreibbar | Kein Erlös |
-| **Vergütung aus Entität** | Entität | wie oben | |
-| **Grundpreis je Monat** | Geld | Monatliche Pauschale, nach verstrichener Zeit anteilig verteilt – sonst stünde am Monatsersten ein voller Monatsbeitrag im Tageswert | 0 |
-| **Grundpreis aus Entität** | Entität | wie oben | |
+| **Arbeitspreis: feste Zahl je kWh** | Geld/kWh | Bewertet Bezug und Eigenverbrauch. **Ohne ihn entsteht keine einzige Geldentität** | Keine Kosten, keine Amortisation |
+| **Arbeitspreis: Entität statt fester Zahl** | Entität | Für dynamische Tarife. Hat Vorrang; meldet sie nichts Brauchbares, gilt wieder die feste Zahl | Nur die feste Zahl |
+| **Einspeisevergütung: feste Zahl je kWh** | Geld/kWh | Bewertet die Einspeisung. Je Anlage überschreibbar | Kein Erlös |
+| **Einspeisevergütung: Entität statt fester Zahl** | Entität | wie oben | |
+| **Grundpreis: feste Zahl** | Geld | Zähler- und Netzentgelt – alles, was unabhängig vom Verbrauch anfällt. Wird nach verstrichener Zeit anteilig verteilt, sonst stünde am Monatsersten ein voller Beitrag im Tageswert | 0 |
+| **Grundpreis: Zeitraum dazu** | je Monat / je Jahr | Worauf sich die Zahl darüber bezieht. „je Jahr“ wird durch zwölf geteilt – gilt auch für die Entität | je Monat |
+| **Grundpreis: Entität statt fester Zahl** | Entität | wie oben. Wird mit demselben Zeitraum gedeutet | |
 | **Währung** | Text | Einheit der Geldsensoren | EUR |
 | **Stand des Bezugszählers bei Einrichtung** | kWh | Siehe unten | Gesamtzeitraum beginnt heute |
 | **Durchschnittspreis davor** | Geld/kWh | Bewertet genau diese Zeit davor | Heutiger Preis |
@@ -589,12 +642,10 @@ schon, kommt die Voreinstellung zu spät: Home Assistant entscheidet beim
 allerersten Anlegen, ob eine Entität ein- oder ausgeschaltet ist, und fragt
 danach nie wieder.
 
-Dafür gibt es drei Wege zum selben Ziel:
+Dafür gibt es zwei Wege zum selben Ziel:
 
 * **Konfigurieren → Doppelte Sensoren.** Der empfohlene: Dort steht *vorher*,
   welche Entitäten es trifft, und ohne Haken passiert nichts.
-* Die Schaltfläche **„Doppelte Sensoren abschalten"** auf dem Gerät des
-  Standorts – ein Griff, ohne Liste.
 * `pv_system.tidy_entities` für Automatisierungen. Er gilt für den ganzen
   Standort und meldet zurück, wie viele und welche:
 
@@ -620,6 +671,34 @@ Fünf-Minuten-Blöcken; dreißig Sekunden liefern ihr zehn Werte je Block.
 
 ### Autarkie und Eigenverbrauch
 
+**Was sie messen**
+
+    Autarkie      = (Hausverbrauch − Netzbezug) ÷ Hausverbrauch
+    Eigenverbrauch = (Erzeugung − Einspeisung) ÷ Erzeugung
+
+Zwei Brüche, mehr ist es nicht – aber es lohnt sich, sie auseinanderzuhalten.
+Die Autarkie schaut auf den **Zähler**: Wie viel von dem, was das Haus zieht,
+musste ich kaufen? Der Eigenverbrauch schaut auf das **Dach**: Wie viel von dem,
+was ich erzeugt habe, ist im Haus geblieben?
+
+Deshalb ist ein Überschussverbraucher in beiden mit drin, und zwar zu Recht:
+
+* Läuft der Heizstab auf Überschuss, steigt der Hausverbrauch und der Netzbezug
+  bleibt, wo er war → die **Autarkie steigt**. Wer nichts aus dem Netz zieht,
+  ist autark, egal wofür der Strom im Haus gebraucht wurde.
+* Dieselbe Kilowattstunde ist auch Eigenverbrauch: Sie wurde erzeugt und ging
+  nicht ins Netz.
+* Läuft er im Winter am Netz, steigen Verbrauch **und** Bezug → die Autarkie
+  fällt. Auch das kommt von allein heraus, ohne Sonderfall.
+
+Daneben steht die **Autarkie Grundverbrauch**: dieselbe Rechnung ohne den
+Überschussverbraucher. Nicht weil die andere falsch wäre, sondern weil nur diese
+von Monat zu Monat vergleichbar ist – eine Quote, die steigt, weil man mehr
+Überschuss wegheizt, sagt über den Haushalt nichts. Sie steht in der
+Detailtabelle des Hauses, nicht als eigener Sensor.
+
+**Wo sie stehen**
+
 Beide gibt es zweimal, und das mit Absicht:
 
 * **in der Karte** als Momentanwert – dort steht er neben allem anderen und
@@ -632,6 +711,12 @@ Zeile. „In der Stunde von 13 bis 14 Uhr kamen 80 % nicht aus dem Netz" ist die
 Zahl, die jemand wissen will. Die beiden Energiemengen, aus denen sie entsteht,
 hängen als Attribut daran. Eine Stunde, in der weniger als 50 Minuten gemessen
 wurde – Neustart, Aussetzer –, wird gar nicht erst veröffentlicht.
+
+**Sekundengenau ist nur die Karte.** Sie liest den Koordinator direkt; der
+rechnet, sobald sich eine der beteiligten Entitäten meldet. In die Datenbank
+geht der Momentanwert **nicht** – es gibt für ihn keinen Sensor und damit keinen
+Zustand in Home Assistant. Wer ihn in einer Automatisierung braucht, nimmt den
+Stundensensor oder rechnet ihn aus den Leistungssensoren, die es einzeln gibt.
 
 ## Dienste
 

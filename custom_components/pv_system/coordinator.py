@@ -23,9 +23,11 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from . import units
 from .const import (
+    BASE_PER_YEAR,
     CONF_AZIMUTH,
     CONF_BASE_PRICE,
     CONF_BASE_PRICE_ENTITY,
+    CONF_BASE_PRICE_UNIT,
     CONF_BATTERY,
     CONF_BATTERY_CHARGED,
     CONF_BATTERY_CURRENT,
@@ -61,9 +63,12 @@ from .const import (
     CONF_CURRENCY_PRICE,
     CONF_CURRENCY_PRICE_ENTITY,
     CONF_DIVERTER_ENERGY,
+    CONF_DIVERTER_FUEL,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
+    CONF_DIVERTER_SOLAR_ENERGY,
+    CONF_DIVERTER_SOLAR_POWER,
     CONF_ENABLED,
     CONF_FEED_IN_PRICE,
     CONF_FEED_IN_PRICE_ENTITY,
@@ -120,6 +125,7 @@ from .const import (
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
     CONF_TILT,
+    FUEL_ELECTRICITY,
     PHASES,
     SIGN_POSITIVE_DISCHARGE,
     SIGN_POSITIVE_EXPORT,
@@ -271,8 +277,16 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "import": netz["import_energy"],
             "export": netz["export_energy"],
             # Was in den Überschussverbraucher ging - ein Teil des
-            # Eigenverbrauchs, aber mit eigenem Wert.
-            "diverted": umleiter.get("energy"),
+            # Eigenverbrauchs, aber mit eigenem Wert. Ist der Anteil aus
+            # PV/Batterie getrennt gemessen, zählt nur er: Die Kilowattstunde,
+            # die der Heizstab im Januar aus dem Netz gezogen hat, ersetzt zwar
+            # auch Gas, kostet aber vorher den vollen Arbeitspreis - sie ist
+            # kein Sondertarif, sondern ganz normaler Bezug.
+            "diverted": (
+                umleiter.get("solar_energy")
+                if umleiter.get("split")
+                else umleiter.get("energy")
+            ),
             "own": eigenverbrauch_kwh(
                 erzeugung,
                 netz["export_energy"],
@@ -308,13 +322,24 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "feed_in": self._preis(
                     conf[CONF_FEED_IN_PRICE_ENTITY], conf[CONF_FEED_IN_PRICE]
                 ),
-                "base": self._preis(
-                    conf[CONF_BASE_PRICE_ENTITY], conf[CONF_BASE_PRICE]
+                # Gerechnet wird mit dem Monat. Wer den Grundpreis je Jahr
+                # eingetragen hat - oder einen Sensor in Euro pro Jahr im Haus
+                # stehen hat -, sagt das im Dialog, und hier wird geteilt.
+                "base": _monatspreis(
+                    self._preis(conf[CONF_BASE_PRICE_ENTITY], conf[CONF_BASE_PRICE]),
+                    conf[CONF_BASE_PRICE_UNIT],
                 ),
                 "currency": conf[CONF_CURRENCY],
                 "prior_import": conf[CONF_PRIOR_IMPORT],
                 "prior_price": conf[CONF_PRIOR_PRICE],
-                "diverted": umleiter.get("price"),
+                # Ersetzt der Verbraucher Strom (ein Speicher, ein Auto), gibt
+                # es keinen anderen Preis: Die Kilowattstunde bleibt eine
+                # Kilowattstunde und ist genau den Arbeitspreis wert.
+                "diverted": (
+                    None
+                    if umleiter.get("fuel") == FUEL_ELECTRICITY
+                    else umleiter.get("price")
+                ),
             },
             {
                 "import": netz["import_power"],
@@ -977,28 +1002,44 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         verbrauch = units.first(gemessen, gerechnet)
 
-        # Die Autarkie rechnet auf dem Grundverbrauch, nicht auf allem. Ein
-        # Heizstab läuft nur, *weil* Überschuss da ist - ihn mitzuzählen hieße,
-        # die Quote mit dem eigenen Erfolg zu füttern: Je mehr man wegheizt,
-        # desto autarker sieht man aus. Der Grundverbrauch fragt das, was
-        # gemeint ist: Wie viel von dem, was das Haus wirklich braucht, kam
-        # nicht aus dem Netz?
+        # Der Überschussverbraucher und der Teil davon, der aus PV oder
+        # Batterie kam. Ohne den zweiten Sensor gilt, was der Name sagt: alles.
         umleiterleistung = units.add(
             *(units.watt(self.hass, e) for e in conf[CONF_DIVERTER_POWER])
         )
+        umleitersonne = units.add(
+            *(units.watt(self.hass, e) for e in conf[CONF_DIVERTER_SOLAR_POWER])
+        )
+
+        # Die Autarkie rechnet auf dem ganzen Hausverbrauch. Sie beantwortet
+        # genau eine Frage - wie viel von dem, was das Haus zieht, kam nicht
+        # aus dem Netz? - und die ist unabhängig davon, wofür der Strom
+        # gebraucht wurde. Läuft ein Heizstab auf Überschuss, steigt der
+        # Verbrauch und der Netzbezug bleibt, wo er war: Die Quote geht hoch,
+        # und das ist richtig. Läuft er im Winter auf Netzstrom, steigen beide:
+        # Die Quote fällt, und das ist auch richtig. Es braucht dafür keinen
+        # Sonderfall, nur den ehrlichen Bruch.
+        autarkie = _quote(verbrauch, netz["import_power"])
+
+        # Daneben dieselbe Rechnung ohne den Überschussverbraucher. Nicht weil
+        # die andere falsch wäre, sondern weil nur diese von Monat zu Monat
+        # vergleichbar ist: Der Hausverbrauch schwankt mit der Sonne, der
+        # Grundverbrauch mit dem Haushalt.
         bezugsgroesse = verbrauch
         if verbrauch is not None and umleiterleistung:
             bezugsgroesse = max(0.0, verbrauch - umleiterleistung)
-
-        autarkie = None
-        if bezugsgroesse is not None and bezugsgroesse > 0:
-            bezug = netz["import_power"] or 0.0
-            autarkie = round(
-                100.0
-                * max(0.0, min(bezugsgroesse, bezugsgroesse - bezug))
-                / bezugsgroesse,
-                1,
-            )
+        # Netzbezug ohne den Anteil, den der Verbraucher selbst aus dem Netz
+        # gezogen hat - sonst belastete er eine Quote, aus der er herausgerechnet
+        # wurde. Ohne getrennten Sensor gilt, was der Name sagt: Ein
+        # Überschussverbraucher zieht nichts aus dem Netz, also ist der Abzug
+        # null und der ganze Bezug gehört dem Grundverbrauch.
+        netzumleitung = None
+        if conf[CONF_DIVERTER_SOLAR_POWER] and umleiterleistung is not None:
+            netzumleitung = max(0.0, umleiterleistung - (umleitersonne or 0.0))
+        grundbezug = netz["import_power"]
+        if grundbezug is not None and netzumleitung:
+            grundbezug = max(0.0, grundbezug - netzumleitung)
+        grundautarkie = _quote(bezugsgroesse, grundbezug)
 
         # Bezugsgröße für den Eigenverbrauch ist die erzeugte Leistung am Modul,
         # nicht die Abgabe des Wechselrichters. Bei einer DC-gekoppelten Anlage
@@ -1020,8 +1061,10 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # bekommen die abgeschlossene Stunde - siehe stunde.py.
         stunde = self.stunden.rechnen(
             {
-                "house": bezugsgroesse,
+                "house": verbrauch,
+                "base": bezugsgroesse,
                 "import": netz["import_power"],
+                "base_import": grundbezug,
                 "export": netz["export_power"],
                 "yield": erzeugung,
             }
@@ -1038,30 +1081,40 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 units.add(*(units.kwh(self.hass, e) for e in conf[CONF_DIVERTER_ENERGY])),
                 2,
             ),
+            # Der Teil, der aus PV oder Batterie kam - und nur der wird mit
+            # dem Preis des ersetzten Brennstoffs bewertet. Fehlt der Sensor,
+            # bleibt beides None und die Rechnung nimmt den ganzen Betrag.
+            "solar_power": units.rund(umleitersonne),
+            "solar_energy": units.rund(
+                units.add(
+                    *(units.kwh(self.hass, e) for e in conf[CONF_DIVERTER_SOLAR_ENERGY])
+                ),
+                2,
+            ),
+            "grid_power": units.rund(netzumleitung),
+            "fuel": conf[CONF_DIVERTER_FUEL],
             "price": conf[CONF_DIVERTER_PRICE],
             "count": len(conf[CONF_DIVERTER_POWER]) + len(conf[CONF_DIVERTER_ENERGY]),
             "enabled": bool(conf[CONF_DIVERTER_ENERGY] or conf[CONF_DIVERTER_POWER]),
+            "split": bool(
+                conf[CONF_DIVERTER_SOLAR_POWER] or conf[CONF_DIVERTER_SOLAR_ENERGY]
+            ),
             "entities": {
                 "power": conf[CONF_DIVERTER_POWER],
                 "energy": conf[CONF_DIVERTER_ENERGY],
+                "solar_power": conf[CONF_DIVERTER_SOLAR_POWER],
+                "solar_energy": conf[CONF_DIVERTER_SOLAR_ENERGY],
             },
         }
 
-        # Der Grundverbrauch: was das Haus gebraucht hätte, ohne dass jemand
-        # Überschuss in warmes Wasser gesteckt hat. Das ist die Zahl, die man
-        # von Monat zu Monat vergleicht - der Hausverbrauch darüber schwankt
-        # mit der Sonne, nicht mit dem Haushalt.
-        grund = verbrauch
-        if verbrauch is not None and umleiterleistung:
-            grund = max(0.0, verbrauch - umleiterleistung)
-
         return {
             "house_power": units.rund(verbrauch),
-            "base_power": units.rund(grund),
+            "base_power": units.rund(bezugsgroesse),
             "house_source": "sensor" if gemessen is not None else "calculated",
             "diverter": umleiter,
             "house_energy": units.rund(units.kwh(self.hass, conf[CONF_HOUSE_ENERGY]), 2),
             "self_sufficiency": autarkie,
+            "base_self_sufficiency": grundautarkie,
             "self_consumption": eigenverbrauch,
             "hour": stunde,
             # Damit Sensoren und Karte erkennen, was überhaupt hinterlegt ist -
@@ -1071,3 +1124,22 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "energy": conf[CONF_HOUSE_ENERGY],
             },
         }
+
+
+def _quote(verbrauch: float | None, bezug: float | None) -> float | None:
+    """Wie viel Prozent des Verbrauchs nicht aus dem Netz kamen.
+
+    Kein Verbrauch, keine Quote: Ein Haus, das gerade nichts zieht, ist weder
+    autark noch abhängig - es ist nur still. Null zu melden wäre eine Aussage,
+    die niemand getroffen hat.
+    """
+    if verbrauch is None or verbrauch <= 0:
+        return None
+    return round(100.0 * max(0.0, min(verbrauch, verbrauch - (bezug or 0.0))) / verbrauch, 1)
+
+
+def _monatspreis(wert: float | None, einheit: str) -> float | None:
+    """Einen Grundpreis auf den Monat bringen."""
+    if wert is None:
+        return None
+    return wert / 12.0 if einheit == BASE_PER_YEAR else wert

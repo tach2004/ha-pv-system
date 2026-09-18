@@ -28,12 +28,14 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 from .const import (
+    BASE_PRICE_UNITS,
     BATTERY_SIGNS,
     CHEMISTRIES,
     CONF_ANIMATE,
     CONF_AZIMUTH,
     CONF_BASE_PRICE,
     CONF_BASE_PRICE_ENTITY,
+    CONF_BASE_PRICE_UNIT,
     CONF_BATTERY,
     CONF_BATTERY_CHARGED,
     CONF_BATTERY_CURRENT,
@@ -70,9 +72,12 @@ from .const import (
     CONF_CURRENCY_PRICE_ENTITY,
     CONF_DISPLAY,
     CONF_DIVERTER_ENERGY,
+    CONF_DIVERTER_FUEL,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
+    CONF_DIVERTER_SOLAR_ENERGY,
+    CONF_DIVERTER_SOLAR_POWER,
     CONF_ENABLED,
     CONF_FEED_IN_PRICE,
     CONF_FEED_IN_PRICE_ENTITY,
@@ -136,6 +141,7 @@ from .const import (
     CONF_TILT,
     DEFAULT_NAME,
     DEFAULT_PLANT_NAME,
+    DIVERTER_FUELS,
     DOMAIN,
     GRID_SIGNS,
     PHASES,
@@ -354,6 +360,9 @@ def _felder_haus() -> dict[Any, Any]:
         vol.Optional(CONF_DIVERTER_NAME): _text(),
         vol.Optional(CONF_DIVERTER_POWER): _sensor("power", mehrere=True),
         vol.Optional(CONF_DIVERTER_ENERGY): _sensor("energy", mehrere=True),
+        vol.Optional(CONF_DIVERTER_SOLAR_POWER): _sensor("power", mehrere=True),
+        vol.Optional(CONF_DIVERTER_SOLAR_ENERGY): _sensor("energy", mehrere=True),
+        vol.Optional(CONF_DIVERTER_FUEL): _auswahl(DIVERTER_FUELS, "diverter_fuel"),
         vol.Optional(CONF_DIVERTER_PRICE): _zahl(0, 10, "any"),
     }
 
@@ -383,7 +392,10 @@ def _felder_kosten() -> dict[Any, Any]:
         vol.Optional(CONF_CURRENCY_PRICE_ENTITY): _sensor(),
         vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, "any"),
         vol.Optional(CONF_FEED_IN_PRICE_ENTITY): _sensor(),
-        vol.Optional(CONF_BASE_PRICE): _zahl(0, 1000, "any"),
+        vol.Optional(CONF_BASE_PRICE): _zahl(0, 10000, "any"),
+        vol.Optional(CONF_BASE_PRICE_UNIT): _auswahl(
+            BASE_PRICE_UNITS, "base_price_unit"
+        ),
         vol.Optional(CONF_BASE_PRICE_ENTITY): _sensor(),
         vol.Optional(CONF_CURRENCY): _text(),
         vol.Optional(CONF_PRIOR_IMPORT): _zahl(0, 10000000, "any"),
@@ -520,7 +532,8 @@ class PvSystemOptionsFlow(OptionsFlow):
         return self.async_show_menu(
             step_id="init",
             menu_options=[
-                "plants", "grid", "house", "costs", "display", "tidy", "save",
+                "plants", "grid", "house", "costs", "display", "tidy", "reset",
+                "save",
             ],
         )
 
@@ -835,6 +848,56 @@ class PvSystemOptionsFlow(OptionsFlow):
             data_schema=vol.Schema({vol.Optional("tidy_confirm", default=False): bool}),
             description_placeholders={"liste": liste},
         )
+
+
+    # ------------------------------------------------------- Kosten leeren
+
+    async def async_step_reset(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Die gemessenen Kostenzahlen verwerfen - hier statt über den Dienst.
+
+        Den Dienst gibt es weiter, aber er ist der unbequemere Weg: In den
+        Entwicklerwerkzeugen verlangt er ein Ziel, und wer nur einen Standort
+        hat, weiß nicht, welches gemeint ist. Hier steht vorher, was gerade in
+        der Bilanz steht, und wer nichts anhakt, hat auch nichts getan.
+        """
+        koordinator = getattr(self._entry, "runtime_data", None)
+
+        if user_input is not None:
+            if user_input.get("reset_confirm") and koordinator is not None:
+                koordinator.kosten.zuruecksetzen()
+                await koordinator.async_refresh()
+            return await self.async_step_init()
+
+        return self.async_show_form(
+            step_id="reset",
+            data_schema=vol.Schema(
+                {vol.Optional("reset_confirm", default=False): bool}
+            ),
+            description_placeholders={"stand": _kostenstand(koordinator)},
+        )
+
+
+def _kostenstand(koordinator: Any) -> str:
+    """Was gerade im Gesamtzeitraum steht - damit man weiß, was man wegwirft."""
+    daten = getattr(koordinator, "data", None) or {}
+    kosten = daten.get("costs") or {}
+    gesamt = (kosten.get("periods") or {}).get("total") or {}
+    if not gesamt:
+        return "Es ist noch nichts gemessen worden."
+    waehrung = kosten.get("currency") or "EUR"
+
+    def _geld(wert: Any) -> str:
+        return "–" if wert is None else f"{float(wert):.2f} {waehrung}"
+
+    return (
+        f"Bezogen {gesamt.get('import_kwh') or 0:.0f} kWh, "
+        f"eingespeist {gesamt.get('export_kwh') or 0:.0f} kWh.\n"
+        f"Kosten {_geld(gesamt.get('cost'))}, "
+        f"Vergütung {_geld(gesamt.get('feed_in'))}, "
+        f"Ersparnis {_geld(gesamt.get('savings'))}."
+    )
 
 
 def _spitze_text(module: dict[str, Any]) -> str:
