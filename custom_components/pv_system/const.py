@@ -131,7 +131,36 @@ CONF_DIVERTER_NAME: Final = "diverter_name"
 CONF_DIVERTER_POWER: Final = "diverter_power_entity"
 CONF_DIVERTER_ENERGY: Final = "diverter_energy_entity"
 CONF_DIVERTER_PRICE: Final = "diverter_price"
+# Wovon der Verbraucher gerade lebt. Ein Heizstab heizt im Sommer mit
+# Ueberschuss und im Winter mit Netzstrom - dieselbe Kilowattstunde ist einmal
+# eine Ersparnis und einmal eine Rechnung. Wer einen Sensor hat, der beides
+# trennt, traegt ihn hier ein; ohne ihn gilt die Annahme, die im Namen steckt:
+# Was in den Ueberschussverbraucher geht, kam aus Ueberschuss.
+CONF_DIVERTER_SOLAR_POWER: Final = "diverter_solar_power_entity"
+CONF_DIVERTER_SOLAR_ENERGY: Final = "diverter_solar_energy_entity"
 DEFAULT_DIVERTER_NAME: Final = "Überschuss"
+
+# Was der Verbraucher ersetzt. Nicht jeder hat einen Heizstab an einer
+# Gasheizung: Es gibt Oel, Pellets, Fernwaerme, eine Waermepumpe - und es gibt
+# Speicher, die gar keinen Brennstoff ersetzen, sondern Strom, den man sonst
+# spaeter gekauft haette. Davon haengt ab, was eine umgeleitete Kilowattstunde
+# wert ist, und nur davon.
+CONF_DIVERTER_FUEL: Final = "diverter_fuel"
+FUEL_GAS: Final = "gas"
+FUEL_OIL: Final = "oil"
+FUEL_PELLETS: Final = "pellets"
+FUEL_DISTRICT: Final = "district"
+FUEL_HEATPUMP: Final = "heatpump"
+FUEL_ELECTRICITY: Final = "electricity"
+DIVERTER_FUELS: Final = [
+    FUEL_GAS,
+    FUEL_OIL,
+    FUEL_PELLETS,
+    FUEL_DISTRICT,
+    FUEL_HEATPUMP,
+    FUEL_ELECTRICITY,
+]
+DEFAULT_DIVERTER_FUEL: Final = FUEL_GAS
 
 # ----------------------------------------------------------------- Darstellung
 CONF_ANIMATE: Final = "animate"
@@ -152,6 +181,14 @@ CONF_COSTS: Final = "costs"
 CONF_CURRENCY_PRICE: Final = "price_per_kwh"
 CONF_FEED_IN_PRICE: Final = "feed_in_price"
 CONF_BASE_PRICE: Final = "base_price"
+# Manche Vertraege weisen den Grundpreis je Monat aus, manche je Jahr, und
+# manche Nutzerin hat ihn als Entitaet in Euro pro Jahr im Haus stehen. Gerechnet
+# wird ueberall mit dem Monat; was eingetragen ist, sagt dieses Feld.
+CONF_BASE_PRICE_UNIT: Final = "base_price_unit"
+BASE_PER_MONTH: Final = "month"
+BASE_PER_YEAR: Final = "year"
+BASE_PRICE_UNITS: Final = [BASE_PER_MONTH, BASE_PER_YEAR]
+DEFAULT_BASE_PRICE_UNIT: Final = BASE_PER_MONTH
 CONF_INVESTMENT: Final = "investment"
 CONF_CURRENCY: Final = "currency"
 

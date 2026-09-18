@@ -18,11 +18,6 @@
     }
   },
   "entity": {
-    "button": {
-      "tidy_entities": {
-        "name": "Doppelte Sensoren abschalten"
-      }
-    },
     "sensor": {
       "balance_day": {
         "name": "Bilanz heute"
@@ -327,19 +322,21 @@
       },
       "costs": {
         "data": {
-          "base_price": "Grundpreis je Monat",
-          "base_price_entity": "Grundpreis aus Entität",
+          "base_price": "Grundpreis: feste Zahl",
+          "base_price_entity": "Grundpreis: Entität statt fester Zahl",
+          "base_price_unit": "Grundpreis: Zeitraum dazu",
           "currency": "Währung",
-          "feed_in_entity": "Vergütung aus Entität",
+          "feed_in_entity": "Einspeisevergütung: Entität statt fester Zahl",
           "feed_in_price": "Einspeisevergütung (Vorgabe)",
-          "price_entity": "Arbeitspreis aus Entität",
-          "price_per_kwh": "Arbeitspreis",
+          "price_entity": "Arbeitspreis: Entität statt fester Zahl",
+          "price_per_kwh": "Arbeitspreis: feste Zahl je kWh",
           "prior_import": "Stand des Bezugszählers bei Einrichtung",
           "prior_price": "Durchschnittspreis davor"
         },
         "data_description": {
-          "base_price": "Der monatliche Grundpreis deines Stromvertrags. Er wird anteilig auf Tag, Monat und Jahr verteilt. Leer oder 0, wenn er dich hier nicht interessiert.",
-          "base_price_entity": "Dasselbe für den Grundpreis.",
+          "base_price": "Der Grundpreis deines Stromvertrags - Zähler- und Netzentgelt, alles, was unabhängig vom Verbrauch anfällt. **Ob die Zahl für einen Monat oder ein Jahr gilt, sagst du im Feld darunter.**\n\nEr wird anteilig auf Tag, Monat und Jahr verteilt. Leer oder 0, wenn er dich hier nicht interessiert.",
+          "base_price_entity": "Dasselbe für den Grundpreis. Achtung: Was diese Entität liefert, wird mit dem Zeitraum darüber gedeutet - steht dort „je Jahr“, gilt das auch für die Entität.",
+          "base_price_unit": "Auf welchen Zeitraum sich die Zahl darüber bezieht. Viele Verträge weisen den Grundpreis je Jahr aus, viele Rechnungen je Monat - beides ist richtig, es muss nur hier stehen. Gerechnet wird intern immer mit dem Monat; „je Jahr“ wird durch zwölf geteilt.",
           "currency": "Das Währungskürzel, z. B. EUR oder CHF. Es wird als Einheit an den Geldsensoren geführt.",
           "feed_in_entity": "Dasselbe für die Einspeisevergütung.",
           "feed_in_price": "Was du je eingespeister Kilowattstunde vergütet bekommst, z. B. 0,08. Leer lassen, wenn du nicht einspeist.",
@@ -416,18 +413,24 @@
         "data": {
           "calculate": "Hausverbrauch rechnen",
           "diverter_energy_entity": "Zähler Überschussverbraucher",
+          "diverter_fuel": "Ersetzt",
           "diverter_name": "Überschussverbraucher",
           "diverter_power_entity": "Leistung Überschussverbraucher",
-          "diverter_price": "Wert je kWh",
+          "diverter_price": "Wert je kWh des Ersetzten",
+          "diverter_solar_energy_entity": "Davon aus PV/Batterie: Zähler",
+          "diverter_solar_power_entity": "Davon aus PV/Batterie: Leistung",
           "energy_entity": "Verbrauchszähler",
           "power_entity": "Gemessener Hausverbrauch"
         },
         "data_description": {
           "calculate": "Verbrauch = Wechselrichterleistung + Netzleistung. Ein gemessener Hausverbrauch hat Vorrang.",
-          "diverter_energy_entity": "kWh-Zähler dieser Verbraucher. **Mehrere sind erlaubt** - sie werden addiert.\n\nDiese Kilowattstunden fließen wirklich im Haus, sie sparen aber keinen Strom, sondern den Brennstoff, mit dem sonst geheizt würde. Deshalb werden sie in der Ersparnis getrennt bewertet - mit dem Feld darunter.\n\nLeer: Der Überschuss zählt wie jeder andere Eigenverbrauch, und die Anlage rechnet sich reicher, als sie ist.",
+          "diverter_energy_entity": "kWh-Zähler dieser Verbraucher. **Mehrere sind erlaubt** - sie werden addiert.\n\nDiese Kilowattstunden fließen wirklich im Haus. Ob sie Geld sparen, hängt davon ab, was sie ersetzen: Wer damit statt mit Gas heizt, spart Gas und nicht Strom - deshalb werden sie in der Ersparnis getrennt bewertet, mit den beiden Feldern weiter unten.\n\nLeer: Der Überschuss zählt wie jeder andere Eigenverbrauch.",
+          "diverter_fuel": "Was dieser Verbraucher ersetzt. Davon hängt ab, was eine umgeleitete Kilowattstunde wert ist.\n\nGas, Öl, Pellets, Fernwärme oder Wärmepumpe: Der Wert ist der Preis dieses Brennstoffs - siehe das Feld darunter.\n\n„Nichts - es bleibt Strom“: Ein Hausspeicher oder ein Auto verbrennt nichts, es verschiebt Strom nach später. Dann ist eine Kilowattstunde genau den Arbeitspreis wert, und das Feld darunter wird ignoriert.",
           "diverter_name": "Wie der Verbraucher in der Karte heißen soll, z. B. „Heizstab“.",
-          "diverter_power_entity": "Was die Überschussverbraucher gerade ziehen - der Heizstab im Brauchwasserspeicher, die Wallbox im Überschussladen. **Mehrere sind erlaubt**; zwei Heizstäbe an derselben Gasheizung werden addiert.\n\nDiese Leistung wird vom Hausverbrauch abgezogen und ergibt den **Grundverbrauch** - das, was dein Haushalt wirklich braucht. Auf ihn beziehen sich auch Autarkie und Eigenverbrauch.",
-          "diverter_price": "Was eine umgeleitete Kilowattstunde wirklich wert ist: der Preis des ersetzten Brennstoffs, geteilt durch den Wirkungsgrad des Kessels. Bei 0,11 €/kWh Gas und 92 % sind das rund 0,12. Leer: Es gilt der Arbeitspreis - und die Anlage rechnet sich reicher, als sie ist.",
+          "diverter_power_entity": "Was die Überschussverbraucher gerade ziehen - der Heizstab im Brauchwasserspeicher, die Wallbox im Überschussladen, der Pufferspeicher der Wärmepumpe. **Mehrere sind erlaubt**; sie werden addiert.\n\nGemeint ist alles, was nur läuft, **weil** Überschuss da ist, und dabei Energie in einen Speicher legt - warmes Wasser, eine Autobatterie, ein Pufferspeicher. Ein Kühlschrank gehört nicht dazu: Der läuft sowieso.\n\nDiese Leistung wird vom Hausverbrauch abgezogen und ergibt den **Grundverbrauch** - das, was dein Haushalt ohne den Überschuss gebraucht hätte. Autarkie und Eigenverbrauch rechnen weiter auf dem **ganzen** Hausverbrauch; der Grundverbrauch steht daneben, weil nur er von Monat zu Monat vergleichbar ist.",
+          "diverter_price": "Was eine Kilowattstunde des **Ersetzten** kostet, geteilt durch den Wirkungsgrad.\n\nGas 0,11 €/kWh bei 92 % Kesselwirkungsgrad → rund 0,12. Heizöl 1,00 €/l ÷ 10 kWh/l ÷ 0,9 → rund 0,11. Wärmepumpe: Arbeitspreis ÷ Jahresarbeitszahl, bei 0,34 € und JAZ 3,5 → rund 0,10 - eine Wärmepumpe macht aus einer Kilowattstunde eben dreieinhalb.\n\nLeer: Es gilt der Arbeitspreis, und die Anlage rechnet sich reicher, als sie ist.",
+          "diverter_solar_energy_entity": "Dasselbe als kWh-Zähler: die Kilowattstunden des Verbrauchers, die aus PV oder Batterie kamen. **Mehrere sind erlaubt.**\n\nIst er gesetzt, geht nur dieser Zähler in die Ersparnis ein - der Rest ist ganz normaler Netzbezug zum Arbeitspreis.",
+          "diverter_solar_power_entity": "**Nur wenn du es getrennt messen kannst.** Der Teil der Leistung oben, der gerade aus PV oder Batterie kommt.\n\nWarum das zählt: Ein Heizstab heizt im Juli mit Überschuss und im Januar mit Netzstrom. Dieselbe Kilowattstunde ist einmal geschenkte Energie und einmal eine Rechnung über den vollen Arbeitspreis. Nur der Teil, der aus der eigenen Anlage kam, wird mit dem Preis des Ersetzten bewertet.\n\nLeer: Es gilt, was der Name sagt - alles kam aus Überschuss. Für einen echten Überschussregler stimmt das auch.",
           "energy_entity": "Ein kWh-Zähler über **alles, was im Haus verbraucht wurde** - Netzbezug *und* selbst genutzter Solarstrom zusammen. Nicht der Bezugszähler: Der steht unter „Netz und Zähler“ und zählt nur, was aus dem Netz kam.\n\nWozu: Er ist der zweite Weg zum Eigenverbrauch. Normalerweise rechnet die Integration „erzeugt minus eingespeist“; hast du keinen Ertragszähler, greift stattdessen „verbraucht minus bezogen“ - und dafür wird er gebraucht.\n\nLeer: völlig in Ordnung, solange deine Anlagen einen Ertragszähler haben.",
           "power_entity": "Nur, wenn du den Hausverbrauch **misst** - etwa mit einem zweiten Zähler hinter dem Hausanschluss. In Watt, kein Zählerstand.\n\nNormalerweise leer lassen: Dann rechnet die Integration ihn aus Netzleistung plus Wechselrichterabgabe, und das ist bei einer Netzparallelanlage genauso richtig."
         },
@@ -441,6 +444,7 @@
           "grid": "Netz und Zähler",
           "house": "Haus und Verbrauch",
           "plants": "Anlagen",
+          "reset": "Kostenzähler leeren",
           "save": "Speichern und schließen",
           "tidy": "Doppelte Sensoren"
         },
@@ -573,6 +577,13 @@
         "description": "Eingerichtet sind {count} Anlagen. Welche möchtest du bearbeiten?",
         "title": "Anlagen"
       },
+      "reset": {
+        "data": {
+          "reset_confirm": "Ja, die gemessenen Kostenzahlen verwerfen"
+        },
+        "description": "Der Ausweg, wenn die Beträge einmal nicht mehr stimmen - typischerweise nach einem Zählertausch oder wenn im Bezugszählerfeld kurz die falsche Entität stand. Tag, Monat und Jahr heilen sich beim nächsten Wechsel von selbst; der Gesamtzeitraum trägt den Fehler weiter, bis jemand ihn leert.\n\n**Was bleibt:** alles, was in der Konfiguration steht - Bezug davor, Preis davor, Ertrag davor, Investition und Inbetriebnahme jeder Anlage. **Was weg ist:** alles, was seit dem ersten Lauf gemessen wurde. Rückgängig machen kann man das nicht.\n\nDasselbe tut der Dienst `pv_system.reset_costs`; in den Entwicklerwerkzeugen verlangt er allerdings ein Ziel.\n\n**Im Gesamtzeitraum steht gerade:**\n\n{stand}",
+        "title": "Kostenzähler leeren"
+      },
       "tidy": {
         "data": {
           "tidy_confirm": "Ja, diese Sensoren abschalten"
@@ -583,6 +594,12 @@
     }
   },
   "selector": {
+    "base_price_unit": {
+      "options": {
+        "month": "je Monat",
+        "year": "je Jahr"
+      }
+    },
     "battery_sign": {
       "options": {
         "positive_charge": "Positiv = laden",
@@ -598,6 +615,16 @@
         "lifepo4": "LiFePO₄",
         "nmc": "NMC",
         "other": "Andere"
+      }
+    },
+    "diverter_fuel": {
+      "options": {
+        "district": "Fernwärme",
+        "electricity": "Nichts - es bleibt Strom (Speicher, Auto)",
+        "gas": "Gas",
+        "heatpump": "Wärmepumpe",
+        "oil": "Heizöl",
+        "pellets": "Pellets oder Holz"
       }
     },
     "grid_sign": {

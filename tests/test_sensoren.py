@@ -23,6 +23,7 @@ import ha_stubs  # noqa: E402
 PvSystemCoordinator = ha_stubs.laden("coordinator").PvSystemCoordinator
 sensor = ha_stubs.laden("sensor")
 stunde = ha_stubs.laden("stunde")
+topologie = ha_stubs.laden("topology")
 
 
 def _anlage(kennung: str, phase: str, **abweichend):
@@ -245,8 +246,63 @@ def test_grundverbrauch_zieht_die_ueberschussverbraucher_ab():
     # Zwei Heizstäbe werden addiert.
     assert haus["diverter"]["power"] == 1500.0
     assert haus["base_power"] == 500.0
-    # Die Autarkie rechnet auf dem Grundverbrauch: 500 W Bedarf, 100 W vom Netz.
-    assert haus["self_sufficiency"] == 80.0
+    # Die Autarkie rechnet auf dem ganzen Hausverbrauch: 2000 W gezogen,
+    # davon 100 W vom Netz. Wer nichts aus dem Netz holt, ist autark - egal,
+    # wofür der Strom im Haus gebraucht wurde.
+    assert haus["self_sufficiency"] == 95.0
+    # Daneben dieselbe Rechnung ohne den Heizstab: 500 W Grundbedarf, 100 W
+    # vom Netz. Nur die ist von Monat zu Monat vergleichbar.
+    assert haus["base_self_sufficiency"] == 80.0
+
+
+def test_ohne_trennsensor_gilt_der_ueberschuss_als_selbst_erzeugt():
+    """Ein Überschussverbraucher zieht nichts aus dem Netz - so heißt er."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.stab", 1500, "W")
+    hass.states.setzen("sensor.netz", 100, "W")
+    haus = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]
+    assert haus["diverter"]["split"] is False
+    assert haus["diverter"]["grid_power"] is None
+    # Die 100 W vom Netz gehören ganz dem Grundverbrauch.
+    assert haus["base_self_sufficiency"] == 80.0
+
+
+def test_mit_trennsensor_wird_der_netzanteil_dem_stab_zugerechnet():
+    """Im Winter heizt derselbe Stab mit Netzstrom - und das zählt anders."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab"],
+            "diverter_solar_power_entity": ["sensor.stab_pv"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.stab", 1500, "W")
+    # Nur 400 W davon kamen von der eigenen Anlage.
+    hass.states.setzen("sensor.stab_pv", 400, "W")
+    hass.states.setzen("sensor.netz", 1200, "W")
+    haus = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]
+    assert haus["diverter"]["split"] is True
+    assert haus["diverter"]["solar_power"] == 400.0
+    assert haus["diverter"]["grid_power"] == 1100.0
+    # Gesamte Autarkie: 2000 W Verbrauch, 1200 W vom Netz.
+    assert haus["self_sufficiency"] == 40.0
+    # Grundverbrauch: 500 W, und davon kamen 1200 - 1100 = 100 W aus dem Netz.
+    assert haus["base_self_sufficiency"] == 80.0
 
 
 def test_ohne_ueberschussverbraucher_bleibt_alles_wie_vorher():
@@ -349,3 +405,67 @@ def _alle_tests():
 if __name__ == "__main__":
     _alle_tests()
     print("alle Sensortests bestanden")
+
+
+# --------------------------------------------------------------- Grundpreis
+
+
+def test_grundpreis_je_jahr_wird_auf_den_monat_gerechnet():
+    """Manche Verträge weisen den Grundpreis je Jahr aus - viele Sensoren auch."""
+    monatlich = _aufbau(
+        costs={"price_per_kwh": 0.34, "base_price": 15.0, "base_price_unit": "month"}
+    )
+    jaehrlich = _aufbau(
+        costs={"price_per_kwh": 0.34, "base_price": 180.0, "base_price_unit": "year"}
+    )
+    werte = []
+    for aufbau in (monatlich, jaehrlich):
+        hass = ha_stubs.HomeAssistant()
+        hass.states.setzen("sensor.haus", 500, "W")
+        hass.states.setzen("sensor.netz", 500, "W")
+        daten = PvSystemCoordinator(
+            hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+        )._berechnen()
+        werte.append(daten["costs"]["base_price"])
+    # 180 im Jahr sind 15 im Monat - beide Wege kommen an derselben Zahl an.
+    assert werte[0] == werte[1] == 15.0
+
+
+def test_grundpreis_ohne_angabe_bleibt_monatlich():
+    """Wer vor dieser Fassung eingerichtet hat, hat die Monatszahl drin stehen."""
+    normal = topologie.kosten_normalisieren({"base_price": 12.0})
+    assert normal["base_price_unit"] == "month"
+
+
+# ------------------------------------------------- Ersetzter Brennstoff
+
+
+def test_ersetzt_strom_heisst_kein_eigener_wertansatz():
+    """Ein Hausspeicher verbrennt nichts - seine kWh ist den Arbeitspreis wert."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.speicher"],
+            "diverter_energy_entity": ["sensor.speicher_kwh"],
+            "diverter_fuel": "electricity",
+            # Bewusst gesetzt: Es soll trotzdem nicht durchschlagen.
+            "diverter_price": 0.11,
+        },
+        costs={"price_per_kwh": 0.34},
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.netz", 0, "W")
+    hass.states.setzen("sensor.speicher", 1500, "W")
+    hass.states.setzen("sensor.speicher_kwh", 40, "kWh")
+    daten = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()
+    assert daten["house"]["diverter"]["fuel"] == "electricity"
+    assert daten["costs"]["diverted_price"] is None
+
+
+def test_gas_bleibt_die_voreinstellung():
+    """Der häufigste Fall soll niemanden zwingen, etwas auszuwählen."""
+    assert topologie.haus_normalisieren({})["diverter_fuel"] == "gas"
