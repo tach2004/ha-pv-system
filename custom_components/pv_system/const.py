@@ -147,6 +147,7 @@ DEFAULT_DIVERTER_NAME: Final = "Überschuss"
 # wert ist, und nur davon.
 CONF_DIVERTER_FUEL: Final = "diverter_fuel"
 FUEL_GAS: Final = "gas"
+FUEL_LPG: Final = "lpg"
 FUEL_OIL: Final = "oil"
 FUEL_PELLETS: Final = "pellets"
 FUEL_DISTRICT: Final = "district"
@@ -154,6 +155,7 @@ FUEL_HEATPUMP: Final = "heatpump"
 FUEL_ELECTRICITY: Final = "electricity"
 DIVERTER_FUELS: Final = [
     FUEL_GAS,
+    FUEL_LPG,
     FUEL_OIL,
     FUEL_PELLETS,
     FUEL_DISTRICT,
@@ -161,6 +163,10 @@ DIVERTER_FUELS: Final = [
     FUEL_ELECTRICITY,
 ]
 DEFAULT_DIVERTER_FUEL: Final = FUEL_GAS
+# Auch der Brennstoffpreis darf aus einer Entitaet kommen. Gas und Oel wechseln
+# am Markt wie Strom, und wer den Gaspreis ohnehin schon als Sensor im Haus
+# hat, soll ihn nicht zweimal pflegen. Vorrang vor der festen Zahl daneben.
+CONF_DIVERTER_PRICE_ENTITY: Final = "diverter_price_entity"
 
 # ----------------------------------------------------------------- Darstellung
 CONF_ANIMATE: Final = "animate"

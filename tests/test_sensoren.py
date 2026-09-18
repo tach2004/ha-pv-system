@@ -469,3 +469,58 @@ def test_ersetzt_strom_heisst_kein_eigener_wertansatz():
 def test_gas_bleibt_die_voreinstellung():
     """Der häufigste Fall soll niemanden zwingen, etwas auszuwählen."""
     assert topologie.haus_normalisieren({})["diverter_fuel"] == "gas"
+
+
+def test_der_brennstoffpreis_darf_aus_einer_entitaet_kommen():
+    """Gas und Öl wechseln am Markt wie Strom - wie beim Arbeitspreis."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab"],
+            "diverter_price": 0.12,
+            "diverter_price_entity": "sensor.gaspreis",
+        },
+        costs={"price_per_kwh": 0.34},
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.netz", 0, "W")
+    hass.states.setzen("sensor.stab", 1500, "W")
+    hass.states.setzen("sensor.gaspreis", 0.09, "EUR/kWh")
+    daten = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()
+    # Die Entität gewinnt gegen die feste Zahl daneben.
+    assert daten["costs"]["diverted_price"] == 0.09
+
+
+def test_ohne_entitaet_bleibt_die_feste_zahl():
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab"],
+            "diverter_price": 0.12,
+        },
+        costs={"price_per_kwh": 0.34},
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.netz", 0, "W")
+    hass.states.setzen("sensor.stab", 1500, "W")
+    daten = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()
+    assert daten["costs"]["diverted_price"] == 0.12
+
+
+def test_fluessiggas_ist_eine_eigene_auswahl():
+    """Erdgas und Flüssiggas kosten nicht dasselbe und werden anders gemessen."""
+    assert topologie.haus_normalisieren({"diverter_fuel": "lpg"})[
+        "diverter_fuel"
+    ] == "lpg"
+    # Was es nicht gibt, fällt auf die Voreinstellung zurück.
+    assert topologie.haus_normalisieren({"diverter_fuel": "kohle"})[
+        "diverter_fuel"
+    ] == "gas"

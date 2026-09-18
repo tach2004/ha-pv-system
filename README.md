@@ -260,14 +260,31 @@ Zähler. Der Kühlschrank gehört nicht dazu – der läuft sowieso.
 **Was ersetzt wird, wählst du aus.** Im Feld *Ersetzt* stehen Gas, Heizöl,
 Pellets oder Holz, Fernwärme, Wärmepumpe und „Nichts – es bleibt Strom“.
 
-| Ersetzt | Wert je kWh | Beispiel |
+**Der Preis ist deiner, nicht meiner.** Die Zahlen unten sind nur der Rechenweg
+– einsetzen musst du, was du bezahlst.
+
+| Ersetzt | Wert je kWh | Rechenweg |
 |---|---|---|
-| Gas | Gaspreis ÷ Kesselwirkungsgrad | 0,11 ÷ 0,92 ≈ **0,12** |
+| Erdgas | Gaspreis je kWh ÷ Kesselwirkungsgrad | 0,11 ÷ 0,92 ≈ **0,12** |
+| Flüssiggas | Literpreis ÷ 6,6 kWh/l ÷ Wirkungsgrad | 0,80 ÷ 6,6 ÷ 0,92 ≈ **0,13** |
 | Heizöl | Literpreis ÷ 10 kWh/l ÷ Wirkungsgrad | 1,00 ÷ 10 ÷ 0,9 ≈ **0,11** |
-| Pellets | Tonnenpreis ÷ 4800 kWh/t ÷ Wirkungsgrad | 350 ÷ 4800 ÷ 0,9 ≈ **0,08** |
+| Pellets oder Holz | Tonnenpreis ÷ 4800 kWh/t ÷ Wirkungsgrad | 350 ÷ 4800 ÷ 0,9 ≈ **0,08** |
 | Fernwärme | Arbeitspreis des Wärmeliefervertrags | z. B. **0,13** |
 | Wärmepumpe | Arbeitspreis ÷ Jahresarbeitszahl | 0,34 ÷ 3,5 ≈ **0,10** |
-| Nichts – es bleibt Strom | Arbeitspreis; das Feld wird ignoriert | Hausspeicher, Auto |
+| Nichts – es bleibt Strom | Arbeitspreis; die Preisfelder werden ignoriert | Hausspeicher, Auto |
+
+Erdgas rechnet die Gasrechnung meist schon in Kilowattstunden ab; steht dort
+nur ein Zählerstand in Kubikmetern, ist die Kilowattstundenzahl ungefähr das
+Zehnfache (Brennwert mal Zustandszahl). Flüssiggas wird in Litern oder
+Kilogramm verkauft und kostet pro Kilowattstunde regelmäßig mehr – deshalb
+steht es als eigene Auswahl da.
+
+**Auch dieser Preis darf aus einer Entität kommen.** Gas und Öl schwanken am
+Markt wie Strom, und wer einen Preissensor im Haus hat, soll ihn nicht zweimal
+pflegen: Das Feld *Wert je kWh des Ersetzten: Entität statt fester Zahl* hat
+Vorrang vor der festen Zahl daneben. Gemeint ist der Wert **nach**
+Wirkungsgrad – ein Sensor mit dem reinen Gaspreis ist um den Kesselwirkungsgrad
+zu niedrig, dafür genügt ein Template-Sensor, der einmal teilt.
 
 Die Wärmepumpe ist der Fall, der überrascht: Sie macht aus einer Kilowattstunde
 dreieinhalb. Wer den Überschuss stattdessen in einen Heizstab schickt, macht aus
@@ -361,9 +378,28 @@ Ruf ihn auf, wenn im Gesamtzeitraum Zahlen stehen, die es nicht geben kann.
 Sonst nie.
 
 **Der bequemere Weg: Konfigurieren → Kostenzähler leeren.** Dort steht vorher,
-was gerade in der Bilanz steht, und ohne Haken passiert nichts. Der Dienst
-bleibt für Automatisierungen – in den Entwicklerwerkzeugen verlangt er
-allerdings ein Ziel, weil er einen Standort braucht:
+was gerade in der Bilanz steht, und ohne Haken passiert nichts.
+
+Dort gibt es **zwei Haken**, weil der Gesamtzeitraum zwei Quellen hat:
+
+1. **Gemessen seit dem ersten Lauf** – liegt im Speicher der Integration. Das
+   leert der Dienst und der erste Haken, sofort.
+2. **Die „davor“-Angaben aus der Konfiguration** – Bezug davor, Preis davor,
+   Ertrag davor. Daher kommen Beträge, die neben *null* gemessenen
+   Kilowattstunden stehen und trotzdem stimmen: Wer 21.700 kWh Bezug davor zu
+   0,34 € einträgt, hat 7.400 € Bezugskosten im Gesamtzeitraum, bevor die
+   Integration die erste Kilowattstunde gesehen hat. Der zweite Haken nimmt
+   diese Felder aus der Konfiguration, und er wirkt erst mit *Speichern und
+   schließen*.
+
+Meistens will man den zweiten **nicht**: Diese Zahlen sind die echte
+Vorgeschichte, und ohne sie beginnt die Amortisation bei null. Sinnvoll ist er,
+wenn man sich vertippt hat oder ganz von vorn anfangen will. Investition und
+Inbetriebnahme bleiben in jedem Fall stehen – das sind Tatsachen über die
+Anlage, keine Zählerstände.
+
+Der Dienst bleibt für Automatisierungen; er leert nur das Gemessene. In den
+Entwicklerwerkzeugen verlangt er ein Ziel, weil er einen Standort braucht:
 
 ```yaml
 action: pv_system.reset_costs
@@ -460,8 +496,9 @@ Das ist der Hausanschluss: ein Zähler für alles, was rein- und rausgeht.
 | **Zähler Überschussverbraucher** | kWh, mehrere | Diese kWh werden in der Ersparnis mit dem Preis des Ersetzten bewertet statt mit dem Arbeitspreis | Überschuss zählt wie normaler Eigenverbrauch |
 | **Davon aus PV/Batterie: Leistung** | W, mehrere | Der Anteil, der gerade aus der eigenen Anlage kommt. Trennt Sommer- von Winterbetrieb | Alles gilt als Überschuss |
 | **Davon aus PV/Batterie: Zähler** | kWh, mehrere | Dasselbe als Zählerstand. Ist er gesetzt, geht nur er in die Ersparnis ein – der Rest ist Netzbezug zum Arbeitspreis | Alles gilt als Überschuss |
-| **Ersetzt** | Auswahl | Gas, Heizöl, Pellets, Fernwärme, Wärmepumpe oder „Nichts – es bleibt Strom“. Bei „Strom“ wird das Feld darunter ignoriert | Gas |
-| **Wert je kWh des Ersetzten** | Geld | Was eine umgeleitete kWh wirklich wert ist: Preis des Ersetzten ÷ Wirkungsgrad (bei der Wärmepumpe ÷ JAZ) | Es gilt der Arbeitspreis |
+| **Ersetzt** | Auswahl | Erdgas, Flüssiggas, Heizöl, Pellets, Fernwärme, Wärmepumpe oder „Nichts – es bleibt Strom“. Bei „Strom“ werden die Preisfelder ignoriert | Erdgas |
+| **Wert je kWh des Ersetzten: feste Zahl** | Geld | Was eine umgeleitete kWh wirklich wert ist: Preis des Ersetzten ÷ Wirkungsgrad (bei der Wärmepumpe ÷ JAZ) | Es gilt der Arbeitspreis |
+| **… : Entität statt fester Zahl** | Entität | Für Preise, die am Markt schwanken. Hat Vorrang; gemeint ist der Wert **nach** Wirkungsgrad | Nur die feste Zahl |
 
 ### Kosten und Ertrag (Standort)
 
@@ -690,6 +727,19 @@ Deshalb ist ein Überschussverbraucher in beiden mit drin, und zwar zu Recht:
   nicht ins Netz.
 * Läuft er im Winter am Netz, steigen Verbrauch **und** Bezug → die Autarkie
   fällt. Auch das kommt von allein heraus, ohne Sonderfall.
+
+**Und die Batterie?** Die häufigste Rückfrage, und sie hat eine klare Antwort:
+Eine Kilowattstunde, die in die Batterie geht, ist **in dem Moment schon
+Eigenverbrauch** – sie wurde erzeugt und ging nicht ins Netz. Wenn sie abends
+wieder herauskommt, ist sie keine neue Erzeugung, sondern dieselbe
+Kilowattstunde ein zweites Mal. Sie noch einmal zu zählen hieße, den Nenner mit
+Energie zu füllen, die oben schon drinstand.
+
+Deshalb steht beim Eigenverbrauch nachts ein **Strich** und keine Null: Es wird
+gerade nichts erzeugt, das im Haus bleiben oder ins Netz gehen könnte – die
+Quote ist nicht null, sie ist unbestimmt. Was nachts die interessante Zahl ist,
+steht daneben: Läuft das Haus aus der Batterie, ist die **Autarkie 100 %**.
+Genau das ist die Frage, die man abends stellt.
 
 Daneben steht die **Autarkie Grundverbrauch**: dieselbe Rechnung ohne den
 Überschussverbraucher. Nicht weil die andere falsch wäre, sondern weil nur diese

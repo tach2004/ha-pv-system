@@ -561,11 +561,15 @@ class PvSystemCard extends HTMLElement {
         color: var(--secondary-text-color, #727272);
         opacity: .6;
       }
+      /* Ganz innen, tangential in der Ecke: Der Kreis berührt den Kastenrand
+         nirgends - vorher lief die Linie quer durch das Zeichen. Deckend
+         gefüllt bleibt er trotzdem, damit er auch dann sauber steht, wenn
+         darunter etwas durchläuft. */
       svg .info-kreis {
-        fill: none;
+        fill: var(--card-background-color, #fff);
         stroke: var(--secondary-text-color, #727272);
         stroke-width: 1;
-        opacity: .55;
+        stroke-opacity: .55;
       }
       svg .info-zeichen {
         font-size: 9px; font-weight: 700; font-style: italic;
@@ -845,7 +849,7 @@ class PvSystemCard extends HTMLElement {
         rx: 12,
       })
     );
-    this._infoZeichen(modulBox, x + M.spalte - 13, g.yModul + 3);
+    this._infoZeichen(modulBox, x + M.spalte - 17.5, g.yModul + 7.5);
     // Nur "Module". Hersteller und Modell standen hier einmal, haben aber
     // die halbe Kastenbreite gekostet und sagen im Betrieb nichts: Sie ändern
     // sich nie. Wer sie sucht, tippt den Kasten an - dort stehen sie neben
@@ -856,7 +860,7 @@ class PvSystemCard extends HTMLElement {
     this._ref(
       modulBox,
       `${id}:modules:power`,
-      e("text", { class: "wert rechts", x: x + M.spalte - 22, y: g.yModul + 17 })
+      e("text", { class: "wert rechts", x: x + M.spalte - 36, y: g.yModul + 17 })
     );
     this._ref(
       modulBox,
@@ -922,7 +926,7 @@ class PvSystemCard extends HTMLElement {
           `${id}:charger:power`,
           e("text", {
             class: "wert rechts",
-            x: x + M.spalte - 32,
+            x: x + M.spalte - 46,
             y: g.yLaderegler + 17,
           })
         );
@@ -994,7 +998,7 @@ class PvSystemCard extends HTMLElement {
           box,
           `${id}:battery:soc`,
           e("text", {
-            class: "wert rechts", x: bx + BATTERIE_B - 10, y: g.yBatterie + 16,
+            class: "wert rechts", x: bx + BATTERIE_B - 24, y: g.yBatterie + 16,
           })
         );
         // Zeile 2: die direkte Batterieleistung mit Vorzeichen, rechts
@@ -1057,7 +1061,7 @@ class PvSystemCard extends HTMLElement {
       this._ref(
         box,
         `${id}:inverter:power`,
-        e("text", { class: "wert rechts", x: x + M.spalte - 32, y: g.yWr + 17 })
+        e("text", { class: "wert rechts", x: x + M.spalte - 46, y: g.yWr + 17 })
       );
       this._ref(
         box,
@@ -1381,7 +1385,7 @@ class PvSystemCard extends HTMLElement {
     );
     this._ref(
       haus, "house:power",
-      e("text", { class: "wert rechts", x: g.hausX + HAUS_B - 10, y: g.bandY + 18 })
+      e("text", { class: "wert rechts", x: g.hausX + HAUS_B - 24, y: g.bandY + 18 })
     );
     this._ref(
       haus, "house:quoten",
@@ -1408,9 +1412,9 @@ class PvSystemCard extends HTMLElement {
     }
     haus.appendChild(
       this._hausSymbol(
-        g.hausX + HAUS_B - 44,
-        g.yBus + ((zeilen - 1) * M.busAbstand) / 2 - 14,
-        30
+        g.hausX + HAUS_B - 50,
+        g.yBus + ((zeilen - 1) * M.busAbstand) / 2 - 17,
+        36
       )
     );
     // Unter den Phasen, nur wenn es Überschussverbraucher gibt: links, was
@@ -1531,7 +1535,7 @@ class PvSystemCard extends HTMLElement {
     g.appendChild(
       e("rect", { class: "rahmen", x, y, width: breite, height: hoehe, rx: 12 })
     );
-    this._infoZeichen(g, x + breite - 3, y + 3);
+    this._infoZeichen(g, x + breite - 7.5, y + 7.5);
     eltern.appendChild(g);
     return g;
   }
@@ -1922,14 +1926,16 @@ class PvSystemCard extends HTMLElement {
     // Beide Quoten in einer Zeile. "Gemessen" oder "gerechnet" steht in der
     // Detailtabelle - im Kasten wäre es eine Zeile für eine Auskunft, die man
     // einmal im Leben braucht.
-    const quoten = [];
-    if (d.house.self_sufficiency !== null && d.house.self_sufficiency !== undefined) {
-      quoten.push(`Autark ${prozent(d.house.self_sufficiency, l)}`);
-    }
-    if (d.house.self_consumption !== null && d.house.self_consumption !== undefined) {
-      quoten.push(`Eigen ${prozent(d.house.self_consumption, l)}`);
-    }
-    this._setzen("house:quoten", quoten.join(" · "));
+    // Beide Beschriftungen stehen immer da, auch wenn eine Quote gerade keine
+    // Zahl hat. Eine Zeile, die nachts auf die Hälfte zusammenschrumpft, sieht
+    // aus wie ein Fehler; ein Strich sagt "gerade nicht bestimmbar" - und das
+    // ist beim Eigenverbrauch nachts die richtige Auskunft, weil nichts
+    // erzeugt wird, das im Haus bleiben könnte.
+    this._setzen(
+      "house:quoten",
+      `Autark ${prozent(d.house.self_sufficiency, l)} · ` +
+        `Eigen ${prozent(d.house.self_consumption, l)}`
+    );
 
     // Was auf jeder Phase im Haus bleibt.
     if (this._geo && this._geo.zeigePhasen === false) {
@@ -1955,27 +1961,17 @@ class PvSystemCard extends HTMLElement {
     this._setzen("kpi:pv", watt(t.pv_power, l));
     this._setzen("kpi:haus", watt(d.house.house_power, l));
     this._setzen("kpi:netz", wattVz(netzleistung, l));
-    // Drei Zahlen nebeneinander passen nicht in eine Kachel - das Watt rutschte
-    // in die zweite Zeile und schob alles darunter weg. Also der Ladestand
-    // groß, Leistung und eingebaute Kapazität klein darunter. Die Kachel
-    // bleibt so breit wie alle anderen: Auf dem Telefon entscheidet das
-    // darüber, ob zwei oder drei Kacheln in eine Zeile passen.
+    // Ladestand groß, Leistung klein darunter: zwei Zahlen, die sich beide
+    // dauernd ändern. Die eingebaute Kapazität ändert sich nie und steht
+    // deshalb bei "Installiert" - dort, wo auch die Modulleistung steht.
     const akkuP = zahl(t.battery_power);
-    const akkuKap = zahl(t.battery_capacity);
     this._setzen("kpi:akku", t.battery_count ? prozent(t.battery_soc, l) : "–");
-    const akkuZeile = [];
-    if (akkuP !== null && Math.abs(akkuP) > 10) {
-      akkuZeile.push(`${akkuP > 0 ? "+" : "−"}${watt(Math.abs(akkuP), l)}`);
-    }
-    if (akkuKap) {
-      akkuZeile.push(
-        `${akkuKap.toLocaleString(l, {
-          minimumFractionDigits: 1,
-          maximumFractionDigits: 1,
-        })} kWh`
-      );
-    }
-    this._setzen("kpi:akku:zusatz", t.battery_count ? akkuZeile.join(" · ") : "");
+    this._setzen(
+      "kpi:akku:zusatz",
+      t.battery_count && akkuP !== null && Math.abs(akkuP) > 10
+        ? `${akkuP > 0 ? "+" : "−"}${watt(Math.abs(akkuP), l)}`
+        : ""
+    );
     this._setzen("kpi:autarkie", prozent(d.house.self_sufficiency, l));
     this._setzen(
       "kpi:autarkie:zusatz",
@@ -1983,6 +1979,9 @@ class PvSystemCard extends HTMLElement {
         ? ""
         : `Eigen ${prozent(d.house.self_consumption, l)}`
     );
+    // Was fest verbaut ist, steht beisammen: oben das Dach, darunter der
+    // Speicher. Zwei Zahlen, die sich nur ändern, wenn jemand schraubt.
+    const akkuKap = zahl(t.battery_capacity);
     this._setzen(
       "kpi:peak",
       t.pv_peak
@@ -1991,6 +1990,15 @@ class PvSystemCard extends HTMLElement {
             maximumFractionDigits: 2,
           })} kWp`
         : "–"
+    );
+    this._setzen(
+      "kpi:peak:zusatz",
+      akkuKap
+        ? `${akkuKap.toLocaleString(l, {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          })} kWh Speicher`
+        : ""
     );
 
     const k = d.costs || {};

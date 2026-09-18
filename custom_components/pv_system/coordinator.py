@@ -67,6 +67,7 @@ from .const import (
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
+    CONF_DIVERTER_PRICE_ENTITY,
     CONF_DIVERTER_SOLAR_ENERGY,
     CONF_DIVERTER_SOLAR_POWER,
     CONF_ENABLED,
@@ -1093,7 +1094,11 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
             "grid_power": units.rund(netzumleitung),
             "fuel": conf[CONF_DIVERTER_FUEL],
-            "price": conf[CONF_DIVERTER_PRICE],
+            # Wie beim Arbeitspreis: Die Entität gewinnt, die feste Zahl ist
+            # der Rückfall. Gas und Öl wechseln am Markt wie Strom.
+            "price": self._preis(
+                conf[CONF_DIVERTER_PRICE_ENTITY], conf[CONF_DIVERTER_PRICE]
+            ),
             "count": len(conf[CONF_DIVERTER_POWER]) + len(conf[CONF_DIVERTER_ENERGY]),
             "enabled": bool(conf[CONF_DIVERTER_ENERGY] or conf[CONF_DIVERTER_POWER]),
             "split": bool(

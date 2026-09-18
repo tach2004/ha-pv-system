@@ -76,6 +76,7 @@ from .const import (
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
+    CONF_DIVERTER_PRICE_ENTITY,
     CONF_DIVERTER_SOLAR_ENERGY,
     CONF_DIVERTER_SOLAR_POWER,
     CONF_ENABLED,
@@ -364,6 +365,7 @@ def _felder_haus() -> dict[Any, Any]:
         vol.Optional(CONF_DIVERTER_SOLAR_ENERGY): _sensor("energy", mehrere=True),
         vol.Optional(CONF_DIVERTER_FUEL): _auswahl(DIVERTER_FUELS, "diverter_fuel"),
         vol.Optional(CONF_DIVERTER_PRICE): _zahl(0, 10, "any"),
+        vol.Optional(CONF_DIVERTER_PRICE_ENTITY): _sensor(),
     }
 
 
@@ -855,28 +857,66 @@ class PvSystemOptionsFlow(OptionsFlow):
     async def async_step_reset(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Die gemessenen Kostenzahlen verwerfen - hier statt über den Dienst.
+        """Die Kostenzahlen verwerfen - hier statt über den Dienst.
 
         Den Dienst gibt es weiter, aber er ist der unbequemere Weg: In den
         Entwicklerwerkzeugen verlangt er ein Ziel, und wer nur einen Standort
         hat, weiß nicht, welches gemeint ist. Hier steht vorher, was gerade in
         der Bilanz steht, und wer nichts anhakt, hat auch nichts getan.
+
+        Zwei Haken, weil es zwei Quellen sind: Das Gemessene liegt im Speicher
+        der Integration, die „davor"-Angaben stehen in der Konfiguration. Wer
+        nur das Erste leert, behält einen Gesamtzeitraum, der mit den alten
+        Zahlen weiterrechnet - und genau das ist meistens gewollt.
         """
         koordinator = getattr(self._entry, "runtime_data", None)
 
         if user_input is not None:
             if user_input.get("reset_confirm") and koordinator is not None:
                 koordinator.kosten.zuruecksetzen()
+            if user_input.get("reset_prior"):
+                self._vorher_leeren()
+            if koordinator is not None and (
+                user_input.get("reset_confirm") or user_input.get("reset_prior")
+            ):
                 await koordinator.async_refresh()
             return await self.async_step_init()
 
         return self.async_show_form(
             step_id="reset",
             data_schema=vol.Schema(
-                {vol.Optional("reset_confirm", default=False): bool}
+                {
+                    vol.Optional("reset_confirm", default=False): bool,
+                    vol.Optional("reset_prior", default=False): bool,
+                }
             ),
-            description_placeholders={"stand": _kostenstand(koordinator)},
+            description_placeholders={
+                "stand": _kostenstand(koordinator),
+                "vorher": _vorherstand(self._daten),
+            },
         )
+
+    def _vorher_leeren(self) -> None:
+        """Die „bei Einrichtung"-Felder aus der Konfiguration nehmen.
+
+        Nicht die Investition und nicht die Inbetriebnahme: Das sind Tatsachen
+        über die Anlage, keine Zählerstände. Geleert wird nur, was den
+        Gesamtzeitraum um eine Vergangenheit ergänzt, die niemand gemessen hat.
+        """
+        kosten = dict(self._daten.get(CONF_COSTS) or {})
+        for feld in (CONF_PRIOR_IMPORT, CONF_PRIOR_EXPORT, CONF_PRIOR_PRICE):
+            kosten[feld] = None
+        self._daten[CONF_COSTS] = kosten
+
+        anlagen = []
+        for anlage in self._daten.get(CONF_PLANTS) or []:
+            anlage = dict(anlage)
+            anlagenkosten = dict(anlage.get(CONF_COSTS) or {})
+            for feld in (CONF_PRIOR_YIELD, CONF_PRIOR_EXPORT):
+                anlagenkosten[feld] = None
+            anlage[CONF_COSTS] = anlagenkosten
+            anlagen.append(anlage)
+        self._daten[CONF_PLANTS] = anlagen
 
 
 def _kostenstand(koordinator: Any) -> str:
@@ -898,6 +938,52 @@ def _kostenstand(koordinator: Any) -> str:
         f"Vergütung {_geld(gesamt.get('feed_in'))}, "
         f"Ersparnis {_geld(gesamt.get('savings'))}."
     )
+
+
+def _vorherstand(daten: dict[str, Any]) -> str:
+    """Die „davor"-Angaben im Klartext, mit dem, was sie beitragen.
+
+    Ohne diese Aufstellung ist die Bilanz nicht zu verstehen: Da stehen
+    tausende Euro Bezugskosten neben null bezogenen Kilowattstunden, und beides
+    stimmt - die Kosten kommen aus einer Zahl, die jemand einmal eingetragen
+    hat.
+    """
+    kosten = daten.get(CONF_COSTS) or {}
+    waehrung = kosten.get(CONF_CURRENCY) or "EUR"
+    bezug = kosten.get(CONF_PRIOR_IMPORT)
+    preis = kosten.get(CONF_PRIOR_PRICE)
+    zeilen: list[str] = []
+
+    if bezug:
+        zeile = f"- Bezug davor: {float(bezug):,.0f} kWh".replace(",", ".")
+        if preis:
+            zeile += (
+                f" × {float(preis):.2f} {waehrung}/kWh"
+                f" = {float(bezug) * float(preis):,.2f} {waehrung}"
+            ).replace(",", ".")
+        zeilen.append(zeile)
+    if kosten.get(CONF_PRIOR_EXPORT):
+        zeilen.append(
+            f"- Einspeisung davor: {float(kosten[CONF_PRIOR_EXPORT]):,.0f} kWh".replace(
+                ",", "."
+            )
+        )
+
+    for anlage in daten.get(CONF_PLANTS) or []:
+        anlagenkosten = anlage.get(CONF_COSTS) or {}
+        for feld, wort in (
+            (CONF_PRIOR_YIELD, "Ertrag davor"),
+            (CONF_PRIOR_EXPORT, "davon eingespeist"),
+        ):
+            if anlagenkosten.get(feld):
+                zeilen.append(
+                    f"- {anlage.get(CONF_NAME) or 'Anlage'}, {wort}: "
+                    f"{float(anlagenkosten[feld]):,.0f} kWh".replace(",", ".")
+                )
+
+    if not zeilen:
+        return "Es ist nichts eingetragen - der zweite Haken ändert nichts."
+    return "\n".join(zeilen)
 
 
 def _spitze_text(module: dict[str, Any]) -> str:
