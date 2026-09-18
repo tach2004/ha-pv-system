@@ -24,6 +24,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 from .const import (
@@ -32,6 +33,7 @@ from .const import (
     CONF_ANIMATE,
     CONF_AZIMUTH,
     CONF_BASE_PRICE,
+    CONF_BASE_PRICE_ENTITY,
     CONF_BATTERY,
     CONF_BATTERY_CHARGED,
     CONF_BATTERY_CURRENT,
@@ -65,6 +67,7 @@ from .const import (
     CONF_COSTS,
     CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
+    CONF_CURRENCY_PRICE_ENTITY,
     CONF_DISPLAY,
     CONF_DIVERTER_ENERGY,
     CONF_DIVERTER_NAME,
@@ -72,6 +75,7 @@ from .const import (
     CONF_DIVERTER_PRICE,
     CONF_ENABLED,
     CONF_FEED_IN_PRICE,
+    CONF_FEED_IN_PRICE_ENTITY,
     CONF_GRID,
     CONF_GRID_EXPORT_ENERGY,
     CONF_GRID_EXPORT_POWER,
@@ -192,6 +196,8 @@ def _zahl(
 
 def _sensor(
     geraeteklasse: str | list[str] | None = None,
+    *,
+    mehrere: bool = False,
 ) -> selector.EntitySelector:
     """Sensorauswahl, nach Geräteklasse gefiltert, wo es eine gibt.
 
@@ -202,6 +208,8 @@ def _sensor(
     config = selector.EntitySelectorConfig(domain=["sensor", "input_number", "number"])
     if geraeteklasse:
         config["device_class"] = geraeteklasse
+    if mehrere:
+        config["multiple"] = True
     return selector.EntitySelector(config)
 
 
@@ -344,8 +352,8 @@ def _felder_haus() -> dict[Any, Any]:
         vol.Optional(CONF_HOUSE_POWER): _sensor("power"),
         vol.Optional(CONF_HOUSE_ENERGY): _sensor("energy"),
         vol.Optional(CONF_DIVERTER_NAME): _text(),
-        vol.Optional(CONF_DIVERTER_POWER): _sensor("power"),
-        vol.Optional(CONF_DIVERTER_ENERGY): _sensor("energy"),
+        vol.Optional(CONF_DIVERTER_POWER): _sensor("power", mehrere=True),
+        vol.Optional(CONF_DIVERTER_ENERGY): _sensor("energy", mehrere=True),
         vol.Optional(CONF_DIVERTER_PRICE): _zahl(0, 10, "any"),
     }
 
@@ -372,8 +380,11 @@ def _felder_kosten() -> dict[Any, Any]:
     # gemeint ist, steht im Hinweis unter dem Feld.
     return {
         vol.Optional(CONF_CURRENCY_PRICE): _zahl(0, 10, "any"),
+        vol.Optional(CONF_CURRENCY_PRICE_ENTITY): _sensor(),
         vol.Optional(CONF_FEED_IN_PRICE): _zahl(0, 10, "any"),
+        vol.Optional(CONF_FEED_IN_PRICE_ENTITY): _sensor(),
         vol.Optional(CONF_BASE_PRICE): _zahl(0, 1000, "any"),
+        vol.Optional(CONF_BASE_PRICE_ENTITY): _sensor(),
         vol.Optional(CONF_CURRENCY): _text(),
         vol.Optional(CONF_PRIOR_IMPORT): _zahl(0, 10000000, "any"),
         vol.Optional(CONF_PRIOR_PRICE): _zahl(0, 10, "any"),
@@ -508,7 +519,9 @@ class PvSystemOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["plants", "grid", "house", "costs", "display", "save"],
+            menu_options=[
+                "plants", "grid", "house", "costs", "display", "tidy", "save",
+            ],
         )
 
     async def async_step_save(
@@ -771,6 +784,56 @@ class PvSystemOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="display",
             data_schema=_mit_vorschlag(felder, self._daten[CONF_DISPLAY]),
+        )
+
+    # ------------------------------------------------------------ Aufräumen
+
+    async def async_step_tidy(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Doppelte Sensoren abschalten - mit Liste vorher.
+
+        Der Dienst und die Schaltfläche tun dasselbe, aber blind: Man drückt
+        und hofft. Hier steht vorher, welche Entitäten es trifft und warum -
+        und wer nichts anhakt, hat auch nichts getan.
+        """
+        from .sensor import aufraeumen, spiegel_kennungen
+
+        koordinator = getattr(self._entry, "runtime_data", None)
+        kandidaten: list[Any] = []
+        if koordinator is not None:
+            kennungen = spiegel_kennungen(koordinator)
+            registry = er.async_get(self.hass)
+            kandidaten = [
+                eintrag
+                for eintrag in er.async_entries_for_config_entry(
+                    registry, self._entry.entry_id
+                )
+                if eintrag.unique_id in kennungen and eintrag.disabled_by is None
+            ]
+
+        if user_input is not None:
+            if user_input.get("tidy_confirm") and koordinator is not None:
+                aufraeumen(self.hass, self._entry)
+            return await self.async_step_init()
+
+        if not kandidaten:
+            liste = (
+                "Nichts zu tun - es ist kein Sensor eingeschaltet, den es "
+                "schon als eigene Entität gibt."
+            )
+        else:
+            zeilen = "\n".join(
+                f"- `{eintrag.entity_id}`" for eintrag in sorted(
+                    kandidaten, key=lambda e: e.entity_id
+                )
+            )
+            liste = f"**{len(kandidaten)} Sensoren:**\n{zeilen}"
+
+        return self.async_show_form(
+            step_id="tidy",
+            data_schema=vol.Schema({vol.Optional("tidy_confirm", default=False): bool}),
+            description_placeholders={"liste": liste},
         )
 
 

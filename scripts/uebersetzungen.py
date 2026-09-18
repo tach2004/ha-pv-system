@@ -204,6 +204,10 @@ FELDER: dict[str, T] = {
     "voltage_entity": ("Spannung", "Voltage"),
     "current_entity": ("Strom", "Current"),
     "energy_entity": ("Energiezähler", "Energy meter"),
+    "tidy_confirm": (
+        "Ja, diese Sensoren abschalten",
+        "Yes, turn these sensors off",
+    ),
     "system_voltage": ("Systemspannung", "System voltage"),
     "max_current": ("Maximaler Ladestrom", "Maximum charge current"),
     "input_voltage_entity": ("Eingangsspannung (PV)", "Input voltage (PV)"),
@@ -262,11 +266,23 @@ FELDER: dict[str, T] = {
     "investment": ("Investitionskosten", "Investment cost"),
     "currency": ("Währung", "Currency"),
     "start_date": ("Zählen seit", "Counting since"),
-    "prior_import": ("Bezug davor", "Import before"),
+    "prior_import": (
+        "Stand des Bezugszählers bei Einrichtung",
+        "Import meter reading at setup",
+    ),
+    "price_entity": ("Arbeitspreis aus Entität", "Energy price from entity"),
+    "feed_in_entity": ("Vergütung aus Entität", "Feed-in tariff from entity"),
+    "base_price_entity": ("Grundpreis aus Entität", "Base fee from entity"),
     "prior_price": ("Durchschnittspreis davor", "Average price before"),
-    "prior_export": ("Einspeisung davor", "Export before"),
+    "prior_export": (
+        "Davon eingespeist bei Einrichtung",
+        "Of that exported at setup",
+    ),
     "commissioned": ("Inbetriebnahme", "Commissioned"),
-    "prior_yield": ("Ertrag davor", "Yield before"),
+    "prior_yield": (
+        "Stand des Ertragszählers bei Einrichtung",
+        "Yield meter reading at setup",
+    ),
 }
 
 HINWEISE: dict[str, T] = {
@@ -678,14 +694,37 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "Name of the grid connection. It sits above the box on the card.",
         ),
         "import_energy_entity": (
-            "Der Bezugsz\u00e4hler in kWh. Aus ihm entstehen die Bezugskosten f\u00fcr "
-            "Tag, Monat und Jahr - ohne ihn bleibt die Kostenrechnung leer.",
-            "The import meter in kWh. Daily, monthly and yearly grid costs are "
-            "derived from it - without it the cost figures stay empty.",
+            "**Der wichtigste Zähler der ganzen Integration.** Ein kWh-Zähler, "
+            "der nur steigt und zählt, was du aus dem Netz geholt hast - in "
+            "Home Assistant meist eine „Riemannsumme“ über die Bezugsleistung "
+            "deines Zählers.\n\nDaraus entsteht alles Geld: Bezugskosten für "
+            "Tag, Monat, Jahr und gesamt. Die Integration merkt sich seinen "
+            "Stand beim ersten Lauf und rechnet ab da nur noch Differenzen - "
+            "der Zähler darf also längst laufen, sein heutiger Stand kostet "
+            "nichts.\n\nLeer: keine Bezugskosten, keine Bilanz, keine "
+            "Amortisation.",
+            "**The single most important meter here.** A kWh counter that only "
+            "rises and counts what you drew from the grid - in Home Assistant "
+            "usually a Riemann sum over your meter's import power.\n\nAll "
+            "money comes from it: grid costs for day, month, year and total. "
+            "The integration remembers its reading on the first run and only "
+            "counts differences from then on - so the meter may have been "
+            "running for years, today's reading costs nothing.\n\nEmpty: no "
+            "grid costs, no balance, no payback.",
         ),
         "export_energy_entity": (
-            "Der Einspeisez\u00e4hler in kWh. Grundlage f\u00fcr den Einspeiseerl\u00f6s.",
-            "The export meter in kWh. Basis for the feed-in revenue.",
+            "Das Gegenstück: ein kWh-Zähler, der nur steigt und zählt, was ins "
+            "Netz gegangen ist.\n\nDaraus entsteht der Einspeiseerlös. Bei "
+            "mehreren Anlagen wird er nach dem Anteil an der Erzeugung "
+            "aufgeteilt - messen kann man das nicht, am Hausanschluss hängt "
+            "ein Zähler für alle.\n\nLeer: kein Erlös. Wer nie einspeist, "
+            "lässt es leer.",
+            "The counterpart: a kWh counter that only rises and counts what "
+            "went to the grid.\n\nThe feed-in revenue comes from it. With "
+            "several plants it is split by each plant's share of generation - "
+            "it cannot be measured, there is one meter for all of them at the "
+            "house connection.\n\nEmpty: no revenue. If you never export, "
+            "leave it empty.",
         ),
         "frequency_entity": (
             "Ein Feld gen\u00fcgt: Im Verbundnetz haben alle drei Phasen dieselbe "
@@ -772,22 +811,34 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "What the load is called on the card, e.g. “immersion heater”.",
         ),
         "diverter_power_entity": (
-            "Was der Überschussverbraucher gerade zieht - der Heizstab im "
-            "Brauchwasserspeicher, die Wallbox im Überschussladen. Nur für die "
-            "Anzeige; für die Rechnung zählt der Zähler darunter.",
-            "What the surplus load currently draws - the immersion heater in "
-            "the hot water tank, the wallbox in surplus charging. Display "
-            "only; the meter below is what counts for the calculation.",
+            "Was die Überschussverbraucher gerade ziehen - der Heizstab im "
+            "Brauchwasserspeicher, die Wallbox im Überschussladen. **Mehrere "
+            "sind erlaubt**; zwei Heizstäbe an derselben Gasheizung werden "
+            "addiert.\n\nDiese Leistung wird vom Hausverbrauch abgezogen und "
+            "ergibt den **Grundverbrauch** - das, was dein Haushalt wirklich "
+            "braucht. Auf ihn beziehen sich auch Autarkie und Eigenverbrauch.",
+            "What the surplus loads currently draw - the immersion heater in "
+            "the hot water tank, the wallbox in surplus charging. **Several "
+            "are allowed**; two heating rods on the same gas boiler are added "
+            "up.\n\nThis power is subtracted from house consumption to give "
+            "the **base load** - what your household really needs. "
+            "Self-sufficiency and self-consumption refer to it too.",
         ),
         "diverter_energy_entity": (
-            "Der Zählerstand dieses Verbrauchers in kWh. Diese Kilowattstunden "
-            "sind Hausverbrauch wie jeder andere - sie sparen aber keinen "
-            "Strom, sondern den Brennstoff, mit dem sonst geheizt würde. "
-            "Deshalb werden sie getrennt bewertet.",
-            "This load's meter reading in kWh. These kilowatt hours are house "
-            "consumption like any other - but they do not save electricity, "
-            "they save the fuel that would otherwise do the heating. That is "
-            "why they are valued separately.",
+            "kWh-Zähler dieser Verbraucher. **Mehrere sind erlaubt** - sie "
+            "werden addiert.\n\nDiese Kilowattstunden fließen wirklich im "
+            "Haus, sie sparen aber keinen Strom, sondern den Brennstoff, mit "
+            "dem sonst geheizt würde. Deshalb werden sie in der Ersparnis "
+            "getrennt bewertet - mit dem Feld darunter.\n\nLeer: Der "
+            "Überschuss zählt wie jeder andere Eigenverbrauch, und die Anlage "
+            "rechnet sich reicher, als sie ist.",
+            "kWh counters of these loads. **Several are allowed** - they are "
+            "added up.\n\nThese kilowatt hours really do flow in the house, "
+            "but they save no electricity, they save the fuel that would "
+            "otherwise do the heating. That is why they are valued separately "
+            "in the savings - with the field below.\n\nEmpty: the surplus "
+            "counts like any other self-consumption, and the system looks "
+            "better off than it is.",
         ),
         "diverter_price": (
             "Was eine umgeleitete Kilowattstunde wirklich wert ist: der Preis "
@@ -801,16 +852,35 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "- and the system looks better off than it is.",
         ),
         "power_entity": (
-            "Ein gemessener Hausverbrauch, falls vorhanden. Er hat Vorrang vor "
-            "der Rechnung. Leer lassen ist der Normalfall.",
-            "A measured house consumption, if you have one. It takes precedence "
-            "over the calculation. Empty is the normal case.",
+            "Nur, wenn du den Hausverbrauch **misst** - etwa mit einem zweiten "
+            "Zähler hinter dem Hausanschluss. In Watt, kein Zählerstand.\n\n"
+            "Normalerweise leer lassen: Dann rechnet die Integration ihn aus "
+            "Netzleistung plus Wechselrichterabgabe, und das ist bei einer "
+            "Netzparallelanlage genauso richtig.",
+            "Only if you **measure** house consumption - with a second meter "
+            "behind the house connection, say. In watts, not a meter "
+            "reading.\n\nNormally leave it empty: the integration then derives "
+            "it from grid power plus inverter output, which for a "
+            "grid-parallel system is just as correct.",
         ),
         "energy_entity": (
-            "Zählerstand des Hausverbrauchs in kWh, falls vorhanden. Er ist "
-            "der zweite Weg zum Eigenverbrauch, wenn kein Ertragszähler da ist.",
-            "kWh meter of house consumption, if available. It is the second "
-            "route to self-consumption when no yield meter exists.",
+            "Ein kWh-Zähler über **alles, was im Haus verbraucht wurde** - "
+            "Netzbezug *und* selbst genutzter Solarstrom zusammen. Nicht der "
+            "Bezugszähler: Der steht unter „Netz und Zähler“ und zählt nur, "
+            "was aus dem Netz kam.\n\nWozu: Er ist der zweite Weg zum "
+            "Eigenverbrauch. Normalerweise rechnet die Integration „erzeugt "
+            "minus eingespeist“; hast du keinen Ertragszähler, greift "
+            "stattdessen „verbraucht minus bezogen“ - und dafür wird er "
+            "gebraucht.\n\nLeer: völlig in Ordnung, solange deine Anlagen "
+            "einen Ertragszähler haben.",
+            "A kWh counter over **everything consumed in the house** - grid "
+            "import *and* self-used solar together. Not the import meter: that "
+            "one lives under “Grid and meter” and only counts what came from "
+            "the grid.\n\nWhat for: it is the second route to "
+            "self-consumption. Normally the integration computes “generated "
+            "minus exported”; without a yield meter it falls back to “consumed "
+            "minus imported” - and that is what this is for.\n\nEmpty: "
+            "perfectly fine as long as your plants have a yield meter.",
         ),
     },
     "display": {
@@ -869,20 +939,41 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "the rate under “Costs and yield” applies.",
         ),
         "prior_yield": (
-            "Wie viele Kilowattstunden diese Anlage erzeugt hat, bevor die "
-            "Integration zu zählen begann. Steht meist am Wechselrichter. "
-            "Ohne diese Angabe fehlt die Zeit davor in der Amortisation.",
-            "How many kilowatt hours this plant produced before the "
-            "integration started counting. Usually shown on the inverter. "
-            "Without it the time before is missing from the payback.",
+            "**Der Stand des Ertragszählers dieser Anlage an dem Tag, an dem "
+            "du die Integration eingerichtet hast.** Steht meist am "
+            "Wechselrichter. Eine einmalige Zahl, kein Sensor.\n\nBeispiel: "
+            "Die Anlage läuft seit 2024 und hat 2300 kWh erzeugt, du richtest "
+            "heute ein - dann 2300.\n\nWozu: Diese Kilowattstunden zählen zum "
+            "Ertrag dieser Anlage und damit zu **ihrer Amortisation**. Ohne "
+            "sie sähe eine Anlage aus dem Jahr 2024 aus, als hätte sie gerade "
+            "erst angefangen. Nur der Gesamtzeitraum; Tag, Monat und Jahr "
+            "bleiben unberührt.",
+            "**This plant's yield meter reading on the day you set the "
+            "integration up.** Usually shown on the inverter. A one-off "
+            "number, not a sensor.\n\nExample: the plant has run since 2024 "
+            "and produced 2300 kWh, you set up today - so 2300.\n\nWhat for: "
+            "these kilowatt hours count towards this plant's yield and thus "
+            "towards **its payback**. Without them a 2024 plant would look as "
+            "if it had only just started. Total period only; day, month and "
+            "year are untouched.",
         ),
         "prior_export": (
-            "Wie viel davon ins Netz ging. Diese Kilowattstunden zählen nicht "
-            "als Ersparnis, sondern werden mit der Vergütung dieser Anlage "
-            "verrechnet. Wer nicht einspeist, trägt 0 ein oder lässt es leer.",
-            "How much of that went to the grid. These kilowatt hours do not "
-            "count as savings but are settled at this plant's tariff. If you "
-            "do not export, enter 0 or leave it empty.",
+            "**Wie viel von „Stand des Ertragszählers“ ins Netz gegangen ist** "
+            "- ebenfalls zum Einrichtungstag, ebenfalls einmalig.\n\nWozu: "
+            "Der Rest (Ertrag minus Einspeisung) gilt als selbst genutzt und "
+            "wird mit dem Arbeitspreis bewertet; die eingespeiste Hälfte mit "
+            "der Vergütung **dieser** Anlage. Zwei Anlagen aus zwei Jahren "
+            "haben regelmäßig zwei Sätze - deshalb steht das hier und nicht "
+            "am Standort.\n\nLeer oder 0: Alles davor zählt als selbst "
+            "genutzt. Wer nie eingespeist hat, ist damit richtig.",
+            "**How much of “yield meter reading” went to the grid** - also as "
+            "of the setup day, also one-off.\n\nWhat for: the remainder "
+            "(yield minus export) counts as self-used and is valued at the "
+            "energy price; the exported part at **this** plant's tariff. Two "
+            "plants from two years regularly have two rates - which is why "
+            "this lives here and not at the site.\n\nEmpty or 0: everything "
+            "before counts as self-used. If you never exported, that is "
+            "correct.",
         ),
     },
     "plant_name": {
@@ -898,12 +989,25 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
     },
     "costs": {
         "prior_import": (
-            "Wie viele Kilowattstunden du aus dem Netz bezogen hast, bevor die "
-            "Integration zu zählen begann. Nur für den Gesamtzeitraum; Tag, "
-            "Monat und Jahr bleiben davon unberührt.",
-            "How many kilowatt hours you drew from the grid before the "
-            "integration started counting. Only for the total; day, month and "
-            "year are unaffected.",
+            "**Der Stand deines Bezugszählers an dem Tag, an dem du diese "
+            "Integration eingerichtet hast.** Eine einmalige Zahl, die du "
+            "einmal abliest und dann nie wieder anfasst - kein Sensor.\n\n"
+            "Beispiel: Dein Bezugszähler steht heute bei 5000 kWh, und du "
+            "richtest heute ein. Dann trägst du 5000 ein.\n\nWozu: Die "
+            "Integration zählt ab heute nur noch Differenzen. Ohne diese Zahl "
+            "begänne der Gesamtzeitraum bei null Bezugskosten, und die Bilanz "
+            "sähe besser aus, als sie ist. Tag, Monat und Jahr rührt sie "
+            "nicht an.\n\nLeer: Der Gesamtzeitraum beginnt heute. Das ist "
+            "richtig, wenn du nur ab jetzt rechnen willst.",
+            "**Your import meter's reading on the day you set this integration "
+            "up.** A one-off number you read once and never touch again - not "
+            "a sensor.\n\nExample: your import meter reads 5000 kWh today and "
+            "you set up today. Then you enter 5000.\n\nWhat for: from today "
+            "the integration only counts differences. Without this number the "
+            "total period would start at zero grid cost and the balance would "
+            "look better than it is. Day, month and year are untouched.\n\n"
+            "Empty: the total period starts today. That is right if you only "
+            "want to count from now on.",
         ),
         "prior_price": (
             "Was die Kilowattstunde im Schnitt gekostet hat, bevor die "
@@ -914,6 +1018,23 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "started counting - electricity three years ago was not priced "
             "like today. Applies to that earlier time only. Empty: today's "
             "price is used.",
+        ),
+        "price_entity": (
+            "Eine Entität, die den Arbeitspreis liefert - für dynamische "
+            "Tarife. Sie hat Vorrang vor der festen Zahl darüber; meldet sie "
+            "gerade nichts, gilt wieder die Zahl. Leer: nur die feste Zahl.",
+            "An entity providing the energy price - for dynamic tariffs. It "
+            "takes precedence over the fixed number above; if it reports "
+            "nothing usable, the number applies again. Empty: the fixed "
+            "number only.",
+        ),
+        "feed_in_entity": (
+            "Dasselbe für die Einspeisevergütung.",
+            "The same for the feed-in tariff.",
+        ),
+        "base_price_entity": (
+            "Dasselbe für den Grundpreis.",
+            "The same for the base fee.",
         ),
         "price_per_kwh": (
             "Was eine Kilowattstunde aus dem Netz kostet, z. B. 0,34. Ohne "
@@ -995,8 +1116,10 @@ HAUSFELDER = [
 ]
 ANZEIGEFELDER = ["animate", "show_strings", "show_phases", "sensor_interval"]
 KOSTENFELDER = [
-    "price_per_kwh", "feed_in_price", "base_price", "currency", "prior_import",
-    "prior_price",
+    "price_per_kwh", "price_entity",
+    "feed_in_price", "feed_in_entity",
+    "base_price", "base_price_entity",
+    "currency", "prior_import", "prior_price",
 ]
 ANLAGENKOSTENFELDER = [
     "investment", "commissioned", "feed_in_price", "prior_yield",
@@ -1058,6 +1181,9 @@ def baum(sprache) -> dict:
                         "grid": s(("Netz und Zähler", "Grid and meter")),
                         "house": s(("Haus und Verbrauch", "House and consumption")),
                         "costs": s(("Kosten und Ertrag", "Costs and yield")),
+                        "tidy": s(
+                            ("Doppelte Sensoren", "Duplicate sensors")
+                        ),
                         "display": s(
                             ("Darstellung und Aufzeichnung", "Appearance and recording")
                         ),
@@ -1249,6 +1375,38 @@ def baum(sprache) -> dict:
                     ),
                     "data": _felder(KOSTENFELDER, s, "costs"),
                     "data_description": _hinweise(KOSTENFELDER, s, "costs"),
+                },
+                "tidy": {
+                    "title": s(
+                        ("Doppelte Sensoren abschalten", "Turn off duplicate sensors")
+                    ),
+                    "description": s(
+                        (
+                            "Diese Integration legt für jeden Wert einen Sensor "
+                            "an. Kommt der Wert aus genau der Entität, die du "
+                            "selbst eingetragen hast, steht er damit zweimal in "
+                            "Home Assistant - und schreibt auch zweimal in die "
+                            "Datenbank.\n\nNeu eingerichtete Anlagen brauchen "
+                            "das nicht: Dort sind diese Sensoren von Anfang an "
+                            "aus. Nötig ist es nur einmal, wenn du vor Fassung "
+                            "1.1.1 eingerichtet hast.\n\nBetroffen sind "
+                            "ausschließlich Entitäten dieser Integration. "
+                            "Gelöscht wird nichts: Jede bleibt in der "
+                            "Geräteansicht stehen und lässt sich mit einem Klick "
+                            "zurückholen.\n\n{liste}",
+                            "This integration creates a sensor for every value. "
+                            "If the value comes from exactly the entity you "
+                            "configured yourself, it then exists twice in Home "
+                            "Assistant - and writes to the database twice.\n\n"
+                            "Newly set up systems do not need this: there these "
+                            "sensors are off from the start. It is needed once "
+                            "only if you set up before version 1.1.1.\n\nOnly "
+                            "entities of this integration are affected. Nothing "
+                            "is deleted: each one stays in the device view and "
+                            "can be brought back with one click.\n\n{liste}",
+                        )
+                    ),
+                    "data": _felder(["tidy_confirm"], s),
                 },
                 "display": {
                     "title": s(

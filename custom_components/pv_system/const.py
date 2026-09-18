@@ -120,6 +120,13 @@ CONF_HOUSE_CALCULATE: Final = "calculate"
 # der Heizstab im Brauchwasserspeicher ist der Regelfall. Seine Kilowattstunden
 # sind Hausverbrauch, aber sie sparen keinen Strom, sondern Gas: Sie gehoeren
 # mit dem Preis des ersetzten Brennstoffs bewertet, nicht mit dem Strompreis.
+# Preise duerfen aus einer Entitaet kommen - ein dynamischer Tarif aendert
+# sich stuendlich, und niemand traegt das von Hand nach. Die Entitaet hat
+# Vorrang vor der festen Zahl daneben.
+CONF_CURRENCY_PRICE_ENTITY: Final = "price_entity"
+CONF_FEED_IN_PRICE_ENTITY: Final = "feed_in_entity"
+CONF_BASE_PRICE_ENTITY: Final = "base_price_entity"
+
 CONF_DIVERTER_NAME: Final = "diverter_name"
 CONF_DIVERTER_POWER: Final = "diverter_power_entity"
 CONF_DIVERTER_ENERGY: Final = "diverter_energy_entity"

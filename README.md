@@ -250,15 +250,38 @@ Leistungssensor (nur für die Karte), ein **Zähler in kWh** und der **Wert je
 kWh**. Bleibt der Wert leer, gilt der Arbeitspreis – dieselbe Rechnung wie
 vorher, und dieselbe zu schöne Zahl.
 
+**Mehrere sind erlaubt.** Zwei Heizstäbe an derselben Gasheizung sparen
+denselben Brennstoff; ihre Leistungen und Zähler werden addiert und teilen sich
+einen Wertansatz.
+
 Und wohin zählt das Ganze sonst?
 
 | Größe | zählt der Heizstab mit? | warum |
 |---|---|---|
-| **Hausverbrauch** | ja | Der Strom fließt hinter dem Zähler. Jeder Hausstromsensor sieht ihn |
-| **Autarkie** | ja | Verbrauch, der nicht aus dem Netz kam – genau das misst die Quote |
-| **Eigenverbrauch** | ja | Erzeugte Energie, die im Haus geblieben ist |
+| **Hausverbrauch** | ja | Der Strom fließt hinter dem Zähler. Jeder Hausstromsensor sieht ihn, und die Pfeile in der Karte müssen aufgehen |
+| **Grundverbrauch** | nein | Genau dafür gibt es ihn: das Haus ohne die Verbraucher, die nur bei Überschuss laufen |
+| **Autarkie** | nein | Sie rechnet auf dem Grundverbrauch |
+| **Eigenverbrauch** | ja | Er fragt nach der *erzeugten* Energie, nicht nach dem Bedarf: Wie viel davon blieb im Haus? |
 | **Ersparnis und Amortisation** | mit eigenem Wert | Ersetzt wurde Gas, nicht Strom |
 | **Bezugskosten Tag/Monat** | nein | Es ist kein Netzbezug. Kosten entstehen nur am Zähler |
+
+### Grundverbrauch
+
+Das Problem am Hausverbrauch ist, dass er zwei Fragen gleichzeitig beantwortet:
+
+* *Was fließt hinter meinem Zähler?* – Da gehört der Heizstab dazu, ohne Wenn
+  und Aber. Die Karte zeichnet Energieflüsse, und dieser fließt.
+* *Was braucht mein Haushalt?* – Da gehört er **nicht** dazu. Er läuft nur,
+  weil die Sonne scheint. Im Januar ist er aus, und der Verbrauch sähe aus, als
+  hätte man gespart.
+
+Deshalb beide: **Hausverbrauch** ist alles, **Grundverbrauch** ist das Haus ohne
+Überschussverbraucher. Im Hauskasten steht der eine oben, der andere unten.
+
+Die **Autarkie rechnet auf dem Grundverbrauch**, und das ist kein Detail: Eine
+Quote, die steigt, weil man mehr Überschuss wegheizt, misst nicht die Anlage,
+sondern lobt sich selbst. „90 % autark“ heißt jetzt: Von dem, was das Haus
+wirklich brauchte, kamen 90 % nicht aus dem Netz.
 
 Bei mehreren Anlagen wird der umgeleitete Anteil nach der Erzeugung aufgeteilt –
 wie die Einspeisung auch, und mit derselben Einschränkung: Es stimmt, solange
@@ -282,12 +305,22 @@ Verbrauch, sondern ein anderer Zähler. Dann wird neu verankert statt gerechnet.
 Die Grenze wächst mit der Zeit – war Home Assistant drei Tage aus, sind sechzig
 Kilowattstunden echt.
 
-Stehen trotzdem einmal unsinnige Beträge da, hilft `pv_system.reset_costs`: Der
-Dienst verwirft alles, was seit dem ersten Lauf gemessen wurde, und fängt bei
-den heutigen Zählerständen neu an. Was in der Konfiguration steht – Ertrag
-davor, Bezug davor, Inbetriebnahme –, bleibt. Tag, Monat und Jahr heilen sich
-ohnehin beim nächsten Wechsel von selbst; nur der Gesamtzeitraum trägt einen
-Fehler weiter.
+### Wozu `pv_system.reset_costs`
+
+Ein Notausgang, kein Wartungslauf. Der Gesamtzeitraum führt einen Geldspeicher:
+Jede gemessene Differenz wird bewertet und aufaddiert. Das macht Preisänderungen
+richtig – hat sich aber einmal ein falscher Betrag hineingerechnet, bleibt er
+für immer drin. Tag, Monat und Jahr setzen sich beim nächsten Wechsel von selbst
+zurück; der Gesamtzeitraum nie.
+
+Der Dienst leert diesen Speicher und verankert alle Zähler bei ihrem heutigen
+Stand neu. **Verloren geht nur das Gemessene seit dem ersten Lauf.** Was in der
+Konfiguration steht, bleibt: die vier „bei Einrichtung“-Felder, der
+Durchschnittspreis, die Investition, die Inbetriebnahme. Die Amortisation
+behält damit ihren Sinn – nur die Wochen dazwischen fehlen.
+
+Ruf ihn auf, wenn im Gesamtzeitraum Zahlen stehen, die es nicht geben kann.
+Sonst nie.
 
 ### Rückwirkend
 
@@ -322,6 +355,200 @@ Dutzend, die dauerhaft „unbekannt" anzeigen.
 
 Fällt ein Zähler zurück – Gerätetausch, ein zurückgesetzter Shelly –, wird die
 Marke neu gesetzt, statt eine negative Differenz auszuweisen.
+
+## Jedes Feld, und was es bewirkt
+
+Die vollständige Liste. Für **eine** Anlage – bei mehreren wiederholt sich der
+Anlagenteil unverändert. Überall gilt: **Was du wegllässt, wird nicht
+angezeigt**, und wo etwas ausgerechnet werden kann, wird es ausgerechnet.
+
+Nur zwei Angaben sind wirklich nötig: ein Name und mindestens eine Anlage.
+Alles andere macht die Karte vollständiger oder die Rechnung genauer.
+
+### Der Unterschied, der alles erklärt: Leistung oder Zählerstand
+
+Zwei Sorten Feld, und sie werden am häufigsten verwechselt:
+
+| | Einheit | verhält sich | wofür |
+|---|---|---|---|
+| **Leistung** | W, kW | springt auf und ab | die Karte, die Flusslinien, die Momentanwerte |
+| **Zähler** | kWh | steigt nur | alles Geld: Kosten, Erlös, Ersparnis, Amortisation |
+
+Ein Zählerstand ist in Home Assistant meist eine *Riemannsumme* über eine
+Leistung (Helfer → „Integral-Sensor“) oder kommt direkt vom Gerät. Wer in ein
+kWh-Feld eine Leistung einträgt, bekommt keine Fehlermeldung, sondern
+Unsinn – die Zahl steigt und fällt, und die Kostenrechnung folgt ihr.
+
+### Netz und Zähler
+
+Das ist der Hausanschluss: ein Zähler für alles, was rein- und rausgeht.
+
+| Feld | Einheit | Was passiert damit | Leer? |
+|---|---|---|---|
+| **Name** | Text | Gerätename in Home Assistant | „Netz“ |
+| **Zählermodell** | Text | Steht klein im Zählerkasten der Karte | nichts |
+| **Phasen** | 1–3 | Wie viele Phasenzeilen die Karte zeichnet | 3 |
+| **Vorzeichen** | Auswahl | Sagt, ob **positiv** an deinem Zähler Bezug oder Einspeisung heißt. Wird nicht geraten | positiv = Bezug |
+| **Gesamtleistung** | W | Die wichtigste Leistung: Sie treibt die Netzlinie, den Hausverbrauch und die Autarkie | Ersatzweise aus den Phasen summiert |
+| **Bezugsleistung** | W | Nur nötig, wenn dein Zähler Bezug und Einspeisung **getrennt** meldet statt als eine Zahl mit Vorzeichen | Aus der Gesamtleistung abgeleitet: positiv = Bezug |
+| **Einspeiseleistung** | W | Dasselbe für die andere Richtung | wie oben |
+| **Bezugszähler** | kWh | **Der wichtigste Zähler überhaupt.** Aus ihm entstehen sämtliche Bezugskosten – Tag, Monat, Jahr, gesamt | Keine Kosten, keine Bilanz, keine Amortisation |
+| **Einspeisezähler** | kWh | Daraus entsteht der Einspeiseerlös. Bei mehreren Anlagen nach Erzeugungsanteil aufgeteilt | Kein Erlös |
+| **Netzfrequenz** | Hz | Nur Anzeige. Ein Feld genügt – alle drei Phasen sind starr gekoppelt | nichts |
+| **Leistung L1/L2/L3** | W | Je Phase am Zähler. Füllt den Zählerkasten und färbt die Phasenlinien abschnittsweise | Die Gesamtleistung wird gedrittelt (nur für die Animation, nicht für Zahlen) |
+| **Spannung L1/L2/L3** | V | Nur Anzeige in der Detailtabelle | nichts |
+| **Strom L1/L2/L3** | A | dito | nichts |
+
+### Haus und Verbrauch
+
+| Feld | Einheit | Was passiert damit | Leer? |
+|---|---|---|---|
+| **Hausverbrauch rechnen** | an/aus | Rechnet `Netzleistung + Wechselrichterabgabe`. Bei einer Netzparallelanlage ist das exakt, nicht geschätzt | an |
+| **Leistung** | W | Nur wenn du den Hausverbrauch **misst**. Hat dann Vorrang vor der Rechnung | Wird gerechnet – der Normalfall |
+| **Verbrauchszähler** | kWh | Alles, was im Haus verbraucht wurde: Netzbezug **und** selbst genutzter Solarstrom. **Nicht** der Bezugszähler. Zweiter Weg zum Eigenverbrauch (`verbraucht − bezogen`), wenn keine Anlage einen Ertragszähler hat | In Ordnung, solange ein Ertragszähler da ist |
+| **Überschussverbraucher** | Text | Name in der Karte, z. B. „Heizstab“ | „Überschuss“ |
+| **Leistung Überschussverbraucher** | W, mehrere | Was sie gerade ziehen. Wird vom Hausverbrauch abgezogen → **Grundverbrauch**. Autarkie und Eigenverbrauch beziehen sich darauf | Kein Grundverbrauch, Quoten wie bisher |
+| **Zähler Überschussverbraucher** | kWh, mehrere | Diese kWh werden in der Ersparnis mit dem Feld darunter bewertet statt mit dem Arbeitspreis | Überschuss zählt wie normaler Eigenverbrauch |
+| **Wert je kWh** | Geld | Was eine umgeleitete kWh wirklich wert ist: Brennstoffpreis ÷ Kesselwirkungsgrad | Es gilt der Arbeitspreis |
+
+### Kosten und Ertrag (Standort)
+
+| Feld | Einheit | Was passiert damit | Leer? |
+|---|---|---|---|
+| **Arbeitspreis** | Geld/kWh | Bewertet Bezug und Eigenverbrauch. **Ohne ihn entsteht keine einzige Geldentität** | Keine Kosten, keine Amortisation |
+| **Arbeitspreis aus Entität** | Entität | Für dynamische Tarife. Hat Vorrang; meldet sie nichts Brauchbares, gilt wieder die feste Zahl | Nur die feste Zahl |
+| **Einspeisevergütung** | Geld/kWh | Bewertet die Einspeisung. Je Anlage überschreibbar | Kein Erlös |
+| **Vergütung aus Entität** | Entität | wie oben | |
+| **Grundpreis je Monat** | Geld | Monatliche Pauschale, nach verstrichener Zeit anteilig verteilt – sonst stünde am Monatsersten ein voller Monatsbeitrag im Tageswert | 0 |
+| **Grundpreis aus Entität** | Entität | wie oben | |
+| **Währung** | Text | Einheit der Geldsensoren | EUR |
+| **Stand des Bezugszählers bei Einrichtung** | kWh | Siehe unten | Gesamtzeitraum beginnt heute |
+| **Durchschnittspreis davor** | Geld/kWh | Bewertet genau diese Zeit davor | Heutiger Preis |
+
+### Anlage
+
+| Feld | Einheit | Was passiert damit | Leer? |
+|---|---|---|---|
+| **Name**, **Platz in der Karte** | Text, 1–99 | Beschriftung und Reihenfolge. Sensoren hängen an der Kennung, nicht am Platz | „Anlage 1“, Anlagereihenfolge |
+
+**Module**
+
+| Feld | Einheit | Was passiert damit | Leer? |
+|---|---|---|---|
+| **Anzahl**, **Wp je Modul** | Zahl | Ergeben die installierte Spitzenleistung – Bezugsgröße für die Ausnutzung | Kein Balken, keine Ausnutzung |
+| **In Reihe**, **Parallel** | Zahl | Nur das Bild der Verschaltung | Wird aus der Anzahl geraten |
+| **Hersteller**, **Modell** | Text | Nur Detailtabelle | nichts |
+| **Neigung**, **Ausrichtung** | Grad | Nur Anzeige. Keine Ertragsprognose | nichts |
+| **Leistung** | W | Was vom Dach kommt (Gleichstrom). Treibt den Balken und die Erzeugungssumme | Kommt vom Laderegler, sonst aus Spannung × Strom |
+| **Spannung**, **Strom** | V, A | Strangwerte. Ergänzen einander und die Leistung | Werden gerechnet, wo möglich |
+| **Ertragszähler** | kWh | Ertrag **dieser** Anlage. Grundlage ihrer Amortisation | Der des Wechselrichters wird genommen |
+
+**Laderegler**
+
+| Feld | Einheit | Was passiert damit | Leer? |
+|---|---|---|---|
+| **Vorhanden** | an/aus | Ohne ihn hängen die Module am Wechselrichter | an |
+| **Systemspannung** | Auswahl | Nur Anzeige und Plausibilität | 48 V |
+| **Leistung** | W | **Die Abgabe zur Batterie hin** | Aus Spannung × Strom, sonst von der Eingangsseite |
+| **Eingang Spannung/Strom** | V, A | Die Modulseite – dieselbe Stelle wie oben. Einmal eintragen genügt | Kommt von den Modulen |
+| **Ausgang Spannung/Strom** | V, A | Die Batterieseite | Aus der Leistung gerechnet |
+| **Ertragszähler**, **Zustand**, **Temperatur** | kWh, Text, °C | Nur Anzeige | nichts |
+
+**Batterie**
+
+| Feld | Einheit | Was passiert damit | Leer? |
+|---|---|---|---|
+| **Vorhanden** | an/aus | Ohne sie entstehen keine Batteriesensoren | an |
+| **Kapazität** | kWh | Bezugsgröße für Inhalt, Restlaufzeit und Ladezeit | Kein Inhalt, keine Restzeit |
+| **Ladestand** | % | Treibt Balken, Inhalt und die Restzeiten | Kein Balken |
+| **Leistung** | W | Direkte Batterieleistung. **Plus heißt laden** – welches Vorzeichen dein Sensor dafür nutzt, sagst du daneben | Aus Spannung × Strom |
+| **Vorzeichen** | Auswahl | Wird nicht geraten | positiv = laden |
+| **Mindestladung** | % | Untergrenze für die Restlaufzeit – eine Batterie wird nicht auf null entladen | 10 % |
+| **Spannung**, **Strom**, **Temperatur**, **Zyklen**, **Gesundheit** | | Nur Anzeige. Die Temperatur färbt sich: bis 30 °C grün, bis 40 °C orange, darüber rot | nichts |
+
+**Wechselrichter**
+
+| Feld | Einheit | Was passiert damit | Leer? |
+|---|---|---|---|
+| **Vorhanden** | an/aus | Ohne ihn endet die Anlage am Gleichstrom | an |
+| **Nennleistung** | W | Bezugsgröße für die Auslastung | Kein Balken |
+| **Phase** | L1/L2/L3 | Auf welcher Schiene er einspeist. Bestimmt, wo er in der Karte abgreift und wie die Phasenflüsse aufgehen | L1 |
+| **Leistung** | W | **Die Abgabe auf der Wechselstromseite.** Geht in Hausverbrauch, Autarkie und die Phasenrechnung ein | Kein Hausverbrauch |
+| **Ertragszähler** | kWh | Grundlage für Ertrag und Amortisation dieser Anlage | Der Modulertrag wird genommen |
+| **Hybrid** | an/aus | Sagt: Er kann die Batterie aus dem Netz laden. Solche Ladung zählt dann **nicht** als Hausverbrauch | aus |
+| **AC-Spannung/-Strom**, **DC-Spannung**, **Frequenz**, **Temperatur**, **Betriebsart** | | Nur Anzeige. Die DC-Spannung dient ohne Laderegler als Strangspannung | nichts |
+
+**Kosten dieser Anlage**
+
+| Feld | Einheit | Was passiert damit | Leer? |
+|---|---|---|---|
+| **Investitionskosten** | Geld | Was **diese** Anlage gekostet hat. Die des Standorts ist die Summe aller Anlagen | Keine Amortisation |
+| **Inbetriebnahme** | Datum | Seit wann sie läuft. Bestimmt die Jahresrate und damit die Restzeit | Beginnt am Einrichtungstag – und die Restzeit ist um Jahre daneben |
+| **Einspeisevergütung** | Geld/kWh | Nur, wenn diese Anlage einen anderen Satz hat als der Rest | Der Satz des Standorts |
+| **Stand des Ertragszählers bei Einrichtung** | kWh | Siehe unten | Die Zeit davor fehlt |
+| **Davon eingespeist bei Einrichtung** | kWh | Siehe unten | Alles davor zählt als selbst genutzt |
+
+### Die vier „bei Einrichtung“-Felder
+
+Sie sind der einzige Teil der Konfiguration, der **keine Entität** ist, sondern
+eine Zahl, die du **einmal abliest** und danach nie wieder anfasst.
+
+Der Grund: Die Integration merkt sich beim ersten Lauf, wo jeder Zähler steht,
+und rechnet ab da nur noch **Differenzen**. Alles, was davor passiert ist, sieht
+sie nicht. Diese vier Felder erzählen es ihr.
+
+```
+Standort:  Stand des Bezugszählers bei Einrichtung   →  Bezugskosten gesamt
+           Durchschnittspreis davor                  →  bewertet genau diese kWh
+
+Anlage:    Inbetriebnahme                            →  Jahresrate, Restzeit
+           Stand des Ertragszählers bei Einrichtung  →  Ertrag dieser Anlage
+           Davon eingespeist bei Einrichtung         →  Aufteilung Erlös/Ersparnis
+```
+
+**Ein durchgerechnetes Beispiel.** Home Assistant läuft seit 2023, die Anlage
+seit April 2024. Heute richtest du die Integration ein und liest ab:
+
+| Wo | Was | Wert |
+|---|---|---|
+| Netz und Zähler → Bezugszähler | `sensor.netzbezug` | steht bei 5000 kWh |
+| Netz und Zähler → Einspeisezähler | `sensor.netzeinspeisung` | steht bei 300 kWh |
+| Anlage → Wechselrichter → Ertragszähler | `sensor.wr_ertrag` | steht bei 2300 kWh |
+
+Dann trägst du ein:
+
+| Feld | Wert | Warum genau der |
+|---|---|---|
+| Stand des Bezugszählers bei Einrichtung | **5000** | Derselbe Zähler, denselben Stand abgelesen |
+| Durchschnittspreis davor | **0,30** | Was die kWh 2023/24 im Schnitt kostete |
+| Inbetriebnahme | **05.04.2024** | |
+| Stand des Ertragszählers bei Einrichtung | **2300** | Derselbe Zähler wie beim Wechselrichter |
+| Davon eingespeist bei Einrichtung | **300** | Vom Einspeisezähler – die Anlage ist die einzige |
+
+**Ja, die Zahlen hängen zusammen:** Der Wert in „Stand des Bezugszählers bei
+Einrichtung“ ist der Stand *genau der Entität*, die du unter Bezugszähler
+ausgewählt hast. Dasselbe beim Ertrag. Wer dort verschiedene Zähler mischt,
+bekommt eine Lücke oder eine Dopplung.
+
+Was dann herauskommt:
+
+```
+Gesamtzeitraum   Bezug        5000 kWh × 0,30  =  1500 €
+Anlage           Ertrag       2300 kWh
+                 davon Netz    300 kWh × 0,08  =    24 €
+                 selbst      2000 kWh × 0,30  =   600 €
+                 Ertrag                          624 €  von 6000 € → 10,4 %
+```
+
+Ab dem ersten Lauf zählt die Integration weiter: Jede neue Kilowattstunde am
+Bezugszähler kostet den **heutigen** Preis, jede neue am Ertragszähler bringt
+den heutigen Ertrag. Der Durchschnittspreis davor gilt nur für die 5000.
+
+**Und der Verbrauchszähler unter „Haus und Verbrauch“?** Der hat mit alldem
+nichts zu tun. Er ist ein *anderer* Zähler: alles, was im Haus verbraucht
+wurde, Netzstrom und Solarstrom zusammen – bei dir die 7000 kWh. Gebraucht wird
+er nur als Ausweichweg für den Eigenverbrauch, falls keine Anlage einen
+Ertragszähler hat. Hast du einen, darf er leer bleiben.
 
 ## Entitäten und Datenbank
 
@@ -360,9 +587,22 @@ den Rechenkern direkt und zeigt weiterhin jeden Wert, sekundengenau.
 **Wer neu einrichtet, braucht nichts zu tun.** Läuft deine Anlage dagegen
 schon, kommt die Voreinstellung zu spät: Home Assistant entscheidet beim
 allerersten Anlegen, ob eine Entität ein- oder ausgeschaltet ist, und fragt
-danach nie wieder. Dafür gibt es auf dem Gerät des Standorts die Schaltfläche
-**„Doppelte Sensoren abschalten"** – einmal drücken, fertig. Wer lieber eine
-Automatisierung schreibt, nimmt `pv_system.tidy_entities`.
+danach nie wieder.
+
+Dafür gibt es drei Wege zum selben Ziel:
+
+* **Konfigurieren → Doppelte Sensoren.** Der empfohlene: Dort steht *vorher*,
+  welche Entitäten es trifft, und ohne Haken passiert nichts.
+* Die Schaltfläche **„Doppelte Sensoren abschalten"** auf dem Gerät des
+  Standorts – ein Griff, ohne Liste.
+* `pv_system.tidy_entities` für Automatisierungen. Er gilt für den ganzen
+  Standort und meldet zurück, wie viele und welche:
+
+  ```yaml
+  action: pv_system.tidy_entities
+  target:
+    entity_id: sensor.pv_system_status
+  ```
 
 Betroffen sind ausschließlich Entitäten dieser Integration. Deine eigenen
 Sensoren rührt sie nicht an – sie sind ja gerade der Grund, warum die Kopien

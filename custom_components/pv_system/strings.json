@@ -328,18 +328,24 @@
       "costs": {
         "data": {
           "base_price": "Monthly base fee",
+          "base_price_entity": "Base fee from entity",
           "currency": "Currency",
+          "feed_in_entity": "Feed-in tariff from entity",
           "feed_in_price": "Feed-in tariff (default)",
+          "price_entity": "Energy price from entity",
           "price_per_kwh": "Energy price",
-          "prior_import": "Import before",
+          "prior_import": "Import meter reading at setup",
           "prior_price": "Average price before"
         },
         "data_description": {
           "base_price": "The monthly base fee of your electricity contract. It is spread proportionally across day, month and year. Empty or 0 if you do not want it counted here.",
+          "base_price_entity": "The same for the base fee.",
           "currency": "The currency code, e.g. EUR or CHF. It is used as the unit of the money sensors.",
+          "feed_in_entity": "The same for the feed-in tariff.",
           "feed_in_price": "What you are paid per kilowatt hour fed into the grid, e.g. 0.08. Leave empty if you do not export.",
+          "price_entity": "An entity providing the energy price - for dynamic tariffs. It takes precedence over the fixed number above; if it reports nothing usable, the number applies again. Empty: the fixed number only.",
           "price_per_kwh": "What one kilowatt hour from the grid costs, e.g. 0.34. Without this price no costs are calculated and no money sensors are created.",
-          "prior_import": "How many kilowatt hours you drew from the grid before the integration started counting. Only for the total; day, month and year are unaffected.",
+          "prior_import": "**Your import meter's reading on the day you set this integration up.** A one-off number you read once and never touch again - not a sensor.\n\nExample: your import meter reads 5000 kWh today and you set up today. Then you enter 5000.\n\nWhat for: from today the integration only counts differences. Without this number the total period would start at zero grid cost and the balance would look better than it is. Day, month and year are untouched.\n\nEmpty: the total period starts today. That is right if you only want to count from now on.",
           "prior_price": "What one kilowatt hour cost on average before the integration started counting - electricity three years ago was not priced like today. Applies to that earlier time only. Empty: today's price is used."
         },
         "description": "Everything is derived from the meter readings you entered under “Grid and meter” - not from extrapolated power. Day, month and year start counting the moment you enter a price here - the time before is covered by the figures at each plant.\n\nYou may change the price at any time: only what has accrued since the last calculation is valued. A price increase applies from the day you enter it and does not rewrite the past.\n\nWhat a plant cost and since when it runs belongs to that plant under “Costs of this plant”. The site's investment is the sum of its plants, its start the earliest commissioning - nobody needs to enter either again here.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
@@ -383,10 +389,10 @@
           "power_sign": "Power sign"
         },
         "data_description": {
-          "export_energy_entity": "The export meter in kWh. Basis for the feed-in revenue.",
+          "export_energy_entity": "The counterpart: a kWh counter that only rises and counts what went to the grid.\n\nThe feed-in revenue comes from it. With several plants it is split by each plant's share of generation - it cannot be measured, there is one meter for all of them at the house connection.\n\nEmpty: no revenue. If you never export, leave it empty.",
           "export_power_entity": "Counterpart to import power - likewise only needed with separate meters.",
           "frequency_entity": "One field is enough: in a synchronous grid all three phases share the same frequency - they are rigidly locked together. One value per phase would be the same number three times.",
-          "import_energy_entity": "The import meter in kWh. Daily, monthly and yearly grid costs are derived from it - without it the cost figures stay empty.",
+          "import_energy_entity": "**The single most important meter here.** A kWh counter that only rises and counts what you drew from the grid - in Home Assistant usually a Riemann sum over your meter's import power.\n\nAll money comes from it: grid costs for day, month, year and total. The integration remembers its reading on the first run and only counts differences from then on - so the meter may have been running for years, today's reading costs nothing.\n\nEmpty: no grid costs, no balance, no payback.",
           "import_power_entity": "Only needed if your meter reports import and export separately instead of one signed figure.",
           "l1_current_entity": "Current on L1, in A. Purely informative.",
           "l1_power_entity": "Power on L1. Leave empty if you only have the total meter - the card then does not draw phases individually.",
@@ -418,12 +424,12 @@
         },
         "data_description": {
           "calculate": "Consumption = inverter power + grid power. A measured value takes precedence.",
-          "diverter_energy_entity": "This load's meter reading in kWh. These kilowatt hours are house consumption like any other - but they do not save electricity, they save the fuel that would otherwise do the heating. That is why they are valued separately.",
+          "diverter_energy_entity": "kWh counters of these loads. **Several are allowed** - they are added up.\n\nThese kilowatt hours really do flow in the house, but they save no electricity, they save the fuel that would otherwise do the heating. That is why they are valued separately in the savings - with the field below.\n\nEmpty: the surplus counts like any other self-consumption, and the system looks better off than it is.",
           "diverter_name": "What the load is called on the card, e.g. “immersion heater”.",
-          "diverter_power_entity": "What the surplus load currently draws - the immersion heater in the hot water tank, the wallbox in surplus charging. Display only; the meter below is what counts for the calculation.",
+          "diverter_power_entity": "What the surplus loads currently draw - the immersion heater in the hot water tank, the wallbox in surplus charging. **Several are allowed**; two heating rods on the same gas boiler are added up.\n\nThis power is subtracted from house consumption to give the **base load** - what your household really needs. Self-sufficiency and self-consumption refer to it too.",
           "diverter_price": "What one diverted kilowatt hour is really worth: the price of the replaced fuel divided by the boiler's efficiency. At 0.11 €/kWh gas and 92 % that is about 0.12. Empty: the energy price applies - and the system looks better off than it is.",
-          "energy_entity": "kWh meter of house consumption, if available. It is the second route to self-consumption when no yield meter exists.",
-          "power_entity": "A measured house consumption, if you have one. It takes precedence over the calculation. Empty is the normal case."
+          "energy_entity": "A kWh counter over **everything consumed in the house** - grid import *and* self-used solar together. Not the import meter: that one lives under “Grid and meter” and only counts what came from the grid.\n\nWhat for: it is the second route to self-consumption. Normally the integration computes “generated minus exported”; without a yield meter it falls back to “consumed minus imported” - and that is what this is for.\n\nEmpty: perfectly fine as long as your plants have a yield meter.",
+          "power_entity": "Only if you **measure** house consumption - with a second meter behind the house connection, say. In watts, not a meter reading.\n\nNormally leave it empty: the integration then derives it from grid power plus inverter output, which for a grid-parallel system is just as correct."
         },
         "title": "House and consumption"
       },
@@ -435,7 +441,8 @@
           "grid": "Grid and meter",
           "house": "House and consumption",
           "plants": "Plants",
-          "save": "Save and close"
+          "save": "Save and close",
+          "tidy": "Duplicate sensors"
         },
         "title": "PV system"
       },
@@ -514,15 +521,15 @@
           "commissioned": "Commissioned",
           "feed_in_price": "Different feed-in tariff",
           "investment": "Investment cost of this plant",
-          "prior_export": "Export before",
-          "prior_yield": "Yield before"
+          "prior_export": "Of that exported at setup",
+          "prior_yield": "Yield meter reading at setup"
         },
         "data_description": {
           "commissioned": "Since when this plant has been running. Without this date the payback starts on the day you set up the integration - and the remaining time would be years off.",
           "feed_in_price": "Only fill this in if this plant gets a different tariff from the rest. Two plants from two years regularly have two rates. Empty: the rate under “Costs and yield” applies.",
           "investment": "What this plant cost - modules, charge controller, storage, inverter, mounting. Its payback is derived from it.",
-          "prior_export": "How much of that went to the grid. These kilowatt hours do not count as savings but are settled at this plant's tariff. If you do not export, enter 0 or leave it empty.",
-          "prior_yield": "How many kilowatt hours this plant produced before the integration started counting. Usually shown on the inverter. Without it the time before is missing from the payback."
+          "prior_export": "**How much of “yield meter reading” went to the grid** - also as of the setup day, also one-off.\n\nWhat for: the remainder (yield minus export) counts as self-used and is valued at the energy price; the exported part at **this** plant's tariff. Two plants from two years regularly have two rates - which is why this lives here and not at the site.\n\nEmpty or 0: everything before counts as self-used. If you never exported, that is correct.",
+          "prior_yield": "**This plant's yield meter reading on the day you set the integration up.** Usually shown on the inverter. A one-off number, not a sensor.\n\nExample: the plant has run since 2024 and produced 2300 kWh, you set up today - so 2300.\n\nWhat for: these kilowatt hours count towards this plant's yield and thus towards **its payback**. Without them a 2024 plant would look as if it had only just started. Total period only; day, month and year are untouched."
         },
         "description": "What this plant cost and since when it has been running. Both count for this plant alone: with several plants each gets its own payback, and the site's is their sum.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Costs – {plant}"
@@ -565,6 +572,13 @@
         },
         "description": "{count} plants are set up. Which one do you want to edit?",
         "title": "Plants"
+      },
+      "tidy": {
+        "data": {
+          "tidy_confirm": "Yes, turn these sensors off"
+        },
+        "description": "This integration creates a sensor for every value. If the value comes from exactly the entity you configured yourself, it then exists twice in Home Assistant - and writes to the database twice.\n\nNewly set up systems do not need this: there these sensors are off from the start. It is needed once only if you set up before version 1.1.1.\n\nOnly entities of this integration are affected. Nothing is deleted: each one stays in the device view and can be brought back with one click.\n\n{liste}",
+        "title": "Turn off duplicate sensors"
       }
     }
   },

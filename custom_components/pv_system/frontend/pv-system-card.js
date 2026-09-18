@@ -60,7 +60,7 @@ const BATTERIE_B = 130;   // Breite des Batteriekastens
 // Phasen. Beide sind Klemmkästen - die Phasen enden an ihrer Kante, statt sie
 // zu kreuzen. Das Netz steht darunter und gehört nicht mehr ins Haus.
 const ZAEHLER_B = 108;    // Breite des Zählerkastens
-const HAUS_B = 140;       // Breite des Hauskastens
+const HAUS_B = 152;       // Breite des Hauskastens
 const BAND_OBEN = 40;     // Titel und Modell über der ersten Phasenzeile
 const BAND_UNTEN = 16;    // Luft unter der letzten Phasenzeile
 const BAND_MIN = 74;      // damit im Hauskasten vier Zeilen Platz haben
@@ -105,6 +105,20 @@ function wattVz(wert, sprache) {
   if (n === null) return "–";
   if (Math.abs(n) < 1) return watt(0, sprache);
   return `${n > 0 ? "+" : "−"}${watt(Math.abs(n), sprache)}`;
+}
+
+/**
+ * Wie warm ist zu warm?
+ *
+ * Die Grenzen sind bewusst grob: Es geht darum, ob jemand hinsehen sollte,
+ * nicht um ein Grad hin oder her.
+ */
+function _waerme(grad) {
+  const n = zahl(grad);
+  if (n === null) return "";
+  if (n >= 40) return "heiss";
+  if (n >= 30) return "warm";
+  return "kuehl";
 }
 
 function watt(wert, sprache) {
@@ -475,6 +489,12 @@ class PvSystemCard extends HTMLElement {
         transition: opacity 200ms ease;
       }
       .pfeil.an { opacity: .95; }
+
+      /* Die Zellentemperatur: grün bis dreißig Grad, dann orange, ab
+         vierzig rot. Kein eigener Balken - die Zahl selbst reicht. */
+      .kuehl { fill: var(--pv-akku, #3ec26a); }
+      .warm  { fill: var(--pv-warm, #e8912a); }
+      .heiss { fill: var(--pv-bezug, #e05c4b); }
 
       .f-solar { stroke: var(--pv-solar, #f5a623); }
       .f-akku  { stroke: var(--pv-akku, #3ec26a); }
@@ -1322,35 +1342,42 @@ class PvSystemCard extends HTMLElement {
       haus, "house:quoten",
       e("text", { class: "mini", x: g.hausX + 10, y: g.bandY + 30 })
     );
-    if (g.zeigePhasen) {
-      for (let i = 0; i < g.phasen; i++) {
-        const y = g.yBus + i * M.busAbstand;
+    // Die Phasenwerte stehen links, zur Leitung hin: "L1  840 W" liest sich in
+    // der Richtung, aus der der Strom kommt. Rechts wird dadurch Platz frei -
+    // dort steht das Haus.
+    const zeilen = g.zeigePhasen ? g.phasen : 1;
+    for (let i = 0; i < zeilen; i++) {
+      const y = g.yBus + i * M.busAbstand;
+      if (g.zeigePhasen) {
         haus.appendChild(
           e("text", {
             class: "klein", x: g.hausX + 10, y: y + 3.5, text: `L${i + 1}`,
           })
         );
-        this._ref(
-          haus, `haus:${i}`,
-          e("text", {
-            class: "mini rechts", x: g.hausX + HAUS_B - 10, y: y + 3.5,
-          })
-        );
       }
-    } else {
       this._ref(
-        haus, "haus:0",
-        e("text", {
-          class: "mini rechts", x: g.hausX + HAUS_B - 10, y: g.yBus + 3.5,
-        })
+        haus, `haus:${i}`,
+        e("text", { class: "mini", x: g.hausX + (g.zeigePhasen ? 32 : 10), y: y + 3.5 })
       );
     }
-    // Der Überschussverbraucher unter den Phasen - nur wenn es ihn gibt.
+    haus.appendChild(
+      this._hausSymbol(
+        g.hausX + HAUS_B - 34,
+        g.yBus + ((zeilen - 1) * M.busAbstand) / 2 - 11,
+        24
+      )
+    );
+    // Unter den Phasen, nur wenn es Überschussverbraucher gibt: links, was
+    // sie gerade ziehen, rechts der Grundverbrauch - das Haus ohne sie.
     this._ref(
       haus, "house:umleiter",
+      e("text", { class: "mini", x: g.hausX + 10, y: g.bandY + g.bandH - 6 })
+    );
+    this._ref(
+      haus, "house:grund",
       e("text", {
-        class: "mini",
-        x: g.hausX + 10,
+        class: "mini rechts",
+        x: g.hausX + HAUS_B - 10,
         y: g.bandY + g.bandH - 6,
       })
     );
@@ -1410,6 +1437,22 @@ class PvSystemCard extends HTMLElement {
   }
 
   /* -------------------------------------------------------------- Symbole */
+
+  /**
+   * Ein Haus: Dach und Wände, mehr braucht es nicht.
+   *
+   * ``groesse`` skaliert es; die Grundform ist dreißig Einheiten breit.
+   */
+  _hausSymbol(x, y, groesse = 30) {
+    const s = groesse / 30;
+    const gruppe = e("g", {
+      class: "symbol",
+      transform: `translate(${x} ${y}) scale(${s.toFixed(3)})`,
+    });
+    gruppe.appendChild(e("path", { d: "M 1 15 L 15 3 L 29 15" }));
+    gruppe.appendChild(e("path", { d: "M 5 14 V 30 H 25 V 14" }));
+    return gruppe;
+  }
 
   /**
    * Ein Strommast, gezeichnet statt geladen.
@@ -1701,6 +1744,15 @@ class PvSystemCard extends HTMLElement {
             ? einheit(b.temperature, "°C", 0, l)
             : ""
         );
+        // Und die Farbe sagt, ob das noch in Ordnung ist. Eine
+        // Lithiumzelle mag zwanzig Grad; ab dreißig wird es warm, ab vierzig
+        // sollte jemand nachsehen. Nur die Schrift färbt sich - ein farbiger
+        // Balken daneben wäre ein zweites Bauteil für dieselbe Auskunft.
+        this._attr(
+          `${id}:battery:temp`,
+          "class",
+          `mini rechts ${_waerme(b.temperature)}`
+        );
         const anteil = Math.max(0, Math.min(100, zahl(b.soc) || 0));
         this._attr(
           `${id}:battery:balken`, "width", ((BATTERIE_B - 20) * anteil) / 100
@@ -1813,9 +1865,11 @@ class PvSystemCard extends HTMLElement {
     const umleiter = d.house.diverter || {};
     this._setzen(
       "house:umleiter",
-      umleiter.enabled
-        ? `${umleiter.name}: ${watt(umleiter.power, l)}`
-        : ""
+      umleiter.enabled ? `${umleiter.name} ${watt(umleiter.power, l)}` : ""
+    );
+    this._setzen(
+      "house:grund",
+      umleiter.enabled ? `Grund ${watt(d.house.base_power, l)}` : ""
     );
 
     // Kennzahlenleiste
@@ -2163,16 +2217,32 @@ class PvSystemCard extends HTMLElement {
       zeilen = [
         ["Verbrauch", watt(h.house_power, l), h.entities.power],
         ["Ermittelt", h.house_source === "sensor" ? "gemessen" : "gerechnet"],
+        // Der Grundverbrauch: das Haus ohne die Verbraucher, die nur laufen,
+        // weil Überschuss da ist. Auf ihn beziehen sich auch die Quoten.
+        ...(h.diverter && h.diverter.enabled
+          ? [["Grundverbrauch", watt(h.base_power, l)]]
+          : []),
         ["Energiezähler", einheit(h.house_energy, "kWh", 2, l), h.entities.energy],
         ["Autarkie", prozent(h.self_sufficiency, l)],
         ["Eigenverbrauch", prozent(h.self_consumption, l)],
         ...(h.diverter && h.diverter.enabled
           ? [
-              [h.diverter.name, watt(h.diverter.power, l), h.diverter.entities.power],
+              // Es dürfen mehrere sein - zwei Heizstäbe an derselben Heizung
+              // sparen denselben Brennstoff. Verlinkt wird nur, wenn es genau
+              // einer ist; eine Summe gehört keiner Entität.
+              [
+                h.diverter.name,
+                watt(h.diverter.power, l),
+                h.diverter.entities.power.length === 1
+                  ? h.diverter.entities.power[0]
+                  : null,
+              ],
               [
                 `${h.diverter.name} Zähler`,
                 einheit(h.diverter.energy, "kWh", 2, l),
-                h.diverter.entities.energy,
+                h.diverter.entities.energy.length === 1
+                  ? h.diverter.entities.energy[0]
+                  : null,
               ],
             ]
           : []),

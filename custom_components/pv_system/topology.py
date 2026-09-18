@@ -21,6 +21,7 @@ from .const import (
     CONF_ANIMATE,
     CONF_AZIMUTH,
     CONF_BASE_PRICE,
+    CONF_BASE_PRICE_ENTITY,
     CONF_BATTERY,
     CONF_BATTERY_CHARGED,
     CONF_BATTERY_CURRENT,
@@ -54,6 +55,7 @@ from .const import (
     CONF_COSTS,
     CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
+    CONF_CURRENCY_PRICE_ENTITY,
     CONF_DISPLAY,
     CONF_DIVERTER_ENERGY,
     CONF_DIVERTER_NAME,
@@ -61,6 +63,7 @@ from .const import (
     CONF_DIVERTER_PRICE,
     CONF_ENABLED,
     CONF_FEED_IN_PRICE,
+    CONF_FEED_IN_PRICE_ENTITY,
     CONF_GRID,
     CONF_GRID_EXPORT_ENERGY,
     CONF_GRID_EXPORT_POWER,
@@ -195,6 +198,24 @@ def _ganz(wert: Any, vorgabe: int | None) -> int | None:
     if zahl is None:
         return vorgabe
     return int(round(zahl))
+
+
+def _entitaeten(wert: Any) -> list[str]:
+    """Eine Liste von Entity-IDs. Eine einzelne wird zur Liste mit einer.
+
+    Die einzelne Form kommt aus aelteren Fassungen - dort gab es genau einen
+    Ueberschussverbraucher.
+    """
+    if isinstance(wert, str):
+        wert = [wert]
+    if not isinstance(wert, (list, tuple)):
+        return []
+    gesehen: list[str] = []
+    for eintrag in wert:
+        kennung = _entity(eintrag)
+        if kennung and kennung not in gesehen:
+            gesehen.append(kennung)
+    return gesehen
 
 
 def _entity(wert: Any) -> str | None:
@@ -383,8 +404,10 @@ def haus_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         CONF_HOUSE_ENERGY: _entity(roh.get(CONF_HOUSE_ENERGY)),
         CONF_HOUSE_CALCULATE: bool(roh.get(CONF_HOUSE_CALCULATE, True)),
         CONF_DIVERTER_NAME: roh.get(CONF_DIVERTER_NAME) or DEFAULT_DIVERTER_NAME,
-        CONF_DIVERTER_POWER: _entity(roh.get(CONF_DIVERTER_POWER)),
-        CONF_DIVERTER_ENERGY: _entity(roh.get(CONF_DIVERTER_ENERGY)),
+        # Mehrere erlaubt: Zwei Heizstaebe an derselben Gasheizung sparen
+        # denselben Brennstoff und teilen sich deshalb einen Wertansatz.
+        CONF_DIVERTER_POWER: _entitaeten(roh.get(CONF_DIVERTER_POWER)),
+        CONF_DIVERTER_ENERGY: _entitaeten(roh.get(CONF_DIVERTER_ENERGY)),
         CONF_DIVERTER_PRICE: _zahl(roh.get(CONF_DIVERTER_PRICE), None),
     }
 
@@ -428,6 +451,9 @@ def kosten_normalisieren(
         CONF_CURRENCY: str(roh.get(CONF_CURRENCY) or DEFAULT_CURRENCY),
         CONF_PRIOR_IMPORT: _zahl(roh.get(CONF_PRIOR_IMPORT), None),
         CONF_PRIOR_PRICE: _zahl(roh.get(CONF_PRIOR_PRICE), None),
+        CONF_CURRENCY_PRICE_ENTITY: _entity(roh.get(CONF_CURRENCY_PRICE_ENTITY)),
+        CONF_FEED_IN_PRICE_ENTITY: _entity(roh.get(CONF_FEED_IN_PRICE_ENTITY)),
+        CONF_BASE_PRICE_ENTITY: _entity(roh.get(CONF_BASE_PRICE_ENTITY)),
     }
 
 
@@ -543,6 +569,21 @@ def quellen(daten: dict[str, Any]) -> set[str]:
     haus = daten.get(CONF_HOUSE, {})
     for feld in (CONF_HOUSE_POWER, CONF_HOUSE_ENERGY):
         if wert := haus.get(feld):
+            gefunden.add(wert)
+    # Die Überschussverbraucher sind Listen - es dürfen mehrere sein.
+    for feld in (CONF_DIVERTER_POWER, CONF_DIVERTER_ENERGY):
+        gefunden.update(haus.get(feld) or [])
+
+    # Preise dürfen aus Entitäten kommen. Ändert sich der Tarif, soll die
+    # Rechnung sofort folgen - sonst stünde bis zur nächsten Messung der alte
+    # Preis in den Momentanwerten.
+    kosten = daten.get(CONF_COSTS, {})
+    for feld in (
+        CONF_CURRENCY_PRICE_ENTITY,
+        CONF_FEED_IN_PRICE_ENTITY,
+        CONF_BASE_PRICE_ENTITY,
+    ):
+        if wert := kosten.get(feld):
             gefunden.add(wert)
 
     return gefunden
