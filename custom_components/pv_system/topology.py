@@ -64,6 +64,7 @@ from .const import (
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
+    CONF_DIVERTER_PRICE_ENTITY,
     CONF_DIVERTER_SOLAR_ENERGY,
     CONF_DIVERTER_SOLAR_POWER,
     CONF_ENABLED,
@@ -423,6 +424,7 @@ def haus_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
             roh.get(CONF_DIVERTER_FUEL), DIVERTER_FUELS, DEFAULT_DIVERTER_FUEL
         ),
         CONF_DIVERTER_PRICE: _zahl(roh.get(CONF_DIVERTER_PRICE), None),
+        CONF_DIVERTER_PRICE_ENTITY: _entity(roh.get(CONF_DIVERTER_PRICE_ENTITY)),
     }
 
 
@@ -595,6 +597,8 @@ def quellen(daten: dict[str, Any]) -> set[str]:
         CONF_DIVERTER_SOLAR_ENERGY,
     ):
         gefunden.update(haus.get(feld) or [])
+    if wert := haus.get(CONF_DIVERTER_PRICE_ENTITY):
+        gefunden.add(wert)
 
     # Preise dürfen aus Entitäten kommen. Ändert sich der Tarif, soll die
     # Rechnung sofort folgen - sonst stünde bis zur nächsten Messung der alte

@@ -183,7 +183,8 @@ AUSWAHL: dict[str, dict[str, T]] = {
         "positive_discharge": ("Positiv = entladen", "Positive = discharging"),
     },
     "diverter_fuel": {
-        "gas": ("Gas", "Gas"),
+        "gas": ("Erdgas", "Natural gas"),
+        "lpg": ("Flüssiggas", "LPG"),
         "oil": ("Heizöl", "Heating oil"),
         "pellets": ("Pellets oder Holz", "Pellets or wood"),
         "district": ("Fernwärme", "District heating"),
@@ -226,6 +227,10 @@ FELDER: dict[str, T] = {
     "reset_confirm": (
         "Ja, die gemessenen Kostenzahlen verwerfen",
         "Yes, discard the measured cost figures",
+    ),
+    "reset_prior": (
+        "Ja, auch die „davor“-Angaben aus der Konfiguration nehmen",
+        "Yes, also remove the “before” figures from the configuration",
     ),
     "system_voltage": ("Systemspannung", "System voltage"),
     "max_current": ("Maximaler Ladestrom", "Maximum charge current"),
@@ -283,8 +288,12 @@ FELDER: dict[str, T] = {
     ),
     "diverter_fuel": ("Ersetzt", "Replaces"),
     "diverter_price": (
-        "Wert je kWh des Ersetzten",
-        "Value per kWh of what is replaced",
+        "Wert je kWh des Ersetzten: feste Zahl",
+        "Value per kWh replaced: fixed number",
+    ),
+    "diverter_price_entity": (
+        "Wert je kWh des Ersetzten: Entität statt fester Zahl",
+        "Value per kWh replaced: entity instead of fixed number",
     ),
     "animate": ("Flusslinien animieren", "Animate flow lines"),
     "show_strings": ("Verschaltung zeichnen", "Draw string layout"),
@@ -926,35 +935,69 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
         "diverter_fuel": (
             "Was dieser Verbraucher ersetzt. Davon hängt ab, was eine "
-            "umgeleitete Kilowattstunde wert ist.\n\nGas, Öl, Pellets, "
-            "Fernwärme oder Wärmepumpe: Der Wert ist der Preis dieses "
-            "Brennstoffs - siehe das Feld darunter.\n\n„Nichts - es bleibt "
-            "Strom“: Ein Hausspeicher oder ein Auto verbrennt nichts, es "
+            "umgeleitete Kilowattstunde wert ist.\n\nErdgas, Flüssiggas, Öl, "
+            "Pellets, Fernwärme oder Wärmepumpe: Der Wert ist der Preis dieses "
+            "Brennstoffs je kWh - siehe die Felder darunter.\n\n„Nichts - es "
+            "bleibt Strom“: Ein Hausspeicher oder ein Auto verbrennt nichts, es "
             "verschiebt Strom nach später. Dann ist eine Kilowattstunde genau "
-            "den Arbeitspreis wert, und das Feld darunter wird ignoriert.",
+            "den Arbeitspreis wert, und die Felder darunter werden ignoriert.",
             "What this load replaces. It decides what one diverted kilowatt "
-            "hour is worth.\n\nGas, oil, pellets, district heating or heat "
-            "pump: the value is the price of that fuel - see the field "
-            "below.\n\n\u201cNothing - it stays electricity\u201d: a home "
-            "battery or a car burns nothing, it moves electricity to later. "
-            "Then a kilowatt hour is worth exactly the energy price, and the "
-            "field below is ignored.",
+            "hour is worth.\n\nNatural gas, LPG, oil, pellets, district "
+            "heating or heat pump: the value is that fuel's price per kWh - see "
+            "the fields below.\n\n\u201cNothing - it stays "
+            "electricity\u201d: a home battery or a car burns nothing, it "
+            "moves electricity to later. Then a kilowatt hour is worth exactly "
+            "the energy price, and the fields below are ignored.",
         ),
         "diverter_price": (
-            "Was eine Kilowattstunde des **Ersetzten** kostet, geteilt durch "
-            "den Wirkungsgrad.\n\nGas 0,11 €/kWh bei 92 % Kesselwirkungsgrad "
-            "→ rund 0,12. Heizöl 1,00 €/l ÷ 10 kWh/l ÷ 0,9 → rund 0,11. "
-            "Wärmepumpe: Arbeitspreis ÷ Jahresarbeitszahl, bei 0,34 € und JAZ "
-            "3,5 → rund 0,10 - eine Wärmepumpe macht aus einer Kilowattstunde "
-            "eben dreieinhalb.\n\nLeer: Es gilt der Arbeitspreis, und die "
-            "Anlage rechnet sich reicher, als sie ist.",
-            "What one kilowatt hour of the **replaced** energy costs, divided "
-            "by the efficiency.\n\nGas 0.11 €/kWh at 92 % boiler efficiency "
-            "→ about 0.12. Heating oil 1.00 €/l ÷ 10 kWh/l ÷ 0.9 → about 0.11. "
-            "Heat pump: energy price ÷ seasonal performance factor, at 0.34 € "
-            "and SPF 3.5 → about 0.10 - a heat pump turns one kilowatt hour "
-            "into three and a half.\n\nEmpty: the energy price applies, and "
-            "the system looks better off than it is.",
+            "Was **eine Kilowattstunde des Ersetzten** kostet, geteilt durch "
+            "den Wirkungsgrad. Dein Preis, nicht irgendeiner - die Zahlen hier "
+            "sind nur Rechenwege:\n\n"
+            "• **Erdgas** 0,11 €/kWh ÷ 0,92 Kessel → rund **0,12**. Die "
+            "Gasrechnung weist kWh aus; Kubikmeter mal Brennwert (rund 10) "
+            "ergibt kWh.\n"
+            "• **Flüssiggas** 0,80 €/l ÷ 6,6 kWh/l ÷ 0,92 → rund **0,13**\n"
+            "• **Heizöl** 1,00 €/l ÷ 10 kWh/l ÷ 0,9 → rund **0,11**\n"
+            "• **Pellets** 350 €/t ÷ 4800 kWh/t ÷ 0,9 → rund **0,08**\n"
+            "• **Fernwärme**: der Arbeitspreis deines Wärmevertrags\n"
+            "• **Wärmepumpe**: Arbeitspreis ÷ Jahresarbeitszahl, bei 0,34 € "
+            "und JAZ 3,5 → rund **0,10**. Sie macht aus einer Kilowattstunde "
+            "dreieinhalb - ein Heizstab nur eine.\n\n"
+            "Leer: Es gilt der Arbeitspreis, und die Anlage rechnet sich "
+            "reicher, als sie ist.",
+            "What **one kilowatt hour of the replaced energy** costs, divided "
+            "by the efficiency. Your price, not somebody's - the numbers here "
+            "are just the arithmetic:\n\n"
+            "• **Natural gas** 0.11 €/kWh ÷ 0.92 boiler → about **0.12**. Gas "
+            "bills state kWh; cubic metres times calorific value (about 10) "
+            "gives kWh.\n"
+            "• **LPG** 0.80 €/l ÷ 6.6 kWh/l ÷ 0.92 → about **0.13**\n"
+            "• **Heating oil** 1.00 €/l ÷ 10 kWh/l ÷ 0.9 → about **0.11**\n"
+            "• **Pellets** 350 €/t ÷ 4800 kWh/t ÷ 0.9 → about **0.08**\n"
+            "• **District heating**: your heat contract's energy price\n"
+            "• **Heat pump**: energy price ÷ seasonal performance factor, at "
+            "0.34 € and SPF 3.5 → about **0.10**. It turns one kilowatt hour "
+            "into three and a half - an immersion heater only into one.\n\n"
+            "Empty: the energy price applies, and the system looks better off "
+            "than it is.",
+        ),
+        "diverter_price_entity": (
+            "Eine Entität, die diesen Wert liefert - für alles, was am Markt "
+            "schwankt. Gas und Öl tun das wie Strom, und wer den Preis ohnehin "
+            "schon als Sensor im Haus hat, soll ihn nicht zweimal "
+            "pflegen.\n\nSie hat Vorrang vor der festen Zahl darüber; meldet "
+            "sie gerade nichts Brauchbares, gilt wieder die Zahl. **Achtung:** "
+            "Gemeint ist der Wert je kWh *nach* Wirkungsgrad. Ein Sensor, der "
+            "den reinen Gaspreis liefert, ist um den Kesselwirkungsgrad zu "
+            "niedrig - dafür genügt ein Vorlagensensor, der einmal teilt.",
+            "An entity providing this value - for everything that moves with "
+            "the market. Gas and oil do, just like electricity, and anyone who "
+            "already has the price as a sensor should not maintain it "
+            "twice.\n\nIt takes precedence over the fixed number above; if it "
+            "reports nothing usable, the number applies again. **Note:** this "
+            "is the value per kWh *after* efficiency. A sensor giving the raw "
+            "gas price is too low by the boiler efficiency - a template sensor "
+            "that divides once is enough.",
         ),
         "power_entity": (
             "Nur, wenn du den Hausverbrauch **misst** - etwa mit einem zweiten "
@@ -1237,7 +1280,7 @@ HAUSFELDER = [
     "calculate", "power_entity", "energy_entity",
     "diverter_name", "diverter_power_entity", "diverter_energy_entity",
     "diverter_solar_power_entity", "diverter_solar_energy_entity",
-    "diverter_fuel", "diverter_price",
+    "diverter_fuel", "diverter_price", "diverter_price_entity",
 ]
 ANZEIGEFELDER = ["animate", "show_strings", "show_phases", "sensor_interval"]
 KOSTENFELDER = [
@@ -1548,34 +1591,57 @@ def baum(sprache) -> dict:
                             "Entität stand. Tag, Monat und Jahr heilen sich "
                             "beim nächsten Wechsel von selbst; der "
                             "Gesamtzeitraum trägt den Fehler weiter, bis "
-                            "jemand ihn leert.\n\n**Was bleibt:** alles, was "
-                            "in der Konfiguration steht - Bezug davor, Preis "
-                            "davor, Ertrag davor, Investition und "
-                            "Inbetriebnahme jeder Anlage. **Was weg ist:** "
-                            "alles, was seit dem ersten Lauf gemessen wurde. "
-                            "Rückgängig machen kann man das nicht.\n\n"
-                            "Dasselbe tut der Dienst `pv_system.reset_costs`; "
-                            "in den Entwicklerwerkzeugen verlangt er "
-                            "allerdings ein Ziel.\n\n**Im Gesamtzeitraum "
-                            "steht gerade:**\n\n{stand}",
+                            "jemand ihn leert.\n\nDer Gesamtzeitraum hat "
+                            "**zwei Quellen**, und deshalb gibt es zwei "
+                            "Haken.\n\n---\n\n**1. Gemessen seit dem "
+                            "ersten Lauf**\n\n{stand}\n\nDas liegt im "
+                            "Speicher der Integration. Der erste Haken wirft "
+                            "es weg und verankert alle Zähler bei ihrem "
+                            "heutigen Stand neu - sofort, nicht erst beim "
+                            "Speichern.\n\n---\n\n**2. Aus der "
+                            "Konfiguration: die „davor“-Angaben**\n\n"
+                            "{vorher}\n\nDaher kommen Beträge, die neben "
+                            "null gemessenen Kilowattstunden stehen und "
+                            "trotzdem stimmen. Der zweite Haken nimmt diese "
+                            "Felder aus der Konfiguration - er wirkt erst mit "
+                            "„Speichern und schließen“.\n\nMeistens will man "
+                            "ihn **nicht**: Diese Zahlen sind deine echte "
+                            "Vorgeschichte, und ohne sie beginnt die "
+                            "Amortisation bei null. Sinnvoll ist er, wenn du "
+                            "dich vertippt hast oder von vorn anfangen "
+                            "willst.\n\nInvestition und Inbetriebnahme "
+                            "bleiben in jedem Fall stehen - das sind "
+                            "Tatsachen über die Anlage, keine Zählerstände. "
+                            "Rückgängig machen kann man beides nicht.",
                             "The way out when the amounts no longer add up - "
                             "typically after a meter swap, or when the wrong "
                             "entity briefly sat in the import meter field. "
                             "Day, month and year heal themselves at the next "
                             "rollover; the total period carries the error "
-                            "until somebody clears it.\n\n**What stays:** "
-                            "everything that is in the configuration - import "
-                            "before, price before, yield before, investment "
-                            "and commissioning of each plant. **What is "
-                            "gone:** everything measured since the first run. "
-                            "This cannot be undone.\n\nThe service "
-                            "`pv_system.reset_costs` does the same; in the "
-                            "developer tools it does require a target "
-                            "though.\n\n**The total period currently "
-                            "reads:**\n\n{stand}",
+                            "until somebody clears it.\n\nThe total period "
+                            "has **two sources**, which is why there are two "
+                            "checkboxes.\n\n---\n\n**1. Measured since the "
+                            "first run**\n\n{stand}\n\nThis lives in the "
+                            "integration's own store. The first box throws it "
+                            "away and re-anchors every counter at today's "
+                            "reading - immediately, not on "
+                            "save.\n\n---\n\n**2. From the configuration: "
+                            "the \u201cbefore\u201d figures**\n\n{vorher}"
+                            "\n\nThat is where amounts come from that stand "
+                            "next to zero measured kilowatt hours and are "
+                            "still correct. The second box removes those "
+                            "fields from the configuration - it only takes "
+                            "effect with \u201cSave and "
+                            "close\u201d.\n\nUsually you do **not** want "
+                            "it: these numbers are your real history, and "
+                            "without them the payback starts at zero. It "
+                            "helps if you mistyped or want to start "
+                            "over.\n\nInvestment and commissioning stay "
+                            "either way - those are facts about the system, "
+                            "not meter readings. Neither can be undone.",
                         )
                     ),
-                    "data": _felder(["reset_confirm"], s),
+                    "data": _felder(["reset_confirm", "reset_prior"], s),
                 },
                 "display": {
                     "title": s(
