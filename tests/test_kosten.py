@@ -42,8 +42,45 @@ def _eine_anlage(**abweichend):
     return [anlage]
 
 
-def _rechner():
-    return kosten.Kostenrechner(ha_stubs.HomeAssistant(), "test")
+class _MitUhr:
+    """Ein Kostenrechner, bei dem zwischen zwei Aufrufen Zeit vergeht.
+
+    Die echte Anlage rechnet frühestens alle 0,8 Sekunden neu; im Test liegen
+    zwei Aufrufe ohne Zutun in derselben Mikrosekunde. Die
+    Plausibilitätsprüfung hielte dann jeden Zählerschritt für einen
+    Zählertausch - zu Recht: In null Sekunden fließt nichts. Wer ``jetzt``
+    selbst angibt, bekommt seine Zeit.
+    """
+
+    # Eine halbe Stunde je Aufruf: Damit sind auch die vierzig Kilowattstunden
+    # aus den Zählerwechsel-Tests physikalisch möglich. Fest auf neun Uhr
+    # morgens gesetzt, damit keine Prüfung über Mitternacht stolpert.
+    SCHRITT = timedelta(minutes=30)
+
+    def __init__(self, hass=None, kennung="test", schritt=None):
+        self._rechner = kosten.Kostenrechner(hass or ha_stubs.HomeAssistant(), kennung)
+        self._uhr = _jetzt().replace(hour=9, minute=0, second=0, microsecond=0)
+        if schritt is not None:
+            self.SCHRITT = schritt
+
+    def rechnen(self, *args, **kwargs):
+        if kwargs.get("jetzt") is None:
+            self._uhr += self.SCHRITT
+            kwargs["jetzt"] = self._uhr
+        return self._rechner.rechnen(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._rechner, name)
+
+
+def _rechner(schritt=None):
+    """Ein Rechner mit Uhr.
+
+    ``schritt`` für Tests, deren Zählerstände in einem Sprung um hunderte
+    Kilowattstunden wachsen: Die sind nur dann physikalisch möglich, wenn
+    entsprechend viel Zeit vergangen ist - und genau das prüft der Rechner.
+    """
+    return _MitUhr(schritt=schritt)
 
 
 def _jetzt():
@@ -105,7 +142,10 @@ def test_neuer_tag_setzt_nur_den_tag_zurueck():
     r = _rechner()
     gestern = _jetzt() - timedelta(days=1)
     r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, PREISE, {}, jetzt=gestern)
-    r.rechnen({"import": 110.0, "export": 0.0, "own": 0.0}, PREISE, {}, jetzt=gestern)
+    r.rechnen(
+        {"import": 110.0, "export": 0.0, "own": 0.0},
+        PREISE, {}, jetzt=gestern + timedelta(hours=2),
+    )
 
     heute = r.rechnen({"import": 115.0, "export": 0.0, "own": 0.0}, PREISE, {})
     assert heute["periods"]["day"]["import_kwh"] == 0
@@ -174,7 +214,7 @@ def test_einspeisung_macht_die_kostenrate_negativ():
 
 def test_amortisation_braucht_eine_belastbare_dauer():
     """Aus drei Stunden Sonne keine Jahresprognose."""
-    r = _rechner()
+    r = _rechner(schritt=timedelta(hours=3))
     anlagen = _eine_anlage()
     r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0}, PREISE, {}, anlagen)
     ergebnis = r.rechnen(
@@ -225,16 +265,123 @@ def test_ohne_zaehler_kein_eigenverbrauch():
 def test_marken_ueberstehen_einen_neustart():
     """Die Periodenmarken liegen auf der Platte, nicht nur im Speicher."""
     hass = ha_stubs.HomeAssistant()
-    r = kosten.Kostenrechner(hass, "test")
+    r = _MitUhr(hass)
     r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, PREISE, {})
     asyncio.run(r.async_speichern())
 
     # Neuer Rechner, dieselbe Datei.
-    zweiter = kosten.Kostenrechner(hass, "test")
-    zweiter._store = r._store
+    zweiter = _MitUhr(hass)
+    zweiter._rechner._store = r._store
     asyncio.run(zweiter.async_laden())
+    zweiter._uhr = r._uhr
     ergebnis = zweiter.rechnen({"import": 106.0, "export": 0.0, "own": 0.0}, PREISE, {})
     assert ergebnis["periods"]["day"]["import_kwh"] == 6.0
+
+
+# ------------------------------------------------------------ Zählertausch
+
+
+def test_eine_andere_entitaet_wird_nicht_als_verbrauch_gerechnet():
+    """Der teuerste Fehler, den diese Datei machen kann.
+
+    Wer im Dialog eine andere Entität einträgt, bekommt einen Zählerstand, der
+    mit dem alten nichts zu tun hat. Ohne Prüfung stünde die Differenz als
+    Verbrauch da - aus 3810 kWh werden 48000, und der Nachmittag kostet
+    fünfzehntausend Euro.
+    """
+    r = _rechner(schritt=timedelta(hours=1))
+    r.rechnen({"import": 3800.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    ergebnis = r.rechnen({"import": 3810.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    assert ergebnis["periods"]["total"]["cost"] == round(10 * 0.34, 2)
+
+    # Jetzt der Tausch.
+    ergebnis = r.rechnen({"import": 48000.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    assert ergebnis["periods"]["total"]["cost"] == round(10 * 0.34, 2)
+    assert ergebnis["periods"]["day"]["import_kwh"] == 0.0
+
+    # Und ab da läuft es normal weiter.
+    ergebnis = r.rechnen({"import": 48005.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    assert ergebnis["periods"]["day"]["import_kwh"] == 5.0
+
+
+def test_ein_echter_sprung_nach_langer_pause_bleibt_erhalten():
+    """War Home Assistant drei Tage aus, sind sechzig Kilowattstunden echt."""
+    r = _rechner()
+    jetzt = _jetzt().replace(hour=9, minute=0, second=0, microsecond=0)
+    r.rechnen({"import": 3800.0, "export": 0.0, "own": 0.0}, PREISE, {}, jetzt=jetzt)
+    ergebnis = r.rechnen(
+        {"import": 3860.0, "export": 0.0, "own": 0.0},
+        PREISE, {}, jetzt=jetzt + timedelta(days=3),
+    )
+    assert ergebnis["periods"]["total"]["import_kwh"] == 60.0
+
+
+def test_zuruecksetzen_faengt_bei_den_heutigen_staenden_an():
+    r = _rechner(schritt=timedelta(hours=1))
+    r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    r.rechnen({"import": 150.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    r.zuruecksetzen()
+    ergebnis = r.rechnen({"import": 150.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    assert ergebnis["periods"]["total"]["cost"] == 0.0
+    ergebnis = r.rechnen({"import": 153.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    assert ergebnis["periods"]["total"]["cost"] == round(3 * 0.34, 2)
+
+
+# ------------------------------------------------------ Überschussverbraucher
+
+
+def test_umgeleitete_kwh_zaehlen_mit_ihrem_eigenen_wert():
+    """Der Heizstab spart kein Strom, sondern Gas - und zwar weniger."""
+    r = _rechner(schritt=timedelta(days=30))
+    anlagen = _eine_anlage()
+    start = {"import": 0.0, "export": 0.0, "own": 0.0, "diverted": 0.0,
+             "anlage:a1": 0.0}
+    jetzt = {"import": 0.0, "export": 0.0, "own": 800.0, "diverted": 250.0,
+             "anlage:a1": 800.0}
+
+    r.rechnen(start, PREISE, {}, anlagen)
+    ohne = r.rechnen(jetzt, PREISE, {}, anlagen)
+    assert ohne["periods"]["total"]["savings"] == round(800 * 0.34, 2)
+
+    # Dieselben Zahlen, aber mit Wertansatz: 550 kWh zum Strompreis,
+    # 250 kWh zum Preis der ersetzten Wärme.
+    r2 = _rechner(schritt=timedelta(days=30))
+    preise = dict(PREISE, diverted=0.12)
+    r2.rechnen(start, preise, {}, anlagen)
+    mit = r2.rechnen(jetzt, preise, {}, anlagen)
+    assert mit["periods"]["total"]["savings"] == round(550 * 0.34 + 250 * 0.12, 2)
+    assert mit["periods"]["total"]["diverted_kwh"] == 250.0
+    # Und die Anlage rechnet sich entsprechend langsamer ab.
+    assert mit["plants"]["a1"]["savings"] < ohne["plants"]["a1"]["savings"]
+
+
+def test_mehr_umgeleitet_als_selbst_genutzt_wird_gedeckelt():
+    """Läuft der Heizstab nachts am Netz, ist das gewöhnlicher Bezug."""
+    r = _rechner(schritt=timedelta(days=30))
+    anlagen = _eine_anlage()
+    preise = dict(PREISE, diverted=0.12)
+    r.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 0.0, "diverted": 0.0}, preise, {}, anlagen
+    )
+    ergebnis = r.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 100.0, "diverted": 400.0},
+        preise, {}, anlagen,
+    )
+    assert ergebnis["periods"]["total"]["diverted_kwh"] == 100.0
+    assert ergebnis["periods"]["total"]["savings"] == round(100 * 0.12, 2)
+
+
+def test_ohne_wertansatz_bleibt_alles_wie_vorher():
+    r = _rechner(schritt=timedelta(days=30))
+    anlagen = _eine_anlage()
+    r.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 0.0, "diverted": 0.0}, PREISE, {}, anlagen
+    )
+    ergebnis = r.rechnen(
+        {"import": 0.0, "export": 0.0, "own": 800.0, "diverted": 250.0},
+        PREISE, {}, anlagen,
+    )
+    assert ergebnis["periods"]["total"]["savings"] == round(800 * 0.34, 2)
 
 
 # ----------------------------------------------------------------- Rückwirkend
@@ -325,7 +472,7 @@ def _anlagen():
 
 def test_einspeisung_wird_nach_ertragsanteil_aufgeteilt():
     """Welche Anlage eingespeist hat, misst niemand - geteilt wird nach Anteil."""
-    r = _rechner()
+    r = _rechner(schritt=timedelta(days=30))
     anlagen = _anlagen()
     start = {"import": 0.0, "export": 0.0, "own": 0.0, "anlage:a1": 0.0, "anlage:a2": 0.0}
     r.rechnen(start, PREISE, {}, anlagen)
@@ -346,7 +493,7 @@ def test_einspeisung_wird_nach_ertragsanteil_aufgeteilt():
 
 
 def test_jede_anlage_darf_ihre_eigene_verguetung_haben():
-    r = _rechner()
+    r = _rechner(schritt=timedelta(days=30))
     anlagen = _anlagen()
     start = {"import": 0.0, "export": 0.0, "own": 0.0, "anlage:a1": 0.0, "anlage:a2": 0.0}
     r.rechnen(start, PREISE, {}, anlagen)
@@ -528,7 +675,7 @@ def test_nach_dem_tageswechsel_stimmt_der_periodenanfang():
 
 def test_preisaenderung_schreibt_die_vergangenheit_nicht_um():
     """Der Geldspeicher bewertet jede Differenz mit dem Preis von damals."""
-    r = _rechner()
+    r = _rechner(schritt=timedelta(hours=2))
     billig = dict(PREISE, price=0.20)
     r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0}, billig, {})
     # 100 kWh zu 20 Cent

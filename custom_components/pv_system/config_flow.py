@@ -66,6 +66,10 @@ from .const import (
     CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
     CONF_DISPLAY,
+    CONF_DIVERTER_ENERGY,
+    CONF_DIVERTER_NAME,
+    CONF_DIVERTER_POWER,
+    CONF_DIVERTER_PRICE,
     CONF_ENABLED,
     CONF_FEED_IN_PRICE,
     CONF_GRID,
@@ -339,6 +343,10 @@ def _felder_haus() -> dict[Any, Any]:
         vol.Optional(CONF_HOUSE_CALCULATE): bool,
         vol.Optional(CONF_HOUSE_POWER): _sensor("power"),
         vol.Optional(CONF_HOUSE_ENERGY): _sensor("energy"),
+        vol.Optional(CONF_DIVERTER_NAME): _text(),
+        vol.Optional(CONF_DIVERTER_POWER): _sensor("power"),
+        vol.Optional(CONF_DIVERTER_ENERGY): _sensor("energy"),
+        vol.Optional(CONF_DIVERTER_PRICE): _zahl(0, 10, "any"),
     }
 
 

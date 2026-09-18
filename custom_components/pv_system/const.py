@@ -116,6 +116,15 @@ CONF_PHASE_CURRENT: Final = "{phase}_current_entity"
 CONF_HOUSE_POWER: Final = "power_entity"
 CONF_HOUSE_ENERGY: Final = "energy_entity"
 CONF_HOUSE_CALCULATE: Final = "calculate"
+# Ein Verbraucher, der nur laeuft, damit der Ueberschuss nicht ins Netz geht -
+# der Heizstab im Brauchwasserspeicher ist der Regelfall. Seine Kilowattstunden
+# sind Hausverbrauch, aber sie sparen keinen Strom, sondern Gas: Sie gehoeren
+# mit dem Preis des ersetzten Brennstoffs bewertet, nicht mit dem Strompreis.
+CONF_DIVERTER_NAME: Final = "diverter_name"
+CONF_DIVERTER_POWER: Final = "diverter_power_entity"
+CONF_DIVERTER_ENERGY: Final = "diverter_energy_entity"
+CONF_DIVERTER_PRICE: Final = "diverter_price"
+DEFAULT_DIVERTER_NAME: Final = "Überschuss"
 
 # ----------------------------------------------------------------- Darstellung
 CONF_ANIMATE: Final = "animate"
@@ -208,6 +217,7 @@ SERVICE_SET_INVERTER: Final = "set_inverter"
 SERVICE_ADD_PLANT: Final = "add_plant"
 SERVICE_REMOVE_PLANT: Final = "remove_plant"
 SERVICE_TIDY_ENTITIES: Final = "tidy_entities"
+SERVICE_RESET_COSTS: Final = "reset_costs"
 
 ATTR_PLANT: Final = "plant"
 ATTR_NAME: Final = "name"

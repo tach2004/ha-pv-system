@@ -247,6 +247,10 @@ FELDER: dict[str, T] = {
     "l2_current_entity": ("Strom L2", "Current L2"),
     "l3_current_entity": ("Strom L3", "Current L3"),
     "calculate": ("Hausverbrauch rechnen", "Calculate house consumption"),
+    "diverter_name": ("Überschussverbraucher", "Surplus load"),
+    "diverter_power_entity": ("Leistung Überschussverbraucher", "Surplus load power"),
+    "diverter_energy_entity": ("Zähler Überschussverbraucher", "Surplus load meter"),
+    "diverter_price": ("Wert je kWh", "Value per kWh"),
     "animate": ("Flusslinien animieren", "Animate flow lines"),
     "show_strings": ("Verschaltung zeichnen", "Draw string layout"),
     "show_phases": ("Phasen einzeln zeichnen", "Draw phases individually"),
@@ -763,6 +767,39 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
     },
     "house": {
+        "diverter_name": (
+            "Wie der Verbraucher in der Karte heißen soll, z. B. „Heizstab“.",
+            "What the load is called on the card, e.g. “immersion heater”.",
+        ),
+        "diverter_power_entity": (
+            "Was der Überschussverbraucher gerade zieht - der Heizstab im "
+            "Brauchwasserspeicher, die Wallbox im Überschussladen. Nur für die "
+            "Anzeige; für die Rechnung zählt der Zähler darunter.",
+            "What the surplus load currently draws - the immersion heater in "
+            "the hot water tank, the wallbox in surplus charging. Display "
+            "only; the meter below is what counts for the calculation.",
+        ),
+        "diverter_energy_entity": (
+            "Der Zählerstand dieses Verbrauchers in kWh. Diese Kilowattstunden "
+            "sind Hausverbrauch wie jeder andere - sie sparen aber keinen "
+            "Strom, sondern den Brennstoff, mit dem sonst geheizt würde. "
+            "Deshalb werden sie getrennt bewertet.",
+            "This load's meter reading in kWh. These kilowatt hours are house "
+            "consumption like any other - but they do not save electricity, "
+            "they save the fuel that would otherwise do the heating. That is "
+            "why they are valued separately.",
+        ),
+        "diverter_price": (
+            "Was eine umgeleitete Kilowattstunde wirklich wert ist: der Preis "
+            "des ersetzten Brennstoffs, geteilt durch den Wirkungsgrad des "
+            "Kessels. Bei 0,11 €/kWh Gas und 92 % sind das rund 0,12. Leer: Es "
+            "gilt der Arbeitspreis - und die Anlage rechnet sich reicher, als "
+            "sie ist.",
+            "What one diverted kilowatt hour is really worth: the price of the "
+            "replaced fuel divided by the boiler's efficiency. At 0.11 €/kWh "
+            "gas and 92 % that is about 0.12. Empty: the energy price applies "
+            "- and the system looks better off than it is.",
+        ),
         "power_entity": (
             "Ein gemessener Hausverbrauch, falls vorhanden. Er hat Vorrang vor "
             "der Rechnung. Leer lassen ist der Normalfall.",
@@ -951,7 +988,11 @@ NETZFELDER = [
     "l2_power_entity", "l2_voltage_entity", "l2_current_entity",
     "l3_power_entity", "l3_voltage_entity", "l3_current_entity",
 ]
-HAUSFELDER = ["calculate", "power_entity", "energy_entity"]
+HAUSFELDER = [
+    "calculate", "power_entity", "energy_entity",
+    "diverter_name", "diverter_power_entity", "diverter_energy_entity",
+    "diverter_price",
+]
 ANZEIGEFELDER = ["animate", "show_strings", "show_phases", "sensor_interval"]
 KOSTENFELDER = [
     "price_per_kwh", "feed_in_price", "base_price", "currency", "prior_import",
@@ -1223,6 +1264,13 @@ def baum(sprache) -> dict:
             for name, werte in AUSWAHL.items()
         },
         "entity": {
+            "button": {
+                "tidy_entities": {
+                    "name": s(
+                        ("Doppelte Sensoren abschalten", "Turn off duplicate sensors")
+                    )
+                }
+            },
             "sensor": {
                 key: (
                     {"name": s(text), "state": {z: s(t) for z, t in STATUS_ZUSTAENDE.items()}}
@@ -1266,6 +1314,28 @@ def baum(sprache) -> dict:
                         "view and can be re-enabled individually; nothing is "
                         "deleted. Newly set up systems do not need this: there "
                         "these sensors are off from the start.",
+                    )
+                ),
+                "fields": {},
+            },
+            "reset_costs": {
+                "name": s(("Kostenzähler zurücksetzen", "Reset cost counters")),
+                "description": s(
+                    (
+                        "Verwirft alles, was seit dem ersten Lauf gemessen "
+                        "wurde, und fängt bei den heutigen Zählerständen neu "
+                        "an. Gedacht für den Fall, dass unsinnige Beträge im "
+                        "Gesamtzeitraum stehen - etwa nach einem Zählertausch. "
+                        "Was in der Konfiguration steht, bleibt: Ertrag davor, "
+                        "Bezug davor, Inbetriebnahme. Tag, Monat und Jahr "
+                        "heilen sich ohnehin von selbst.",
+                        "Discards everything measured since the first run and "
+                        "starts again from today's meter readings. Meant for "
+                        "the case where nonsensical amounts end up in the "
+                        "total - after a meter swap, for instance. What is in "
+                        "the configuration stays: yield before, import before, "
+                        "commissioning. Day, month and year heal by themselves "
+                        "anyway.",
                     )
                 ),
                 "fields": {},

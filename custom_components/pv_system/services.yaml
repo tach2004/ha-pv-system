@@ -161,3 +161,9 @@ tidy_entities:
     entity:
       integration: pv_system
       domain: sensor
+
+reset_costs:
+  target:
+    entity:
+      integration: pv_system
+      domain: sensor

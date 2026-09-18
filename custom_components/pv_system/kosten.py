@@ -48,6 +48,24 @@ die niemand pflegt.
 Tag, Monat und Jahr rechnen weiterhin mit dem aktuellen Preis. Über so kurze
 Strecken ändert er sich praktisch nie, und wenn doch, ist die Abweichung
 kleiner als der Aufwand, sie zu vermeiden.
+
+**Nicht jede selbst genutzte Kilowattstunde ist gleich viel wert.** Wer den
+Überschuss in einen Heizstab schickt, statt ihn ins Netz zu geben, spart damit
+keinen Strom - er spart Gas. Die Ersparnis ist also der Gaspreis geteilt durch
+den Kesselwirkungsgrad, nicht der Arbeitspreis. Bei 250 kWh sind das rund 30
+statt 85 Euro; wer den Unterschied nicht macht, rechnet sich die Anlage um die
+Hälfte reicher. Deshalb gibt es den *Überschussverbraucher*: einen Zähler und
+einen eigenen Wertansatz. Für den Hausverbrauch und die Autarkie zählen diese
+Kilowattstunden ganz normal mit - sie sind ja wirklich im Haus geblieben.
+
+**Ein Zählerstand darf sich ändern, ein Zähler nicht klammheimlich.** Wer im
+Dialog eine andere Entität einträgt, bekommt einen Stand, der mit dem alten
+nichts zu tun hat - und ohne Prüfung stünde die Differenz als Verbrauch in der
+Rechnung. Aus 3810 kWh werden 48000 kWh, und schon kostet der Nachmittag
+15000 Euro. Deshalb wird jeder Stand mit dem vorigen verglichen: Was in der
+verstrichenen Zeit physikalisch nicht durch einen Hausanschluss gepasst hätte,
+ist kein Verbrauch, sondern ein anderer Zähler. Dann wird neu verankert statt
+berechnet.
 """
 
 from __future__ import annotations
@@ -107,6 +125,15 @@ def _periodenbeginn(zeitpunkt: datetime, periode: str) -> datetime:
     return lokal
 
 
+# Mehr als das passt durch keinen Hausanschluss. Ein Sprung darüber ist kein
+# Verbrauch, sondern ein Zählerwechsel.
+MAX_LEISTUNG_KW = 100.0
+
+# Etwas Spielraum obendrauf: für Rundung, für den ersten Schritt nach dem
+# Start und dafür, dass zwei Zählerstände nie exakt gleichzeitig eintreffen.
+SPRUNG_TOLERANZ_KWH = 1.0
+
+
 class Kostenrechner:
     """Hält die Periodenmarken und rechnet daraus Geldbeträge."""
 
@@ -116,27 +143,100 @@ class Kostenrechner:
             hass, SPEICHER_VERSION, f"{DOMAIN}.{eintrag_id}.kosten"
         )
         self._marken: dict[str, dict[str, Any]] = {}
+        # Der zuletzt gesehene Stand je Zähler, mit Zeitpunkt. Bewusst neben
+        # den Periodenmarken und nicht in ihnen: Die Marke für den
+        # Gesamtzeitraum darf erst entstehen, wenn _mengen sie anlegt - sonst
+        # fehlt ihr der Periodenanfang.
+        self._staende: dict[str, dict[str, Any]] = {}
 
     async def async_laden(self) -> None:
         """Marken aus dem Speicher holen. Fehlt die Datei, wird neu begonnen."""
         gespeichert = await self._store.async_load()
-        if isinstance(gespeichert, dict):
-            marken = gespeichert.get("marken")
-            if isinstance(marken, dict):
-                self._marken = {
-                    periode: dict(werte)
-                    for periode, werte in marken.items()
-                    if periode in PERIODS and isinstance(werte, dict)
+        if not isinstance(gespeichert, dict):
+            return
+        marken = gespeichert.get("marken")
+        if isinstance(marken, dict):
+            self._marken = {
+                periode: dict(werte)
+                for periode, werte in marken.items()
+                if periode in PERIODS and isinstance(werte, dict)
+            }
+        staende = gespeichert.get("staende")
+        if isinstance(staende, dict):
+            self._staende = {
+                name: dict(wert)
+                for name, wert in staende.items()
+                if isinstance(wert, dict)
+            }
+        else:
+            # Aus einer Fassung ohne Prüfung: Die letzten Stände standen dort
+            # im Geldspeicher. Ohne Zeitpunkt - der erste Vergleich läuft dann
+            # großzügig, und ab dem zweiten stimmt es wieder.
+            letzte = (self._marken.get(PERIOD_TOTAL) or {}).get("letzte")
+            if isinstance(letzte, dict):
+                self._staende = {
+                    name: {"wert": wert} for name, wert in letzte.items()
                 }
 
     async def async_speichern(self) -> None:
         """Sofort schreiben - beim Abbau des Eintrags."""
-        await self._store.async_save({"marken": self._marken})
+        await self._store.async_save(self._zustand())
+
+    def zuruecksetzen(self) -> None:
+        """Alles vergessen und beim nächsten Lauf neu verankern.
+
+        Der Ausweg, wenn die Zahlen einmal nicht mehr stimmen - etwa weil vor
+        der Prüfung ein Zählertausch durchgerutscht ist. Tag, Monat und Jahr
+        heilen sich beim nächsten Wechsel von selbst, der Gesamtzeitraum nicht:
+        Sein Geldspeicher trägt den Fehler weiter, bis jemand ihn leert.
+
+        Was in der Konfiguration steht - Ertrag davor, Bezug davor, die
+        Inbetriebnahme jeder Anlage -, bleibt davon unberührt. Verloren geht
+        nur das, was seit dem ersten Lauf gemessen wurde.
+        """
+        self._marken = {}
+        self._staende = {}
+        self._merken()
+
+    def _zustand(self) -> dict[str, Any]:
+        return {"marken": self._marken, "staende": self._staende}
 
     def _merken(self) -> None:
-        self._store.async_delay_save(
-            lambda: {"marken": self._marken}, SPEICHER_VERZUG
-        )
+        self._store.async_delay_save(self._zustand, SPEICHER_VERZUG)
+
+    # ------------------------------------------------------------- Prüfung
+
+    def _pruefen(
+        self, zaehler: dict[str, float | None], jetzt: datetime
+    ) -> set[str]:
+        """Welche Zähler nicht mehr derselbe Zähler sind.
+
+        Zurück kommen die Namen, deren Stand mit dem vorigen nichts zu tun hat:
+        zurückgefallen (Gerätetausch, Reset) oder weiter gesprungen, als in der
+        verstrichenen Zeit überhaupt fließen konnte (andere Entität eingetragen).
+        Beide werden gleich behandelt - neu verankern, nichts berechnen.
+
+        Die Grenze wächst mit der Zeit: War Home Assistant drei Tage aus, ist
+        auch ein Sprung von sechzig Kilowattstunden echter Verbrauch.
+        """
+        frisch: set[str] = set()
+        for name, roh in zaehler.items():
+            stand = _zahl(roh)
+            if stand is None:
+                continue
+            vorher = self._staende.get(name) or {}
+            self._staende[name] = {
+                "wert": stand,
+                "zeit": dt_util.as_local(jetzt).isoformat(),
+            }
+            alt = _zahl(vorher.get("wert"))
+            if alt is None:
+                continue
+            stunden = _tage_seit(vorher.get("zeit"), jetzt) * 24.0
+            grenze = SPRUNG_TOLERANZ_KWH + MAX_LEISTUNG_KW * stunden
+            if stand < alt or stand - alt > grenze:
+                frisch.add(name)
+        return frisch
 
     # ----------------------------------------------------------------- Rechnen
 
@@ -159,12 +259,17 @@ class Kostenrechner:
         arbeitspreis = _zahl(preise.get("price"))
         verguetung = _zahl(preise.get("feed_in"))
         grundpreis = _zahl(preise.get("base")) or 0.0
+        umleitpreis = _zahl(preise.get("diverted"))
 
         vorher = self._vorher(preise, anlagen)
+        # Zuerst die Prüfung: Ein Zähler, der nicht mehr derselbe ist, darf
+        # weder in eine Menge noch in einen Betrag eingehen.
+        frisch = self._pruefen(zaehler, jetzt)
+
         zeitraeume: dict[str, Any] = {}
-        veraendert = False
+        veraendert = bool(frisch)
         for periode in PERIODS:
-            mengen, neu = self._mengen(periode, zaehler, jetzt)
+            mengen, neu = self._mengen(periode, zaehler, jetzt, frisch)
             veraendert = veraendert or neu
             # Was vor dem ersten Lauf schon aufgelaufen ist, gehört allein in
             # den Gesamtzeitraum - heute und diesen Monat ist es nicht passiert.
@@ -172,13 +277,13 @@ class Kostenrechner:
                 mengen = _dazu(mengen, vorher)
                 mengen["start"] = _fruehester_beginn(anlagen, mengen.get("start"))
             zeitraeume[periode] = self._geld(
-                mengen, arbeitspreis, verguetung, grundpreis, jetzt
+                mengen, arbeitspreis, verguetung, grundpreis, jetzt, umleitpreis
             )
         # Erst jetzt der Geldspeicher: Er hängt sich an dieselbe Marke wie der
         # Gesamtzeitraum, und die muss vorher angelegt sein - sonst stünde dort
         # kein Periodenanfang, und die Amortisation rechnete ab 1970.
         gespeichert, neu_geld = self._geldspeicher(
-            zaehler, arbeitspreis, verguetung, jetzt
+            zaehler, arbeitspreis, verguetung, jetzt, frisch, umleitpreis
         )
         veraendert = veraendert or neu_geld
 
@@ -198,6 +303,7 @@ class Kostenrechner:
             verguetung,
             jetzt,
             _zahl(preise.get("prior_price")),
+            umleitpreis,
         )
         # Die Rohmengen waren nur für die Aufteilung auf die Anlagen nötig.
         for zeitraum in zeitraeume.values():
@@ -249,6 +355,8 @@ class Kostenrechner:
         preis: float | None,
         verguetung: float | None,
         jetzt: datetime,
+        frisch: set[str] | None = None,
+        umleitpreis: float | None = None,
     ) -> tuple[dict[str, float], bool]:
         """Den seit dem ersten Lauf angefallenen Betrag fortschreiben.
 
@@ -264,25 +372,50 @@ class Kostenrechner:
         geld: dict[str, float] = marke.setdefault(
             "geld", {"cost": 0.0, "revenue": 0.0, "savings": 0.0}
         )
+        # Der Korrekturposten für den Überschussverbraucher. Nachträglich
+        # angelegt, damit ältere Speicherstände weiterlaufen.
+        geld.setdefault("divert", 0.0)
         letzte: dict[str, Any] = marke.setdefault("letzte", {})
 
+        # Der Korrektursatz: Was eine umgeleitete Kilowattstunde *mehr oder
+        # weniger* wert ist als eine gewöhnlich selbst genutzte. Damit genügt
+        # ein einziger zusätzlicher Posten statt einer zweiten Rechnung.
+        korrektur = _abstand(umleitpreis, preis) if preis is not None else None
+
         veraendert = False
-        for name, satz in (("import", preis), ("export", verguetung), ("own", preis)):
+        mengen: dict[str, float] = {}
+        for name in ("import", "export", "own", "diverted"):
             stand = _zahl(zaehler.get(name))
             if stand is None:
                 continue
             vorher = _zahl(letzte.get(name))
             letzte[name] = stand
-            if vorher is None:
+            # Ein anderer Zähler bringt keine Rechnung mit, nur einen neuen
+            # Ausgangspunkt.
+            if vorher is None or name in (frisch or ()):
                 veraendert = True
                 continue
             # Ein zurückgefallener Zähler bringt keine negative Rechnung.
             menge = max(0.0, stand - vorher)
             if menge:
                 veraendert = True
-            if satz is None or not menge:
+                mengen[name] = menge
+
+        # Dieselbe Deckelung wie im Zeitraum: Umgeleitet werden kann nur, was
+        # auch selbst genutzt wurde. Läuft der Heizstab nachts am Netz, ist das
+        # gewöhnlicher Bezug - und keine Ersparnis, die sich umbewerten ließe.
+        if "diverted" in mengen:
+            mengen["diverted"] = min(mengen["diverted"], mengen.get("own", 0.0))
+
+        for name, satz, feld in (
+            ("import", preis, "cost"),
+            ("export", verguetung, "revenue"),
+            ("own", preis, "savings"),
+            ("diverted", korrektur, "divert"),
+        ):
+            menge = mengen.get(name)
+            if not menge or satz is None:
                 continue
-            feld = {"import": "cost", "export": "revenue", "own": "savings"}[name]
             geld[feld] = round(geld[feld] + menge * satz, 4)
         return geld, veraendert
 
@@ -325,7 +458,10 @@ class Kostenrechner:
         ersparnis = None
         if frueher is not None or gespeichert["savings"]:
             ersparnis = round(
-                gespeichert["savings"] + vorher.get("own", 0.0) * (frueher or 0.0), 2
+                gespeichert["savings"]
+                + gespeichert.get("divert", 0.0)
+                + vorher.get("own", 0.0) * (frueher or 0.0),
+                2,
             )
 
         ertrag = None
@@ -347,7 +483,11 @@ class Kostenrechner:
         }
 
     def _mengen(
-        self, periode: str, zaehler: dict[str, float | None], jetzt: datetime
+        self,
+        periode: str,
+        zaehler: dict[str, float | None],
+        jetzt: datetime,
+        frisch: set[str] | None = None,
     ) -> tuple[dict[str, Any], bool]:
         """Verbrauchte, eingespeiste und erzeugte kWh dieses Zeitraums."""
         beginn = _periodenbeginn(jetzt, periode)
@@ -378,9 +518,10 @@ class Kostenrechner:
                 mengen[name] = None
                 continue
             verankert = _zahl(werte.get(name))
-            # Erster Wert überhaupt, oder der Zähler ist zurückgefallen
-            # (Gerätetausch, Reset): neu verankern statt negativ zu rechnen.
-            if verankert is None or stand < verankert:
+            # Erster Wert überhaupt, oder es ist nicht mehr derselbe Zähler
+            # (Reset, Gerätetausch, andere Entität): neu verankern statt eine
+            # Differenz auszuweisen, die nie geflossen ist.
+            if verankert is None or stand < verankert or name in (frisch or ()):
                 werte[name] = stand
                 verankert = stand
                 veraendert = True
@@ -394,6 +535,7 @@ class Kostenrechner:
         verguetung: float | None,
         grundpreis: float,
         jetzt: datetime,
+        umleitpreis: float | None = None,
     ) -> dict[str, Any]:
         """Aus kWh werden Euro.
 
@@ -421,8 +563,12 @@ class Kostenrechner:
             if verguetung is not None and einspeisung is not None
             else None
         )
+        # Der umgeleitete Teil des Eigenverbrauchs zählt mit seinem eigenen
+        # Wert. Begrenzt auf den Eigenverbrauch: Läuft der Heizstab nachts am
+        # Netz, ist das gewöhnlicher Bezug und keine Ersparnis der Anlage.
+        umgeleitet = min(_zahl(mengen.get("diverted")) or 0.0, eigen or 0.0)
         ersparnis = (
-            round(eigen * preis, 2)
+            round(eigen * preis + umgeleitet * _abstand(umleitpreis, preis), 2)
             if preis is not None and eigen is not None
             else None
         )
@@ -435,6 +581,7 @@ class Kostenrechner:
             "import_kwh": bezug,
             "export_kwh": einspeisung,
             "own_kwh": eigen,
+            "diverted_kwh": round(umgeleitet, 3) if eigen is not None else None,
             "cost": kosten,
             # Der Grundpreis steckt in "cost" mit drin. Getrennt ausgewiesen,
             # weil sonst niemand nachvollziehen kann, warum an einem Tag ohne
@@ -462,6 +609,7 @@ class Kostenrechner:
         verguetung: float | None,
         jetzt: datetime,
         preis_vorher: float | None = None,
+        umleitpreis: float | None = None,
     ) -> dict[str, Any]:
         """Ertrag und Amortisation je Anlage, seit ihrer Inbetriebnahme.
 
@@ -488,6 +636,7 @@ class Kostenrechner:
             (_zahl(gesamt.get("export_kwh")) or 0.0)
             - sum(_zahl(a.get("prior_export")) or 0.0 for a in anlagen),
         )
+        umleitung = _zahl(gesamt.get("diverted_kwh")) or 0.0
 
         ergebnis: dict[str, Any] = {}
         for anlage in anlagen:
@@ -509,8 +658,19 @@ class Kostenrechner:
             frueher = preis_vorher if preis_vorher is not None else preis
             eigen_vorher = max(0.0, vorher_erzeugt - vorher_eingespeist)
             eigen_jetzt = max(0.0, eigen - eigen_vorher)
+            # Der Überschussverbraucher hängt am Hausanschluss, nicht an einer
+            # Anlage. Aufgeteilt wird er wie die Einspeisung: nach dem Anteil
+            # an der Erzeugung. Auch das ist eine Näherung - aber ohne sie
+            # rechnete sich jede Anlage die Heizstab-Kilowattstunden zum
+            # Strompreis gut, und das sind sie nicht wert.
+            umgeleitet = min(eigen_jetzt, umleitung * anteil)
             ersparnis = (
-                round(eigen_jetzt * preis + eigen_vorher * (frueher or 0.0), 2)
+                round(
+                    eigen_jetzt * preis
+                    + umgeleitet * _abstand(umleitpreis, preis)
+                    + eigen_vorher * (frueher or 0.0),
+                    2,
+                )
                 if preis is not None
                 else None
             )
@@ -668,6 +828,17 @@ def _als_datum(wert: Any) -> str | None:
         text = wert.strip()[:10]
         return text if dt_util.parse_datetime(f"{text}T00:00:00") else None
     return None
+
+
+def _abstand(umleitpreis: float | None, preis: float | None) -> float:
+    """Wie viel eine umgeleitete Kilowattstunde vom Arbeitspreis abweicht.
+
+    Ohne eigenen Wertansatz ist der Abstand null - dann gilt der Arbeitspreis
+    wie bisher, und niemand merkt, dass es diese Rechnung überhaupt gibt.
+    """
+    if umleitpreis is None or preis is None:
+        return 0.0
+    return umleitpreis - preis
 
 
 def _summe(*werte: float | None) -> float | None:

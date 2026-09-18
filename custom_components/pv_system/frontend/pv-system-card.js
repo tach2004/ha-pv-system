@@ -60,12 +60,15 @@ const BATTERIE_B = 130;   // Breite des Batteriekastens
 // Phasen. Beide sind Klemmkästen - die Phasen enden an ihrer Kante, statt sie
 // zu kreuzen. Das Netz steht darunter und gehört nicht mehr ins Haus.
 const ZAEHLER_B = 108;    // Breite des Zählerkastens
-const HAUS_B = 116;       // Breite des Hauskastens
+const HAUS_B = 140;       // Breite des Hauskastens
 const BAND_OBEN = 40;     // Titel und Modell über der ersten Phasenzeile
 const BAND_UNTEN = 16;    // Luft unter der letzten Phasenzeile
 const BAND_MIN = 74;      // damit im Hauskasten vier Zeilen Platz haben
 const NETZ_ABSTAND = 34;  // Länge der Senkrechten vom Zähler zum Netz
-const NETZ_H = 48;        // Höhe der Netzzeile ganz unten
+// Etwas höher als der Text braucht: Beim Überfahren wird der Rahmen
+// sichtbar, und seine Unterkante soll nicht durch die Unterlängen von
+// "Bezug aus dem Netz" laufen.
+const NETZ_H = 56;        // Höhe der Netzzeile ganz unten
 // Abstand zwischen einem Kasten und dem nächsten Abgriff auf der Phase. Ohne
 // ihn stößt der erste Wechselrichter direkt an den Zähler, und der Abschnitt
 // dazwischen ist zu kurz, um seinen Fluss noch zu zeigen.
@@ -394,7 +397,13 @@ class PvSystemCard extends HTMLElement {
       .buehne { width: 100%; overflow-x: auto; }
       svg { display: block; width: 100%; height: auto; }
 
-      .block { cursor: pointer; }
+      .block {
+        cursor: pointer;
+        /* Ohne das wartet iOS nach jeder Berührung darauf, ob noch ein
+           zweiter Tipper kommt - und die Karte fühlt sich träge an. */
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
       .block .rahmen {
         fill: var(--card-background-color, #fff);
         stroke: var(--divider-color, #cfd8dc);
@@ -405,10 +414,19 @@ class PvSystemCard extends HTMLElement {
          anklickbar zu machen, und zeigt sich erst beim Überfahren. */
       .block .rahmen.offen { fill: transparent; stroke: transparent; }
 
-      .block:hover .rahmen, .block.aktiv .rahmen {
+      /* Der Rahmen beim Überfahren nur dort, wo es ein Überfahren gibt. Auf
+         einem Telefon bleibt :hover nach dem Tippen am Element kleben - dann
+         sähen zwei Kästen gleichzeitig ausgewählt aus, und man tippt gegen
+         eine Auswahl an, die es gar nicht gibt. */
+      @media (hover: hover) {
+        .block:hover .rahmen { stroke: var(--primary-color, #03a9f4); stroke-width: 2.2; }
+        .block:hover .rahmen.offen { stroke: var(--primary-color, #03a9f4); }
+      }
+      .block.aktiv .rahmen {
         stroke: var(--primary-color, #03a9f4);
         stroke-width: 2.2;
       }
+      .block.aktiv .rahmen.offen { stroke: var(--primary-color, #03a9f4); }
       .block.leer .rahmen { stroke-dasharray: 4 4; opacity: .6; }
 
       text {
@@ -536,10 +554,20 @@ class PvSystemCard extends HTMLElement {
       .fuss .punkt { display: inline-flex; align-items: center; gap: 4px; }
       .fuss .punkt i { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
       .fusskopf { font-weight: 600; }
-      .kennzahl.block { cursor: pointer; }
-      .kennzahl.block:hover, .kennzahl.block.aktiv {
+      .kennzahl.block {
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .kennzahl.block.aktiv {
         outline: 2px solid var(--primary-color, #03a9f4);
         outline-offset: -2px;
+      }
+      @media (hover: hover) {
+        .kennzahl.block:hover {
+          outline: 2px solid var(--primary-color, #03a9f4);
+          outline-offset: -2px;
+        }
       }
     `;
     return stil;
@@ -588,8 +616,12 @@ class PvSystemCard extends HTMLElement {
     // für Titel und Modell, unten etwas Luft, mindestens aber so hoch, dass im
     // Haus vier Zeilen stehen können.
     const bandY = yBus - BAND_OBEN;
+    // Gibt es einen Überschussverbraucher, braucht seine Zeile unten Platz.
+    // Beide Kästen wachsen mit: Zwei verschieden hohe Klemmkästen nebeneinander
+    // sähen aus wie ein Versehen.
+    const hatUmleiter = Boolean(d.house.diverter && d.house.diverter.enabled);
     const bandH = Math.max(
-      BAND_OBEN + (phasen - 1) * M.busAbstand + BAND_UNTEN,
+      BAND_OBEN + (phasen - 1) * M.busAbstand + BAND_UNTEN + (hatUmleiter ? 14 : 0),
       BAND_MIN
     );
     const yNetz = bandY + bandH + NETZ_ABSTAND;
@@ -1274,22 +1306,53 @@ class PvSystemCard extends HTMLElement {
     }
 
     /* --- Haus ---------------------------------------------------------- */
+    // Spiegelbildlich zum Zähler: oben der Gesamtverbrauch, darunter die
+    // beiden Quoten, und auf der Höhe jeder Phase, was auf ihr im Haus
+    // bleibt. Die Zahl steht nirgends gemessen - sie ist die Erzeugung auf
+    // dieser Phase plus das, was dort vom Netz kommt.
     const haus = this._kasten(bloecke, "house:", g.hausX, g.bandY, HAUS_B, g.bandH);
     haus.appendChild(
-      e("text", { class: "titel", x: g.hausX + 10, y: g.bandY + 16, text: "Haus" })
+      e("text", { class: "titel", x: g.hausX + 10, y: g.bandY + 17, text: "Haus" })
     );
-    haus.appendChild(this._hausSymbol(g.hausX + HAUS_B - 40, g.bandY + 4));
     this._ref(
       haus, "house:power",
-      e("text", { class: "wert", x: g.hausX + 10, y: g.bandY + 42 })
+      e("text", { class: "wert rechts", x: g.hausX + HAUS_B - 10, y: g.bandY + 18 })
     );
     this._ref(
-      haus, "house:autarkie",
-      e("text", { class: "mini", x: g.hausX + 10, y: g.bandY + 56 })
+      haus, "house:quoten",
+      e("text", { class: "mini", x: g.hausX + 10, y: g.bandY + 30 })
     );
+    if (g.zeigePhasen) {
+      for (let i = 0; i < g.phasen; i++) {
+        const y = g.yBus + i * M.busAbstand;
+        haus.appendChild(
+          e("text", {
+            class: "klein", x: g.hausX + 10, y: y + 3.5, text: `L${i + 1}`,
+          })
+        );
+        this._ref(
+          haus, `haus:${i}`,
+          e("text", {
+            class: "mini rechts", x: g.hausX + HAUS_B - 10, y: y + 3.5,
+          })
+        );
+      }
+    } else {
+      this._ref(
+        haus, "haus:0",
+        e("text", {
+          class: "mini rechts", x: g.hausX + HAUS_B - 10, y: g.yBus + 3.5,
+        })
+      );
+    }
+    // Der Überschussverbraucher unter den Phasen - nur wenn es ihn gibt.
     this._ref(
-      haus, "house:quelle",
-      e("text", { class: "mini", x: g.hausX + 10, y: g.bandY + 68 })
+      haus, "house:umleiter",
+      e("text", {
+        class: "mini",
+        x: g.hausX + 10,
+        y: g.bandY + g.bandH - 6,
+      })
     );
 
     /* --- Klemmpunkte an beiden Kästen ---------------------------------- */
@@ -1364,20 +1427,6 @@ class PvSystemCard extends HTMLElement {
     ]) {
       g.appendChild(e("path", { d }));
     }
-    return g;
-  }
-
-  /** Ein Haus: Dach und Wände, mehr braucht es nicht. */
-  _hausSymbol(x, y) {
-    const g = e("g", { class: "symbol" });
-    g.appendChild(
-      e("path", { d: `M ${x + 1} ${y + 15} L ${x + 15} ${y + 3} L ${x + 29} ${y + 15}` })
-    );
-    g.appendChild(
-      e("path", {
-        d: `M ${x + 5} ${y + 14} V ${y + 30} H ${x + 25} V ${y + 14}`,
-      })
-    );
     return g;
   }
 
@@ -1739,15 +1788,34 @@ class PvSystemCard extends HTMLElement {
 
     // Haus
     this._setzen("house:power", watt(d.house.house_power, l));
+    // Beide Quoten in einer Zeile. "Gemessen" oder "gerechnet" steht in der
+    // Detailtabelle - im Kasten wäre es eine Zeile für eine Auskunft, die man
+    // einmal im Leben braucht.
+    const quoten = [];
+    if (d.house.self_sufficiency !== null && d.house.self_sufficiency !== undefined) {
+      quoten.push(`Autark ${prozent(d.house.self_sufficiency, l)}`);
+    }
+    if (d.house.self_consumption !== null && d.house.self_consumption !== undefined) {
+      quoten.push(`Eigen ${prozent(d.house.self_consumption, l)}`);
+    }
+    this._setzen("house:quoten", quoten.join(" · "));
+
+    // Was auf jeder Phase im Haus bleibt.
+    if (this._geo && this._geo.zeigePhasen === false) {
+      this._setzen("haus:0", watt(d.house.house_power, l));
+    } else {
+      ["l1", "l2", "l3"].forEach((p, i) => {
+        const wert = zahl(phasen[p] && phasen[p].house_power);
+        this._setzen(`haus:${i}`, wert === null ? "" : watt(wert, l));
+      });
+    }
+
+    const umleiter = d.house.diverter || {};
     this._setzen(
-      "house:autarkie",
-      d.house.self_sufficiency === null || d.house.self_sufficiency === undefined
-        ? ""
-        : `Autarkie ${prozent(d.house.self_sufficiency, l)}`
-    );
-    this._setzen(
-      "house:quelle",
-      d.house.house_source === "sensor" ? "gemessen" : "gerechnet"
+      "house:umleiter",
+      umleiter.enabled
+        ? `${umleiter.name}: ${watt(umleiter.power, l)}`
+        : ""
     );
 
     // Kennzahlenleiste
@@ -2079,7 +2147,14 @@ class PvSystemCard extends HTMLElement {
           ]);
         }
         if (phase.pv_power !== null && phase.pv_power !== undefined) {
-          zeilen.push([`${p.toUpperCase()} Erzeugung`, watt(phase.pv_power, l)]);
+          // Hängt nur ein Wechselrichter an der Phase, ist die Erzeugung
+          // sein eigener Sensor - dann führt die Zeile auch dorthin.
+          zeilen.push([
+            `${p.toUpperCase()} Erzeugung`,
+            watt(phase.pv_power, l),
+            phase.entities.pv_power,
+          ]);
+          zeilen.push([`${p.toUpperCase()} Haus`, watt(phase.house_power, l)]);
         }
       }
     } else if (art === "house") {
@@ -2091,6 +2166,16 @@ class PvSystemCard extends HTMLElement {
         ["Energiezähler", einheit(h.house_energy, "kWh", 2, l), h.entities.energy],
         ["Autarkie", prozent(h.self_sufficiency, l)],
         ["Eigenverbrauch", prozent(h.self_consumption, l)],
+        ...(h.diverter && h.diverter.enabled
+          ? [
+              [h.diverter.name, watt(h.diverter.power, l), h.diverter.entities.power],
+              [
+                `${h.diverter.name} Zähler`,
+                einheit(h.diverter.energy, "kWh", 2, l),
+                h.diverter.entities.energy,
+              ],
+            ]
+          : []),
         // Die beiden Quoten noch einmal über die letzte volle Stunde - das
         // ist der Wert, der auch als Sensor in Home Assistant steht. Der
         // Augenblick darüber schwankt mit jeder Wolke.

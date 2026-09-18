@@ -82,6 +82,8 @@ jobs:
               "pv_system.coordinator",
               "pv_system.config_flow",
               "pv_system.sensor",
+              "pv_system.button",
+              "pv_system.stunde",
               "pv_system.websocket",
               "pv_system.recorder",
           ):
