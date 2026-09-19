@@ -509,8 +509,8 @@ def _felder(schluessel: list[str], sprache, schritt: str | None = None) -> dict[
 HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
     "modules": {
         "manufacturer": (
-            "Der Modulhersteller, z. B. \u201eTrina\u201c. Nur zur Anzeige.",
-            "The module manufacturer, e.g. \u201cTrina\u201d. Display only.",
+            "Der Modulhersteller. Nur zur Anzeige.",
+            "The module manufacturer. Display only.",
         ),
         "model": (
             "Die Modulbezeichnung, z. B. \u201eVertex S 405\u201c. Nur zur Anzeige.",
@@ -607,8 +607,8 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "Operating state as text, e.g. “Bulk”, “Absorption”, “Float”.",
         ),
         "max_current": (
-            "Nur zur Anzeige, z. B. 85 A beim MPPT 250/85.",
-            "Display only, e.g. 85 A on an MPPT 250/85.",
+            "Nur zur Anzeige, z. B. 85 A bei einem MPPT 250/85.",
+            "Display only, e.g. 85 A on a 250/85 MPPT.",
         ),
     },
     "battery": {
@@ -725,10 +725,10 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
         "power_entity": (
             "Die abgegebene AC-Leistung - der interne Sensor oder ein "
-            "Zwischenzähler wie ein Shelly. Aus dieser Zahl entsteht der "
+            "Zwischenzähler davor. Aus dieser Zahl entsteht der "
             "Hausverbrauch.",
             "AC output power - the built-in sensor or an inline meter such as a "
-            "Shelly. House consumption is derived from this figure.",
+            "inline meter. House consumption is derived from this figure.",
         ),
         "voltage_entity": (
             "Nicht benutzt - hier zählen AC- und DC-Spannung weiter unten.",
@@ -750,10 +750,10 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "Continuous rating from the label. The load bar is based on it.",
         ),
         "hybrid": (
-            "An, wenn das Gerät auch aus dem Netz laden kann (z. B. Victron "
-            "MultiPlus).",
-            "On when the device can also charge from the grid (e.g. Victron "
-            "MultiPlus).",
+            "An, wenn das Gerät auch aus dem Netz laden kann - ein "
+            "Hybridwechselrichter mit Netzladefunktion.",
+            "On when the device can also charge from the grid - a hybrid "
+            "inverter with grid charging.",
         ),
     },
     "grid": {
@@ -869,8 +869,8 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "card then does not draw phases individually.",
         ),
         "meter_model": (
-            "Nur zur Anzeige, z. B. „Shelly Pro 3EM Gen2“.",
-            "Display only, e.g. “Shelly Pro 3EM Gen2”.",
+            "Nur zur Anzeige, z. B. „Dreiphasiger Smartmeter“.",
+            "Display only, e.g. “Three-phase smart meter”.",
         ),
     },
     "house": {
@@ -1333,8 +1333,8 @@ NETZFELDER = [
     "l2_power_entity", "l2_voltage_entity", "l2_current_entity",
     "l3_power_entity", "l3_voltage_entity", "l3_current_entity",
 ]
-HAUSFELDER = [
-    "calculate", "power_entity", "energy_entity",
+HAUSFELDER = ["calculate", "power_entity", "energy_entity"]
+UEBERSCHUSSFELDER = [
     "diverter_name", "diverter_power_entity", "diverter_energy_entity",
     "diverter_solar_power_entity", "diverter_solar_energy_entity",
     "diverter_fuel", "diverter_price", "diverter_price_unit",
@@ -1406,6 +1406,7 @@ def baum(sprache) -> dict:
                         "plants": s(("Anlagen", "Plants")),
                         "grid": s(("Netz und Zähler", "Grid and meter")),
                         "house": s(("Haus und Verbrauch", "House and consumption")),
+                        "surplus": s(("Überschuss", "Surplus")),
                         "costs": s(("Kosten und Ertrag", "Costs and yield")),
                         "tidy": s(
                             ("Doppelte Sensoren", "Duplicate sensors")
@@ -1543,6 +1544,48 @@ def baum(sprache) -> dict:
                     "data": _felder(HAUSFELDER, s, "house"),
                     "data_description": _hinweise(HAUSFELDER, s, "house"),
                 },
+                "surplus": {
+                    "title": s(("Überschuss", "Surplus")),
+                    "description": s(
+                        (
+                            "Verbraucher, die **nur laufen, weil Überschuss da "
+                            "ist**, und dabei Energie in einen Speicher legen: "
+                            "der Heizstab im Brauchwasserspeicher, die Wallbox "
+                            "im Überschussladen, der Pufferspeicher der "
+                            "Wärmepumpe. Der Kühlschrank gehört nicht dazu - "
+                            "der läuft sowieso.\n\nSie sind ein Thema für "
+                            "sich, weil ihre Kilowattstunden **nicht Strom "
+                            "ersetzen, sondern Gas, Öl, Wärme** - und deshalb "
+                            "anders bewertet werden als jeder andere "
+                            "Eigenverbrauch.\n\nAlles hier darf leer "
+                            "bleiben. Wer keinen solchen Verbraucher hat, "
+                            "überspringt diesen Schritt.\n\n**Wo eine "
+                            "Entität und eine feste Zahl nebeneinander "
+                            "stehen, gewinnt immer die Entität.** Die Zahl ist "
+                            "nur der Rückfall, wenn die Entität gerade nichts "
+                            "Brauchbares meldet. Das gilt genauso bei "
+                            "Arbeitspreis, Vergütung und Grundpreis.",
+                            "Loads that **only run because there is surplus** "
+                            "and put energy into a store: the immersion heater "
+                            "in the hot water tank, the wallbox in surplus "
+                            "charging, the heat pump's buffer tank. A fridge "
+                            "does not count - it runs anyway.\n\nThey are a "
+                            "topic of their own because their kilowatt hours "
+                            "**replace not electricity but gas, oil, heat** - "
+                            "and are therefore valued differently from any "
+                            "other self-consumption.\n\nEverything here may "
+                            "be left empty. If you have no such load, skip "
+                            "this step.\n\n**Wherever an entity and a fixed "
+                            "number sit side by side, the entity always "
+                            "wins.** The number is only the fallback for when "
+                            "the entity reports nothing usable. The same "
+                            "applies to energy price, feed-in tariff and base "
+                            "fee.",
+                        )
+                    ),
+                    "data": _felder(UEBERSCHUSSFELDER, s, "house"),
+                    "data_description": _hinweise(UEBERSCHUSSFELDER, s, "house"),
+                },
                 "plant_costs": {
                     "title": s(("Kosten – {plant}", "Costs – {plant}")),
                     "description": s(
@@ -1583,7 +1626,12 @@ def baum(sprache) -> dict:
                             "Anlage“. Die Investition des Standorts ist die "
                             "Summe seiner Anlagen, sein Beginn die älteste "
                             "Inbetriebnahme - beides muss hier niemand noch "
-                            "einmal eintragen."
+                            "einmal eintragen.\n\n**Wo eine Entität und "
+                            "eine feste Zahl nebeneinander stehen, gewinnt "
+                            "immer die Entität.** Die Zahl ist nur der "
+                            "Rückfall, wenn die Entität gerade nichts "
+                            "Brauchbares meldet - ein hängender Tarifabruf, "
+                            "ein Sensor auf „nicht verfügbar“."
                             + OPTIONAL[0],
                             "Everything is derived from the meter readings you "
                             "entered under “Grid and meter” - not from "
@@ -1598,7 +1646,12 @@ def baum(sprache) -> dict:
                             "runs belongs to that plant under “Costs of this "
                             "plant”. The site's investment is the sum of its "
                             "plants, its start the earliest commissioning - "
-                            "nobody needs to enter either again here."
+                            "nobody needs to enter either again here.\n\n"
+                            "**Wherever an entity and a fixed number sit side "
+                            "by side, the entity always wins.** The number is "
+                            "only the fallback for when the entity reports "
+                            "nothing usable - a stalled tariff fetch, a sensor "
+                            "gone unavailable."
                             + OPTIONAL[1],
                         )
                     ),

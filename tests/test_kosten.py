@@ -127,7 +127,7 @@ def test_zaehlerwechsel_erzeugt_keinen_negativen_betrag():
     r = _rechner()
     r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, PREISE, {})
     r.rechnen({"import": 140.0, "export": 0.0, "own": 0.0}, PREISE, {})
-    # Neuer Shelly, Zähler beginnt wieder bei null.
+    # Neuer Zähler, er beginnt wieder bei null.
     ergebnis = r.rechnen({"import": 3.0, "export": 0.0, "own": 0.0}, PREISE, {})
     assert ergebnis["periods"]["day"]["import_kwh"] == 0
     assert ergebnis["periods"]["day"]["cost"] == 0.0

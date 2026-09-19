@@ -116,9 +116,28 @@ function wattVz(wert, sprache) {
 function _waerme(grad) {
   const n = zahl(grad);
   if (n === null) return "";
-  if (n >= 40) return "heiss";
+  // Über vierzig und unter fünf Grad wird es für eine Lithiumzelle kritisch:
+  // oben droht Alterung, unten darf sie nicht mehr geladen werden. Beides
+  // bekommt deshalb nicht nur eine Farbe, sondern auch einen Blinker.
+  if (n >= 40) return "heiss warnen";
   if (n >= 30) return "warm";
+  if (n < 5) return "kalt warnen";
   return "kuehl";
+}
+
+/**
+ * Wie voll ist voll genug?
+ *
+ * Dieselben Schwellen wie in den Balken von Home Assistant: Unter zwanzig
+ * Prozent rot, unter fünfzig orange, darüber grün. Wer sie kennt, muss hier
+ * nichts Neues lernen.
+ */
+function _fuellstand(prozent) {
+  const n = zahl(prozent);
+  if (n === null) return "f-leer";
+  if (n < 20) return "f-leer";
+  if (n < 50) return "f-halb";
+  return "f-voll";
 }
 
 function watt(wert, sprache) {
@@ -146,9 +165,13 @@ function prozent(wert, sprache) {
   return einheit(wert, "%", 0, sprache);
 }
 
-/** Eine Energiemenge in Kilowattstunden, mit einer Nachkommastelle. */
+/** Eine Energiemenge in Kilowattstunden.
+ *
+ * Zwei Nachkommastellen wie bei der Spitzenleistung: 7,40 und 4,81 stehen
+ * untereinander und sind auf einen Blick vergleichbar, 7,4 und 4,81 nicht.
+ */
 function kwh(wert, sprache) {
-  return einheit(wert, "kWh", 1, sprache);
+  return einheit(wert, "kWh", 2, sprache);
 }
 
 /** Ein Geldbetrag in der eingestellten Währung. */
@@ -495,11 +518,38 @@ class PvSystemCard extends HTMLElement {
       }
       .pfeil.an { opacity: .95; }
 
-      /* Die Zellentemperatur: grün bis dreißig Grad, dann orange, ab
-         vierzig rot. Kein eigener Balken - die Zahl selbst reicht. */
+      /* Die Zellentemperatur: blau unter fünf Grad, grün bis dreißig, dann
+         orange, ab vierzig rot. Kein eigener Balken - die Zahl selbst reicht. */
+      .kalt  { fill: var(--pv-netz, #4a8fd4); }
       .kuehl { fill: var(--pv-akku, #3ec26a); }
       .warm  { fill: var(--pv-warm, #e8912a); }
       .heiss { fill: var(--pv-bezug, #e05c4b); }
+
+      /* Die beiden Enden blinken. Nicht schnell und nicht grell - ein ruhiges
+         Auf und Ab, das im Augenwinkel auffällt und beim Hinsehen nicht
+         stört. Wer Animationen abgeschaltet hat, bekommt stattdessen einen
+         Rahmen um die Zahl: Auffallen soll sie so oder so. */
+      .warnen { animation: pulsen 1.6s ease-in-out infinite; }
+      @keyframes pulsen {
+        0%, 100% { opacity: 1; }
+        50%      { opacity: .25; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .warnen {
+          animation: none;
+          paint-order: stroke;
+          stroke: currentColor;
+          stroke-width: 2.6;
+          stroke-opacity: .22;
+          stroke-linejoin: round;
+        }
+      }
+
+      /* Der Füllstandsbalken der Batterie - dieselben Stufen wie in Home
+         Assistant: unter zwanzig Prozent rot, unter fünfzig orange. */
+      .f-voll { fill: var(--pv-akku, #3ec26a); }
+      .f-halb { fill: var(--pv-warm, #e8912a); }
+      .f-leer { fill: var(--pv-bezug, #e05c4b); }
 
       .f-solar { stroke: var(--pv-solar, #f5a623); }
       .f-akku  { stroke: var(--pv-akku, #3ec26a); }
@@ -547,9 +597,10 @@ class PvSystemCard extends HTMLElement {
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
       /* Eine Spur kleiner als die Beschriftung: Hier stehen bis zu zwei Zahlen
-         nebeneinander, und die Kachelbreite ist gesetzt. */
+         nebeneinander, und die Kachelbreite ist gesetzt - "−466 W · 7,36 kWh"
+         braucht bei zehn Pixeln sechs mehr, als die Kachel innen hat. */
       .kennzahl .v2 {
-        font-size: 10px; color: var(--secondary-text-color, #727272);
+        font-size: 9px; color: var(--secondary-text-color, #727272);
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
       .kennzahl .v2:empty { display: none; }
@@ -557,7 +608,7 @@ class PvSystemCard extends HTMLElement {
       /* Das Wort hinter der Zahl: klein, grau, mit etwas Luft davor. Es sagt,
          welche der beiden gleich großen Zahlen welche ist. */
       .kennzahl .vwort {
-        font-size: 10px; font-weight: 400;
+        font-size: 9px; font-weight: 400;
         color: var(--secondary-text-color, #727272);
         margin-left: 4px;
       }
@@ -1053,8 +1104,8 @@ class PvSystemCard extends HTMLElement {
           box,
           `${id}:battery:balken`,
           e("rect", {
+            class: "f-voll",
             x: bx + 10, y: g.yBatterie + 48, width: 0, height: 5, rx: 2.5,
-            fill: "var(--pv-akku, #3ec26a)",
           })
         );
       } else {
@@ -1857,8 +1908,10 @@ class PvSystemCard extends HTMLElement {
         );
         // Und die Farbe sagt, ob das noch in Ordnung ist. Eine
         // Lithiumzelle mag zwanzig Grad; ab dreißig wird es warm, ab vierzig
-        // sollte jemand nachsehen. Nur die Schrift färbt sich - ein farbiger
-        // Balken daneben wäre ein zweites Bauteil für dieselbe Auskunft.
+        // sollte jemand nachsehen - und unter fünf Grad darf sie nicht mehr
+        // geladen werden. Beide Enden blinken deshalb zusätzlich. Nur die
+        // Schrift färbt sich; ein farbiger Balken daneben wäre ein zweites
+        // Bauteil für dieselbe Auskunft.
         this._attr(
           `${id}:battery:temp`,
           "class",
@@ -1868,6 +1921,9 @@ class PvSystemCard extends HTMLElement {
         this._attr(
           `${id}:battery:balken`, "width", ((BATTERIE_B - 20) * anteil) / 100
         );
+        // Und seine Farbe sagt dasselbe noch einmal: Ein halb voller Balken
+        // sieht auf einem Handy aus wie ein fast leerer, die Farbe nicht.
+        this._attr(`${id}:battery:balken`, "class", _fuellstand(b.soc));
         // Laden fließt zum Speicher, Entladen von ihm weg.
         this._fluss(`${id}:akku`, b.power, 3000, (zahl(b.power) || 0) < 0);
       }
@@ -2029,8 +2085,8 @@ class PvSystemCard extends HTMLElement {
     this._setzen(
       "kpi:peak2",
       akkuKap ? akkuKap.toLocaleString(l, {
-        minimumFractionDigits: 1,
-        maximumFractionDigits: 1,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       }) : ""
     );
     this._setzen("kpi:peak2:wort", akkuKap ? "kWh Akku" : "");

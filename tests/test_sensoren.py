@@ -301,8 +301,63 @@ def test_mit_trennsensor_wird_der_netzanteil_dem_stab_zugerechnet():
     assert haus["diverter"]["grid_power"] == 1100.0
     # Gesamte Autarkie: 2000 W Verbrauch, 1200 W vom Netz.
     assert haus["self_sufficiency"] == 40.0
-    # Grundverbrauch: 500 W, und davon kamen 1200 - 1100 = 100 W aus dem Netz.
-    assert haus["base_self_sufficiency"] == 80.0
+    # Vom Grundverbrauch gehen nur die 400 W ab, die wirklich aus Überschuss
+    # kamen. Die übrigen 1100 W zieht der Stab aus dem Netz - dann ist er ein
+    # gewöhnliches Gerät und gehört in den Grundverbrauch wie jedes andere.
+    assert haus["base_power"] == 1600.0
+    # 1600 W Grundverbrauch, 1200 W davon aus dem Netz.
+    assert haus["base_self_sufficiency"] == 25.0
+
+
+def test_nichts_aus_pv_heisst_ganz_normaler_verbrauch():
+    """Der Fall, der die Grundlast sonst zu klein macht.
+
+    Der Stab zieht, aber nicht einen Watt davon kommt aus der eigenen Anlage -
+    im Januar der Normalfall. Dann ist er kein Überschussverbraucher mehr,
+    sondern eine Last wie der Backofen, und der Grundverbrauch ist der ganze
+    Hausverbrauch.
+    """
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab"],
+            "diverter_solar_power_entity": ["sensor.stab_pv"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.stab", 1500, "W")
+    hass.states.setzen("sensor.stab_pv", 0, "W")
+    hass.states.setzen("sensor.netz", 2000, "W")
+    haus = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]
+    assert haus["house_power"] == 2000.0
+    assert haus["base_power"] == 2000.0
+    assert haus["self_sufficiency"] == haus["base_self_sufficiency"] == 0.0
+
+
+def test_alles_aus_pv_heisst_voller_abzug():
+    """Der Gegenfall: Der Hausverbrauch liegt genau um den Stab höher."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab"],
+            "diverter_solar_power_entity": ["sensor.stab_pv"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.stab", 1500, "W")
+    hass.states.setzen("sensor.stab_pv", 1500, "W")
+    hass.states.setzen("sensor.netz", 0, "W")
+    haus = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]
+    assert haus["house_power"] - haus["base_power"] == 1500.0
+    assert haus["self_sufficiency"] == haus["base_self_sufficiency"] == 100.0
 
 
 def test_ohne_ueberschussverbraucher_bleibt_alles_wie_vorher():

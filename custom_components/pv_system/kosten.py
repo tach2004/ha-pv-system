@@ -9,7 +9,7 @@ merken und die Differenz zu bilden.
 
 Gemerkt wird in einer eigenen Datei unter ``.storage``; die Marken überstehen
 damit Neustarts und Updates. Fällt ein Zähler zurück - Gerätetausch, Reset des
-Shelly, ein neuer Sensor -, wird die Marke neu gesetzt statt eine negative
+Zaehler, ein neuer Sensor -, wird die Marke neu gesetzt statt eine negative
 Differenz auszuweisen.
 
 Vier Zeiträume laufen parallel:

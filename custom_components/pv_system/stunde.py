@@ -49,10 +49,12 @@ MINDESTZEIT = timedelta(minutes=50)
 MINDESTMENGE = 0.01
 
 # Welche Leistungen aufaddiert werden - und wie das Feld in der Stunde heißt.
-# "base" und "base_import" sind dasselbe Paar noch einmal, nur ohne den
-# Überschussverbraucher: Die Autarkie darüber ist die von Monat zu Monat
-# vergleichbare, weil sie nicht mit der Sonne schwankt.
-GROESSEN = ("house", "base", "import", "base_import", "export", "yield")
+# "base" ist der Hausverbrauch noch einmal, nur ohne den Anteil, der aus
+# Überschuss lief: Die Autarkie darüber ist die von Monat zu Monat
+# vergleichbare, weil sie nicht mit der Sonne schwankt. Der Netzbezug ist für
+# beide derselbe - was aus dem Netz kam, kam nicht aus Überschuss und steht
+# deshalb in beiden Verbrauchszahlen.
+GROESSEN = ("house", "base", "import", "export", "yield")
 
 
 class Stundenwerte:
@@ -163,13 +165,12 @@ class Stundenwerte:
         verbrauch = self._lauf["house"]
         bezug = self._lauf["import"]
         grund = self._lauf["base"]
-        grundbezug = self._lauf["base_import"]
         erzeugung = self._lauf["yield"]
         einspeisung = self._lauf["export"]
 
         self._fertig = {
             "self_sufficiency": _quote(verbrauch, verbrauch - bezug),
-            "base_self_sufficiency": _quote(grund, grund - grundbezug),
+            "base_self_sufficiency": _quote(grund, grund - bezug),
             "self_consumption": _quote(erzeugung, erzeugung - einspeisung),
             "start": self._beginn,
             "house_kwh": round(verbrauch, 3),

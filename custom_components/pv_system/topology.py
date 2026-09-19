@@ -291,7 +291,7 @@ def module_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
 
 
 # Wie lang ein geratener String höchstens wird. Die Zahl kommt von der
-# Eingangsspannung: Ein verbreiteter Laderegler wie der Victron MPPT 250/85
+# Eingangsspannung: Ein verbreiteter MPPT-Laderegler der 250-Volt-Klasse
 # verträgt 250 V, ein Modul liefert im Leerlauf gut 40 V. Mehr als sechs in
 # Reihe gehen dort also nicht, und auf solche Anlagen zielt diese Integration.
 STRING_MAX = 6
