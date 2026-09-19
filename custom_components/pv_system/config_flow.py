@@ -13,7 +13,7 @@ bearbeiten zu können; jedes Formular weist darauf hin.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final
 
 import voluptuous as vol
 from homeassistant.config_entries import (
@@ -356,11 +356,42 @@ def _felder_wechselrichter() -> dict[Any, Any]:
     }
 
 
+# Haus und Überschuss teilen sich einen Block in der Konfiguration - die
+# Schlüssel liegen beide unter CONF_HOUSE -, aber zwei Dialogschritte. Damit
+# der eine Schritt die Felder des anderen nicht leert, muss jeder wissen,
+# welche Felder ihm gehören: Was nicht abgeschickt wurde, wird normalerweise
+# gelöscht, und genau so soll Leeren ja auch funktionieren.
+HAUSFELDER: Final = (CONF_HOUSE_CALCULATE, CONF_HOUSE_POWER, CONF_HOUSE_ENERGY)
+UEBERSCHUSSFELDER: Final = (
+    CONF_DIVERTER_NAME,
+    CONF_DIVERTER_POWER,
+    CONF_DIVERTER_ENERGY,
+    CONF_DIVERTER_SOLAR_POWER,
+    CONF_DIVERTER_SOLAR_ENERGY,
+    CONF_DIVERTER_FUEL,
+    CONF_DIVERTER_PRICE,
+    CONF_DIVERTER_PRICE_ENTITY,
+    CONF_DIVERTER_PRICE_UNIT,
+    CONF_DIVERTER_EFFICIENCY,
+)
+
+
 def _felder_haus() -> dict[Any, Any]:
     return {
         vol.Optional(CONF_HOUSE_CALCULATE): bool,
         vol.Optional(CONF_HOUSE_POWER): _sensor("power"),
         vol.Optional(CONF_HOUSE_ENERGY): _sensor("energy"),
+    }
+
+
+def _felder_ueberschuss() -> dict[Any, Any]:
+    """Alles zum Überschussverbraucher - ein eigener Schritt.
+
+    Zehn Felder, die zusammen eine einzige Frage beantworten: Was ist eine
+    umgeleitete Kilowattstunde wert? Zwischen Hausverbrauch und Energiezähler
+    standen sie wie ein Anhang; sie sind aber ein Thema für sich.
+    """
+    return {
         vol.Optional(CONF_DIVERTER_NAME): _text(),
         vol.Optional(CONF_DIVERTER_POWER): _sensor("power", mehrere=True),
         vol.Optional(CONF_DIVERTER_ENERGY): _sensor("energy", mehrere=True),
@@ -368,10 +399,10 @@ def _felder_haus() -> dict[Any, Any]:
         vol.Optional(CONF_DIVERTER_SOLAR_ENERGY): _sensor("energy", mehrere=True),
         vol.Optional(CONF_DIVERTER_FUEL): _auswahl(DIVERTER_FUELS, "diverter_fuel"),
         vol.Optional(CONF_DIVERTER_PRICE): _zahl(0, 10000, "any"),
-        vol.Optional(CONF_DIVERTER_PRICE_ENTITY): _sensor(),
         vol.Optional(CONF_DIVERTER_PRICE_UNIT): _auswahl(
             DIVERTER_PRICE_UNITS, "diverter_price_unit"
         ),
+        vol.Optional(CONF_DIVERTER_PRICE_ENTITY): _sensor(),
         vol.Optional(CONF_DIVERTER_EFFICIENCY): _zahl(10, 800, 1, "%"),
     }
 
@@ -541,8 +572,8 @@ class PvSystemOptionsFlow(OptionsFlow):
         return self.async_show_menu(
             step_id="init",
             menu_options=[
-                "plants", "grid", "house", "costs", "display", "tidy", "reset",
-                "save",
+                "plants", "grid", "house", "surplus", "costs", "display",
+                "tidy", "reset", "save",
             ],
         )
 
@@ -769,14 +800,44 @@ class PvSystemOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            self._daten[CONF_HOUSE] = haus_normalisieren(user_input)
+            self._haus_uebernehmen(user_input, UEBERSCHUSSFELDER)
             return await self.async_step_init()
 
-        felder = _felder_haus()
         return self.async_show_form(
             step_id="house",
-            data_schema=_mit_vorschlag(felder, self._daten[CONF_HOUSE]),
+            data_schema=_mit_vorschlag(_felder_haus(), self._daten[CONF_HOUSE]),
         )
+
+    # ------------------------------------------------------------ Überschuss
+
+    async def async_step_surplus(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._haus_uebernehmen(user_input, HAUSFELDER)
+            return await self.async_step_init()
+
+        return self.async_show_form(
+            step_id="surplus",
+            data_schema=_mit_vorschlag(
+                _felder_ueberschuss(), self._daten[CONF_HOUSE]
+            ),
+        )
+
+    def _haus_uebernehmen(
+        self, user_input: dict[str, Any], behalten: tuple[str, ...]
+    ) -> None:
+        """Einen Teil des Hausblocks übernehmen, den anderen stehen lassen.
+
+        Was ein Formular nicht abschickt, gilt als geleert - nur so lässt sich
+        ein Feld wieder loswerden. Zwei Schritte auf demselben Block würden
+        sich damit gegenseitig ausräumen, deshalb rettet jeder ausdrücklich
+        die Felder des anderen herüber.
+        """
+        alt = self._daten.get(CONF_HOUSE) or {}
+        roh = {feld: alt.get(feld) for feld in behalten}
+        roh.update(user_input)
+        self._daten[CONF_HOUSE] = haus_normalisieren(roh)
 
     # ----------------------------------------------------------- Kosten
 

@@ -306,7 +306,7 @@
           "input_current_entity": "Der Strangstrom von den Modulen. Zusammen mit der Eingangsspannung ergibt er die Modulleistung.",
           "input_voltage_entity": "Die Spannung, die von den Modulen kommt - bei einem MPPT oft dreistellig.",
           "manufacturer": "Nur zur Anzeige - die Karte schreibt Hersteller und Modell untereinander.",
-          "max_current": "Nur zur Anzeige, z. B. 85 A beim MPPT 250/85.",
+          "max_current": "Nur zur Anzeige, z. B. 85 A bei einem MPPT 250/85.",
           "model": "Nur zur Anzeige, z. B. die Typenbezeichnung vom Aufkleber.",
           "name": "Name dieses Ladereglers, z. B. „MPPT Dach Ost“.",
           "output_current_entity": "Der Ladestrom Richtung Batterie. Ohne Leistungssensor wird daraus die Ladeleistung gerechnet.",
@@ -345,7 +345,7 @@
           "prior_import": "**Der Stand deines Bezugszählers an dem Tag, an dem du diese Integration eingerichtet hast.** Eine einmalige Zahl, die du einmal abliest und dann nie wieder anfasst - kein Sensor.\n\nBeispiel: Dein Bezugszähler steht heute bei 5000 kWh, und du richtest heute ein. Dann trägst du 5000 ein.\n\nWozu: Die Integration zählt ab heute nur noch Differenzen. Ohne diese Zahl begänne der Gesamtzeitraum bei null Bezugskosten, und die Bilanz sähe besser aus, als sie ist. Tag, Monat und Jahr rührt sie nicht an.\n\nLeer: Der Gesamtzeitraum beginnt heute. Das ist richtig, wenn du nur ab jetzt rechnen willst.",
           "prior_price": "Was die Kilowattstunde im Schnitt gekostet hat, bevor die Integration zu zählen begann - Strom war vor drei Jahren nicht so teuer wie heute. Gilt nur für die Zeit davor. Leer: Es wird mit dem heutigen Preis gerechnet."
         },
-        "description": "Gerechnet wird aus den Zählerständen, die du unter „Netz und Zähler“ eingetragen hast - nicht aus hochgerechneten Leistungen. Tag, Monat und Jahr laufen ab dem Zeitpunkt mit, an dem du hier einen Preis einträgst - für die Zeit davor sorgen die Angaben bei der jeweiligen Anlage.\n\nDen Preis darfst du jederzeit ändern: Bewertet wird immer nur, was seit der letzten Rechnung dazugekommen ist. Eine Preiserhöhung wirkt ab dem Tag, an dem du sie einträgst, und schreibt die Vergangenheit nicht um.\n\nWas eine Anlage gekostet hat und seit wann sie läuft, steht bei ihr selbst unter „Kosten dieser Anlage“. Die Investition des Standorts ist die Summe seiner Anlagen, sein Beginn die älteste Inbetriebnahme - beides muss hier niemand noch einmal eintragen.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
+        "description": "Gerechnet wird aus den Zählerständen, die du unter „Netz und Zähler“ eingetragen hast - nicht aus hochgerechneten Leistungen. Tag, Monat und Jahr laufen ab dem Zeitpunkt mit, an dem du hier einen Preis einträgst - für die Zeit davor sorgen die Angaben bei der jeweiligen Anlage.\n\nDen Preis darfst du jederzeit ändern: Bewertet wird immer nur, was seit der letzten Rechnung dazugekommen ist. Eine Preiserhöhung wirkt ab dem Tag, an dem du sie einträgst, und schreibt die Vergangenheit nicht um.\n\nWas eine Anlage gekostet hat und seit wann sie läuft, steht bei ihr selbst unter „Kosten dieser Anlage“. Die Investition des Standorts ist die Summe seiner Anlagen, sein Beginn die älteste Inbetriebnahme - beides muss hier niemand noch einmal eintragen.\n\n**Wo eine Entität und eine feste Zahl nebeneinander stehen, gewinnt immer die Entität.** Die Zahl ist nur der Rückfall, wenn die Entität gerade nichts Brauchbares meldet - ein hängender Tarifabruf, ein Sensor auf „nicht verfügbar“.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
         "title": "Kosten und Ertrag"
       },
       "display": {
@@ -400,7 +400,7 @@
           "l3_current_entity": "Strom auf L3 in A. Rein informativ.",
           "l3_power_entity": "Leistung auf L3 - wie L1 nur nötig, wenn dein Zähler die Phasen einzeln meldet.",
           "l3_voltage_entity": "Spannung auf L3, um 230 V. Rein informativ.",
-          "meter_model": "Nur zur Anzeige, z. B. „Shelly Pro 3EM Gen2“.",
+          "meter_model": "Nur zur Anzeige, z. B. „Dreiphasiger Smartmeter“.",
           "name": "Name des Netzanschlusses. Er steht über dem Kasten in der Karte.",
           "phases": "Phasen des Hausanschlusses. In Deutschland fast immer drei - nur ändern, wenn du es sicher anders weißt.",
           "power_entity": "Die Summe über alle Phasen am Hausanschluss. Das ist das wichtigste Feld hier.",
@@ -412,31 +412,11 @@
       "house": {
         "data": {
           "calculate": "Hausverbrauch rechnen",
-          "diverter_efficiency": "Wirkungsgrad der ersetzten Heizung",
-          "diverter_energy_entity": "Zähler Überschussverbraucher",
-          "diverter_fuel": "Ersetzt",
-          "diverter_name": "Überschussverbraucher",
-          "diverter_power_entity": "Leistung Überschussverbraucher",
-          "diverter_price": "Preis des Ersetzten: feste Zahl",
-          "diverter_price_entity": "Preis des Ersetzten: Entität statt fester Zahl",
-          "diverter_price_unit": "Preis des Ersetzten: je",
-          "diverter_solar_energy_entity": "Davon aus PV/Batterie: Zähler",
-          "diverter_solar_power_entity": "Davon aus PV/Batterie: Leistung",
           "energy_entity": "Verbrauchszähler",
           "power_entity": "Gemessener Hausverbrauch"
         },
         "data_description": {
           "calculate": "Verbrauch = Wechselrichterleistung + Netzleistung. Ein gemessener Hausverbrauch hat Vorrang.",
-          "diverter_efficiency": "Wie viel Wärme die **ersetzte** Heizung aus ihrem Brennstoff macht, in Prozent. Sie braucht mehr als eine Kilowattstunde Brennstoff für eine Kilowattstunde Wärme - genau darum geht es.\n\n• Gasbrennwertkessel: rund **92**\n• Älterer Gas- oder Ölkessel: **80** bis **88**\n• Pelletkessel: rund **90**\n• Fernwärme: **100** - übergeben wird Wärme, nicht Brennstoff\n• **Wärmepumpe: die Jahresarbeitszahl mal hundert.** Bei JAZ 3,5 also 350. Sie macht aus einer Kilowattstunde Strom dreieinhalb Kilowattstunden Wärme - ein Heizstab nur eine. Deshalb ist der Überschuss in einem Haus mit Wärmepumpe deutlich weniger wert, und das soll die Rechnung auch sagen.\n\n100 heißt: nicht umrechnen.",
-          "diverter_energy_entity": "kWh-Zähler dieser Verbraucher. **Mehrere sind erlaubt** - sie werden addiert.\n\nDiese Kilowattstunden fließen wirklich im Haus. Ob sie Geld sparen, hängt davon ab, was sie ersetzen: Wer damit statt mit Gas heizt, spart Gas und nicht Strom - deshalb werden sie in der Ersparnis getrennt bewertet, mit den beiden Feldern weiter unten.\n\nLeer: Der Überschuss zählt wie jeder andere Eigenverbrauch.",
-          "diverter_fuel": "Was dieser Verbraucher ersetzt. Davon hängt ab, was eine umgeleitete Kilowattstunde wert ist.\n\nErdgas, Flüssiggas, Öl, Pellets, Fernwärme oder Wärmepumpe: Der Wert ist der Preis dieses Brennstoffs je kWh - siehe die Felder darunter.\n\n„Nichts - es bleibt Strom“: Ein Hausspeicher oder ein Auto verbrennt nichts, es verschiebt Strom nach später. Dann ist eine Kilowattstunde genau den Arbeitspreis wert, und die Felder darunter werden ignoriert.",
-          "diverter_name": "Wie der Verbraucher in der Karte heißen soll, z. B. „Heizstab“.",
-          "diverter_power_entity": "Was die Überschussverbraucher gerade ziehen - der Heizstab im Brauchwasserspeicher, die Wallbox im Überschussladen, der Pufferspeicher der Wärmepumpe. **Mehrere sind erlaubt**; sie werden addiert.\n\nGemeint ist alles, was nur läuft, **weil** Überschuss da ist, und dabei Energie in einen Speicher legt - warmes Wasser, eine Autobatterie, ein Pufferspeicher. Ein Kühlschrank gehört nicht dazu: Der läuft sowieso.\n\nDiese Leistung wird vom Hausverbrauch abgezogen und ergibt den **Grundverbrauch** - das, was dein Haushalt ohne den Überschuss gebraucht hätte. Autarkie und Eigenverbrauch rechnen weiter auf dem **ganzen** Hausverbrauch; der Grundverbrauch steht daneben, weil nur er von Monat zu Monat vergleichbar ist.",
-          "diverter_price": "Der Preis, **wie er auf deiner Rechnung steht** - nicht umgerechnet. Umrechnen ist Arbeit der Integration: Wie viele Kilowattstunden in einem Liter, einem Kubikmeter oder einer Tonne stecken, weiß sie, und den Wirkungsgrad fragt sie darunter ab.\n\nWelche Einheit gemeint ist, sagst du im Feld daneben. Erdgas wird meist je kWh oder je m³ abgerechnet, Flüssiggas je Liter oder Kilogramm, Heizöl je Liter, Pellets je Tonne, Fernwärme je kWh.\n\nWeil sich das ständig ändert, ist das Feld darunter meistens das bessere: eine Entität, die den Preis liefert.\n\nLeer: Es gilt der Arbeitspreis, und die Anlage rechnet sich reicher, als sie ist.",
-          "diverter_price_entity": "Eine Entität, die diesen Preis liefert - **der bessere Weg für alles, was am Markt schwankt.** Gas und Öl tun das wie Strom; eine feste Zahl ist morgen falsch.\n\nSie hat Vorrang vor der festen Zahl darüber; meldet sie gerade nichts Brauchbares, gilt wieder die Zahl. Gemeint ist derselbe Preis in derselben Einheit - umgerechnet wird auch hier automatisch.",
-          "diverter_price_unit": "Worauf sich der Preis bezieht - **genau so, wie er abgerechnet wird**. Die Integration rechnet daraus Kilowattstunden:\n\n• Erdgas: je kWh oder je m³ (rund 10 kWh je m³)\n• Flüssiggas: je Liter (6,57 kWh), je kg (12,87 kWh)\n• Heizöl: je Liter (10 kWh), je kg (11,9 kWh)\n• Pellets: je kg (4,8 kWh) oder je Tonne (4800 kWh)\n• Fernwärme und Wärmepumpe: je kWh\n\nPasst die Einheit nicht zum Brennstoff - Heizöl je Kubikmeter gibt es nicht -, wird nichts umgerechnet und es gilt der Arbeitspreis. Lieber keine Zahl als eine erfundene.\n\nDie Heizwerte sind die üblichen; je nach Qualität schwanken sie um ein paar Prozent. Wer es genauer braucht, trägt den Preis gleich je Kilowattstunde ein.",
-          "diverter_solar_energy_entity": "Dasselbe als kWh-Zähler: die Kilowattstunden des Verbrauchers, die aus PV oder Batterie kamen. **Mehrere sind erlaubt.**\n\nIst er gesetzt, geht nur dieser Zähler in die Ersparnis ein - der Rest ist ganz normaler Netzbezug zum Arbeitspreis.",
-          "diverter_solar_power_entity": "**Nur wenn du es getrennt messen kannst.** Der Teil der Leistung oben, der gerade aus PV oder Batterie kommt.\n\nWarum das zählt: Ein Heizstab heizt im Juli mit Überschuss und im Januar mit Netzstrom. Dieselbe Kilowattstunde ist einmal geschenkte Energie und einmal eine Rechnung über den vollen Arbeitspreis. Nur der Teil, der aus der eigenen Anlage kam, wird mit dem Preis des Ersetzten bewertet.\n\nLeer: Es gilt, was der Name sagt - alles kam aus Überschuss. Für einen echten Überschussregler stimmt das auch.",
           "energy_entity": "Ein kWh-Zähler über **alles, was im Haus verbraucht wurde** - Netzbezug *und* selbst genutzter Solarstrom zusammen. Nicht der Bezugszähler: Der steht unter „Netz und Zähler“ und zählt nur, was aus dem Netz kam.\n\nWozu: Er ist der zweite Weg zum Eigenverbrauch. Normalerweise rechnet die Integration „erzeugt minus eingespeist“; hast du keinen Ertragszähler, greift stattdessen „verbraucht minus bezogen“ - und dafür wird er gebraucht.\n\nLeer: völlig in Ordnung, solange deine Anlagen einen Ertragszähler haben.",
           "power_entity": "Nur, wenn du den Hausverbrauch **misst** - etwa mit einem zweiten Zähler hinter dem Hausanschluss. In Watt, kein Zählerstand.\n\nNormalerweise leer lassen: Dann rechnet die Integration ihn aus Netzleistung plus Wechselrichterabgabe, und das ist bei einer Netzparallelanlage genauso richtig."
         },
@@ -452,6 +432,7 @@
           "plants": "Anlagen",
           "reset": "Kostenzähler leeren",
           "save": "Speichern und schließen",
+          "surplus": "Überschuss",
           "tidy": "Doppelte Sensoren"
         },
         "title": "PV-System"
@@ -481,13 +462,13 @@
           "enabled": "Aus, wenn diese Anlage keinen eigenen Wechselrichter hat.",
           "energy_entity": "Zählerstand in kWh für das, was dieses Gerät insgesamt abgegeben hat. Die Kostenrechnung nimmt ihn als Erzeugung - nur was der Wechselrichter abgibt, kann ins Netz gehen.",
           "frequency_entity": "Die Netzfrequenz, die dieses Gerät misst - um 50 Hz.",
-          "hybrid": "An, wenn das Gerät auch aus dem Netz laden kann (z. B. Victron MultiPlus).",
+          "hybrid": "An, wenn das Gerät auch aus dem Netz laden kann - ein Hybridwechselrichter mit Netzladefunktion.",
           "manufacturer": "Nur zur Anzeige - die Karte schreibt Hersteller und Modell untereinander.",
           "mode_entity": "Die Betriebsart als Text, z. B. „Netzparallel“ oder „Inselbetrieb“.",
           "model": "Nur zur Anzeige, z. B. die Typenbezeichnung vom Aufkleber.",
           "name": "Name dieses Wechselrichters, z. B. „GTN1000 L3“.",
           "phase": "Auf welcher Phase dieser einphasige Wechselrichter einspeist.",
-          "power_entity": "Die abgegebene AC-Leistung - der interne Sensor oder ein Zwischenzähler wie ein Shelly. Aus dieser Zahl entsteht der Hausverbrauch.",
+          "power_entity": "Die abgegebene AC-Leistung - der interne Sensor oder ein Zwischenzähler davor. Aus dieser Zahl entsteht der Hausverbrauch.",
           "rated_power_w": "Dauerleistung laut Typenschild. Daraus entsteht der Auslastungsbalken.",
           "temperature_entity": "Temperatur des Wechselrichters selbst."
         },
@@ -514,7 +495,7 @@
           "count": "So viele Module hängen an dieser Anlage.",
           "current_entity": "Der Strangstrom (DC) auf der Modulseite. Leer lassen ist in Ordnung.",
           "energy_entity": "Ein Zählerstand in kWh für den Ertrag dieser Module, falls vorhanden. Leer lassen ist in Ordnung.",
-          "manufacturer": "Der Modulhersteller, z. B. „Trina“. Nur zur Anzeige.",
+          "manufacturer": "Der Modulhersteller. Nur zur Anzeige.",
           "model": "Die Modulbezeichnung, z. B. „Vertex S 405“. Nur zur Anzeige.",
           "parallel": "Vier in Reihe und davon zwei Stränge parallel ergeben acht Module.",
           "peak_wp": "Die Spitzenleistung eines einzelnen Moduls laut Typenschild.",
@@ -590,6 +571,34 @@
         },
         "description": "Der Ausweg, wenn die Beträge einmal nicht mehr stimmen - typischerweise nach einem Zählertausch oder wenn im Bezugszählerfeld kurz die falsche Entität stand. Tag, Monat und Jahr heilen sich beim nächsten Wechsel von selbst; der Gesamtzeitraum trägt den Fehler weiter, bis jemand ihn leert.\n\nDer Gesamtzeitraum hat **zwei Quellen**, und deshalb gibt es zwei Haken.\n\n---\n\n**1. Gemessen seit dem ersten Lauf**\n\n{stand}\n\nDas liegt im Speicher der Integration. Der erste Haken wirft es weg und verankert alle Zähler bei ihrem heutigen Stand neu - sofort, nicht erst beim Speichern.\n\n---\n\n**2. Aus der Konfiguration: die „davor“-Angaben**\n\n{vorher}\n\nDaher kommen Beträge, die neben null gemessenen Kilowattstunden stehen und trotzdem stimmen. Der zweite Haken nimmt diese Felder aus der Konfiguration - er wirkt erst mit „Speichern und schließen“.\n\nMeistens will man ihn **nicht**: Diese Zahlen sind deine echte Vorgeschichte, und ohne sie beginnt die Amortisation bei null. Sinnvoll ist er, wenn du dich vertippt hast oder von vorn anfangen willst.\n\nInvestition und Inbetriebnahme bleiben in jedem Fall stehen - das sind Tatsachen über die Anlage, keine Zählerstände. Rückgängig machen kann man beides nicht.",
         "title": "Kostenzähler leeren"
+      },
+      "surplus": {
+        "data": {
+          "diverter_efficiency": "Wirkungsgrad der ersetzten Heizung",
+          "diverter_energy_entity": "Zähler Überschussverbraucher",
+          "diverter_fuel": "Ersetzt",
+          "diverter_name": "Überschussverbraucher",
+          "diverter_power_entity": "Leistung Überschussverbraucher",
+          "diverter_price": "Preis des Ersetzten: feste Zahl",
+          "diverter_price_entity": "Preis des Ersetzten: Entität statt fester Zahl",
+          "diverter_price_unit": "Preis des Ersetzten: je",
+          "diverter_solar_energy_entity": "Davon aus PV/Batterie: Zähler",
+          "diverter_solar_power_entity": "Davon aus PV/Batterie: Leistung"
+        },
+        "data_description": {
+          "diverter_efficiency": "Wie viel Wärme die **ersetzte** Heizung aus ihrem Brennstoff macht, in Prozent. Sie braucht mehr als eine Kilowattstunde Brennstoff für eine Kilowattstunde Wärme - genau darum geht es.\n\n• Gasbrennwertkessel: rund **92**\n• Älterer Gas- oder Ölkessel: **80** bis **88**\n• Pelletkessel: rund **90**\n• Fernwärme: **100** - übergeben wird Wärme, nicht Brennstoff\n• **Wärmepumpe: die Jahresarbeitszahl mal hundert.** Bei JAZ 3,5 also 350. Sie macht aus einer Kilowattstunde Strom dreieinhalb Kilowattstunden Wärme - ein Heizstab nur eine. Deshalb ist der Überschuss in einem Haus mit Wärmepumpe deutlich weniger wert, und das soll die Rechnung auch sagen.\n\n100 heißt: nicht umrechnen.",
+          "diverter_energy_entity": "kWh-Zähler dieser Verbraucher. **Mehrere sind erlaubt** - sie werden addiert.\n\nDiese Kilowattstunden fließen wirklich im Haus. Ob sie Geld sparen, hängt davon ab, was sie ersetzen: Wer damit statt mit Gas heizt, spart Gas und nicht Strom - deshalb werden sie in der Ersparnis getrennt bewertet, mit den beiden Feldern weiter unten.\n\nLeer: Der Überschuss zählt wie jeder andere Eigenverbrauch.",
+          "diverter_fuel": "Was dieser Verbraucher ersetzt. Davon hängt ab, was eine umgeleitete Kilowattstunde wert ist.\n\nErdgas, Flüssiggas, Öl, Pellets, Fernwärme oder Wärmepumpe: Der Wert ist der Preis dieses Brennstoffs je kWh - siehe die Felder darunter.\n\n„Nichts - es bleibt Strom“: Ein Hausspeicher oder ein Auto verbrennt nichts, es verschiebt Strom nach später. Dann ist eine Kilowattstunde genau den Arbeitspreis wert, und die Felder darunter werden ignoriert.",
+          "diverter_name": "Wie der Verbraucher in der Karte heißen soll, z. B. „Heizstab“.",
+          "diverter_power_entity": "Was die Überschussverbraucher gerade ziehen - der Heizstab im Brauchwasserspeicher, die Wallbox im Überschussladen, der Pufferspeicher der Wärmepumpe. **Mehrere sind erlaubt**; sie werden addiert.\n\nGemeint ist alles, was nur läuft, **weil** Überschuss da ist, und dabei Energie in einen Speicher legt - warmes Wasser, eine Autobatterie, ein Pufferspeicher. Ein Kühlschrank gehört nicht dazu: Der läuft sowieso.\n\nDiese Leistung wird vom Hausverbrauch abgezogen und ergibt den **Grundverbrauch** - das, was dein Haushalt ohne den Überschuss gebraucht hätte. Autarkie und Eigenverbrauch rechnen weiter auf dem **ganzen** Hausverbrauch; der Grundverbrauch steht daneben, weil nur er von Monat zu Monat vergleichbar ist.",
+          "diverter_price": "Der Preis, **wie er auf deiner Rechnung steht** - nicht umgerechnet. Umrechnen ist Arbeit der Integration: Wie viele Kilowattstunden in einem Liter, einem Kubikmeter oder einer Tonne stecken, weiß sie, und den Wirkungsgrad fragt sie darunter ab.\n\nWelche Einheit gemeint ist, sagst du im Feld daneben. Erdgas wird meist je kWh oder je m³ abgerechnet, Flüssiggas je Liter oder Kilogramm, Heizöl je Liter, Pellets je Tonne, Fernwärme je kWh.\n\nWeil sich das ständig ändert, ist das Feld darunter meistens das bessere: eine Entität, die den Preis liefert.\n\nLeer: Es gilt der Arbeitspreis, und die Anlage rechnet sich reicher, als sie ist.",
+          "diverter_price_entity": "Eine Entität, die diesen Preis liefert - **der bessere Weg für alles, was am Markt schwankt.** Gas und Öl tun das wie Strom; eine feste Zahl ist morgen falsch.\n\nSie hat Vorrang vor der festen Zahl darüber; meldet sie gerade nichts Brauchbares, gilt wieder die Zahl. Gemeint ist derselbe Preis in derselben Einheit - umgerechnet wird auch hier automatisch.",
+          "diverter_price_unit": "Worauf sich der Preis bezieht - **genau so, wie er abgerechnet wird**. Die Integration rechnet daraus Kilowattstunden:\n\n• Erdgas: je kWh oder je m³ (rund 10 kWh je m³)\n• Flüssiggas: je Liter (6,57 kWh), je kg (12,87 kWh)\n• Heizöl: je Liter (10 kWh), je kg (11,9 kWh)\n• Pellets: je kg (4,8 kWh) oder je Tonne (4800 kWh)\n• Fernwärme und Wärmepumpe: je kWh\n\nPasst die Einheit nicht zum Brennstoff - Heizöl je Kubikmeter gibt es nicht -, wird nichts umgerechnet und es gilt der Arbeitspreis. Lieber keine Zahl als eine erfundene.\n\nDie Heizwerte sind die üblichen; je nach Qualität schwanken sie um ein paar Prozent. Wer es genauer braucht, trägt den Preis gleich je Kilowattstunde ein.",
+          "diverter_solar_energy_entity": "Dasselbe als kWh-Zähler: die Kilowattstunden des Verbrauchers, die aus PV oder Batterie kamen. **Mehrere sind erlaubt.**\n\nIst er gesetzt, geht nur dieser Zähler in die Ersparnis ein - der Rest ist ganz normaler Netzbezug zum Arbeitspreis.",
+          "diverter_solar_power_entity": "**Nur wenn du es getrennt messen kannst.** Der Teil der Leistung oben, der gerade aus PV oder Batterie kommt.\n\nWarum das zählt: Ein Heizstab heizt im Juli mit Überschuss und im Januar mit Netzstrom. Dieselbe Kilowattstunde ist einmal geschenkte Energie und einmal eine Rechnung über den vollen Arbeitspreis. Nur der Teil, der aus der eigenen Anlage kam, wird mit dem Preis des Ersetzten bewertet.\n\nLeer: Es gilt, was der Name sagt - alles kam aus Überschuss. Für einen echten Überschussregler stimmt das auch."
+        },
+        "description": "Verbraucher, die **nur laufen, weil Überschuss da ist**, und dabei Energie in einen Speicher legen: der Heizstab im Brauchwasserspeicher, die Wallbox im Überschussladen, der Pufferspeicher der Wärmepumpe. Der Kühlschrank gehört nicht dazu - der läuft sowieso.\n\nSie sind ein Thema für sich, weil ihre Kilowattstunden **nicht Strom ersetzen, sondern Gas, Öl, Wärme** - und deshalb anders bewertet werden als jeder andere Eigenverbrauch.\n\nAlles hier darf leer bleiben. Wer keinen solchen Verbraucher hat, überspringt diesen Schritt.\n\n**Wo eine Entität und eine feste Zahl nebeneinander stehen, gewinnt immer die Entität.** Die Zahl ist nur der Rückfall, wenn die Entität gerade nichts Brauchbares meldet. Das gilt genauso bei Arbeitspreis, Vergütung und Grundpreis.",
+        "title": "Überschuss"
       },
       "tidy": {
         "data": {
