@@ -60,6 +60,18 @@ const BATTERIE_B = 130;   // Breite des Batteriekastens
 // Phasen. Beide sind Klemmkästen - die Phasen enden an ihrer Kante, statt sie
 // zu kreuzen. Das Netz steht darunter und gehört nicht mehr ins Haus.
 const ZAEHLER_B = 108;    // Breite des Zählerkastens
+// Die Phasenzeilen sitzen in einer Pille auf der Kastenkante. Ein Stück von
+// ihr ragt hinaus: Dort endet die Leitung, dort sitzt der Anschlusspunkt, und
+// dort ist die Linie des Kastens unterbrochen. Damit gehört jede Zahl sichtbar
+// zu ihrer Phase, statt nur zufällig auf deren Höhe zu stehen.
+//
+// Die Breite trägt den schlimmsten Fall, den eine Hausanlage zeigt:
+// "L1 → −10,56 kW" passt mit Luft zwischen Pfeil und Zahl. Die Höhe hat über
+// der 10-Pixel-Schrift noch rund einen Pixel Reserve - genug für ein Thema,
+// das die Schrift etwas größer stellt.
+const PILLE_B = 86;       // Gesamtbreite, Überstand eingerechnet
+const PILLE_H = 15;       // Höhe
+const PILLE_UEBER = 8;    // wie weit sie über die Kastenkante hinausragt
 const HAUS_B = 152;       // Breite des Hauskastens
 const BAND_OBEN = 40;     // Titel und Modell über der ersten Phasenzeile
 const BAND_UNTEN = 16;    // Luft unter der letzten Phasenzeile
@@ -547,6 +559,15 @@ class PvSystemCard extends HTMLElement {
 
       /* Der Füllstandsbalken der Batterie - dieselben Stufen wie in Home
          Assistant: unter zwanzig Prozent rot, unter fünfzig orange. */
+      /* Die Phasenpille auf der Kastenkante. Deckend gefüllt und nach dem
+         Rahmen gezeichnet: Die Linie des Kastens endet an ihr und beginnt
+         dahinter wieder, statt quer hindurchzulaufen. */
+      .pille {
+        fill: var(--card-background-color, #fff);
+        stroke: var(--divider-color, #cfd8dc);
+        stroke-width: 1;
+      }
+
       .f-voll { fill: var(--pv-akku, #3ec26a); }
       .f-halb { fill: var(--pv-warm, #e8912a); }
       .f-leer { fill: var(--pv-bezug, #e05c4b); }
@@ -1307,8 +1328,8 @@ class PvSystemCard extends HTMLElement {
 
     for (let i = 0; i < g.phasen; i++) {
       const y = g.yBus + i * M.busAbstand;
-      const links = g.zaehlerX + ZAEHLER_B;
-      const rechts = g.hausX;
+      const links = g.zaehlerX + ZAEHLER_B + PILLE_UEBER;
+      const rechts = g.hausX - PILLE_UEBER;
       // Die Knotenpunkte von links nach rechts. Ein Wechselrichter außerhalb
       // der Strecke - bei vielen Anlagen steht der Zähler unter einer Spalte -
       // erweitert sie einfach.
@@ -1364,8 +1385,8 @@ class PvSystemCard extends HTMLElement {
    */
   _pfeilstellen() {
     const g = this._geo;
-    const links = g.zaehlerX + ZAEHLER_B;
-    const rechts = g.hausX;
+    const links = g.zaehlerX + ZAEHLER_B + PILLE_UEBER;
+    const rechts = g.hausX - PILLE_UEBER;
     const grenzen = [
       ...new Set([
         links,
@@ -1396,11 +1417,10 @@ class PvSystemCard extends HTMLElement {
 
   _untenZeichnen(leitungen, bloecke) {
     const g = this._geo;
-    const links = g.zaehlerX + ZAEHLER_B;
 
     /* --- Zähler -------------------------------------------------------- */
-    // Ein Klemmkasten neben den Phasen: Die Leitungen enden an seiner Kante,
-    // statt ihn zu kreuzen. Auf der Höhe jeder Phase steht dort, was diese
+    // Ein Klemmkasten neben den Phasen: Die Leitungen enden an den Pillen auf
+    // seiner Kante, statt ihn zu kreuzen. In jeder Pille steht, was diese
     // Phase am Zähler gerade führt - mit Vorzeichen, so wie das Gerät zählt.
     const zaehler = this._kasten(
       bloecke, "grid:", g.zaehlerX, g.bandY, ZAEHLER_B, g.bandH
@@ -1415,15 +1435,26 @@ class PvSystemCard extends HTMLElement {
     if (g.zeigePhasen) {
       for (let i = 0; i < g.phasen; i++) {
         const y = g.yBus + i * M.busAbstand;
+        // Spiegelbildlich zum Haus, Zeichen für Zeichen dasselbe: "L1 →"
+        // und dahinter der Wert. Am Zähler zeigt der Pfeil auf die Leitung
+        // hinaus, im Haus von ihr herein - die Richtung steht im Vorzeichen.
+        const pilleX = g.zaehlerX + ZAEHLER_B + PILLE_UEBER - PILLE_B;
+        zaehler.appendChild(
+          e("rect", {
+            class: "pille",
+            x: pilleX, y: y - PILLE_H / 2,
+            width: PILLE_B, height: PILLE_H, rx: PILLE_H / 2,
+          })
+        );
         zaehler.appendChild(
           e("text", {
-            class: "klein", x: g.zaehlerX + 10, y: y + 3.5, text: `L${i + 1}`,
+            class: "klein", x: pilleX + 8, y: y + 3.5, text: `L${i + 1} \u2192`,
           })
         );
         this._ref(
           zaehler, `meter:${i}`,
           e("text", {
-            class: "mini rechts", x: g.zaehlerX + ZAEHLER_B - 10, y: y + 3.5,
+            class: "mini rechts", x: pilleX + PILLE_B - 8, y: y + 3.5,
           })
         );
       }
@@ -1456,23 +1487,35 @@ class PvSystemCard extends HTMLElement {
       haus, "house:quoten",
       e("text", { class: "mini", x: g.hausX + 10, y: g.bandY + 30 })
     );
-    // Die Phasenwerte stehen links, zur Leitung hin, mit einem Pfeil dazwischen:
-    // "L1 → 840 W" liest sich in der Richtung, in die der Strom fließt, und
-    // sagt gleich mit, dass es um einen Zufluss geht und nicht um einen Namen.
-    // Rechts wird dadurch Platz frei - dort steht das Haus.
+    // Die Phasenwerte stehen links, zur Leitung hin, in derselben Pille wie am
+    // Zähler: "L1 → 840 W" liest sich in der Richtung, in die der Strom
+    // fließt, und sagt gleich mit, dass es um einen Zufluss geht und nicht um
+    // einen Namen. Rechts wird dadurch Platz frei - dort steht das Haus.
     const zeilen = g.zeigePhasen ? g.phasen : 1;
     for (let i = 0; i < zeilen; i++) {
       const y = g.yBus + i * M.busAbstand;
+      const pilleX = g.hausX - PILLE_UEBER;
       if (g.zeigePhasen) {
         haus.appendChild(
+          e("rect", {
+            class: "pille",
+            x: pilleX, y: y - PILLE_H / 2,
+            width: PILLE_B, height: PILLE_H, rx: PILLE_H / 2,
+          })
+        );
+        haus.appendChild(
           e("text", {
-            class: "klein", x: g.hausX + 10, y: y + 3.5, text: `L${i + 1} \u2192`,
+            class: "klein", x: pilleX + 8, y: y + 3.5, text: `L${i + 1} \u2192`,
           })
         );
       }
       this._ref(
         haus, `haus:${i}`,
-        e("text", { class: "mini", x: g.hausX + (g.zeigePhasen ? 40 : 10), y: y + 3.5 })
+        e("text", {
+          class: g.zeigePhasen ? "mini rechts" : "mini",
+          x: g.zeigePhasen ? pilleX + PILLE_B - 8 : g.hausX + 10,
+          y: y + 3.5,
+        })
       );
     }
     haus.appendChild(
@@ -1499,10 +1542,16 @@ class PvSystemCard extends HTMLElement {
 
     /* --- Klemmpunkte an beiden Kästen ---------------------------------- */
     // Nach den Kästen gezeichnet, damit sie auf der Kante sitzen statt
-    // dahinter zu verschwinden. Sie sagen: Hier ist die Phase angeschlossen.
+    // dahinter zu verschwinden. Sie sitzen auf der äußeren Kante der Pille,
+    // nicht auf der des Kastens: Dort endet die Leitung, und dort sagt der
+    // Punkt, dass die Phase angeschlossen ist.
     for (let i = 0; i < g.phasen; i++) {
       const y = g.yBus + i * M.busAbstand;
-      for (const x of [links, g.hausX]) {
+      const enden = [
+        g.zaehlerX + ZAEHLER_B + PILLE_UEBER,
+        g.hausX - PILLE_UEBER,
+      ];
+      for (const x of enden) {
         bloecke.appendChild(
           e("circle", { cx: x, cy: y, r: 3.4, fill: "var(--pv-netz, #4a8fd4)" })
         );
