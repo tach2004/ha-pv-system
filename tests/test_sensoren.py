@@ -524,3 +524,96 @@ def test_fluessiggas_ist_eine_eigene_auswahl():
     assert topologie.haus_normalisieren({"diverter_fuel": "kohle"})[
         "diverter_fuel"
     ] == "gas"
+
+
+# ----------------------------------------------- Preis je Einheit umrechnen
+
+
+def _umleiter(**haus):
+    """Ein Standort mit einem Überschussverbraucher und einem Preis daran."""
+    grund = {
+        "calculate": True,
+        "power_entity": "sensor.haus",
+        "diverter_power_entity": ["sensor.stab"],
+    }
+    grund.update(haus)
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.netz", 0, "W")
+    hass.states.setzen("sensor.stab", 1500, "W")
+    hass.states.setzen("sensor.preis", 0.80, "EUR/l")
+    aufbau = _aufbau(house=grund, costs={"price_per_kwh": 0.34})
+    return PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["costs"]["diverted_price"]
+
+
+def test_fluessiggas_je_liter_wird_umgerechnet():
+    """0,80 € je Liter sind bei 6,57 kWh/l und 92 % rund 0,132 € je kWh."""
+    wert = _umleiter(
+        diverter_fuel="lpg",
+        diverter_price=0.80,
+        diverter_price_unit="liter",
+        diverter_efficiency=92,
+    )
+    assert abs(wert - 0.80 / 6.57 / 0.92) < 0.0001
+
+
+def test_heizoel_je_liter_wird_umgerechnet():
+    wert = _umleiter(
+        diverter_fuel="oil",
+        diverter_price=1.00,
+        diverter_price_unit="liter",
+        diverter_efficiency=90,
+    )
+    assert abs(wert - 1.00 / 10.0 / 0.90) < 0.0001
+
+
+def test_pellets_je_tonne_werden_umgerechnet():
+    wert = _umleiter(
+        diverter_fuel="pellets",
+        diverter_price=350.0,
+        diverter_price_unit="ton",
+        diverter_efficiency=90,
+    )
+    assert abs(wert - 350.0 / 4800.0 / 0.90) < 0.0001
+
+
+def test_die_waermepumpe_rechnet_mit_der_jahresarbeitszahl():
+    """JAZ 3,5 heißt 350 % - eine kWh Strom wird zu dreieinhalb kWh Wärme."""
+    wert = _umleiter(
+        diverter_fuel="heatpump",
+        diverter_price=0.34,
+        diverter_price_unit="kwh",
+        diverter_efficiency=350,
+    )
+    # Der Überschuss ersetzt dann nur noch rund zehn statt vierunddreißig Cent.
+    assert abs(wert - 0.34 / 3.5) < 0.0001
+
+
+def test_eine_einheit_die_nicht_passt_erfindet_keine_zahl():
+    """Heizöl je Kubikmeter gibt es nicht - lieber gar kein Wertansatz."""
+    assert _umleiter(
+        diverter_fuel="oil", diverter_price=1.00, diverter_price_unit="m3"
+    ) is None
+
+
+def test_die_preisentitaet_wird_genauso_umgerechnet():
+    """Sonst stünde derselbe Preis je nach Herkunft für etwas anderes."""
+    wert = _umleiter(
+        diverter_fuel="lpg",
+        diverter_price=0.50,
+        diverter_price_entity="sensor.preis",
+        diverter_price_unit="liter",
+        diverter_efficiency=92,
+    )
+    # 0,80 aus der Entität, nicht 0,50 aus der festen Zahl.
+    assert abs(wert - 0.80 / 6.57 / 0.92) < 0.0001
+
+
+def test_ersetzt_strom_ignoriert_auch_die_einheit():
+    assert _umleiter(
+        diverter_fuel="electricity",
+        diverter_price=0.80,
+        diverter_price_unit="liter",
+    ) is None

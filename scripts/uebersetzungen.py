@@ -198,6 +198,13 @@ AUSWAHL: dict[str, dict[str, T]] = {
         "month": ("je Monat", "per month"),
         "year": ("je Jahr", "per year"),
     },
+    "diverter_price_unit": {
+        "kwh": ("Kilowattstunde (kWh)", "kilowatt hour (kWh)"),
+        "liter": ("Liter", "litre"),
+        "m3": ("Kubikmeter (m³)", "cubic metre (m³)"),
+        "kg": ("Kilogramm", "kilogram"),
+        "ton": ("Tonne", "tonne"),
+    },
 }
 
 # --------------------------------------------------------------- Felder
@@ -288,12 +295,20 @@ FELDER: dict[str, T] = {
     ),
     "diverter_fuel": ("Ersetzt", "Replaces"),
     "diverter_price": (
-        "Wert je kWh des Ersetzten: feste Zahl",
-        "Value per kWh replaced: fixed number",
+        "Preis des Ersetzten: feste Zahl",
+        "Price of what is replaced: fixed number",
     ),
     "diverter_price_entity": (
-        "Wert je kWh des Ersetzten: Entität statt fester Zahl",
-        "Value per kWh replaced: entity instead of fixed number",
+        "Preis des Ersetzten: Entität statt fester Zahl",
+        "Price of what is replaced: entity instead of fixed number",
+    ),
+    "diverter_price_unit": (
+        "Preis des Ersetzten: je",
+        "Price of what is replaced: per",
+    ),
+    "diverter_efficiency": (
+        "Wirkungsgrad der ersetzten Heizung",
+        "Efficiency of the replaced heating",
     ),
     "animate": ("Flusslinien animieren", "Animate flow lines"),
     "show_strings": ("Verschaltung zeichnen", "Draw string layout"),
@@ -950,54 +965,96 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "the energy price, and the fields below are ignored.",
         ),
         "diverter_price": (
-            "Was **eine Kilowattstunde des Ersetzten** kostet, geteilt durch "
-            "den Wirkungsgrad. Dein Preis, nicht irgendeiner - die Zahlen hier "
-            "sind nur Rechenwege:\n\n"
-            "• **Erdgas** 0,11 €/kWh ÷ 0,92 Kessel → rund **0,12**. Die "
-            "Gasrechnung weist kWh aus; Kubikmeter mal Brennwert (rund 10) "
-            "ergibt kWh.\n"
-            "• **Flüssiggas** 0,80 €/l ÷ 6,6 kWh/l ÷ 0,92 → rund **0,13**\n"
-            "• **Heizöl** 1,00 €/l ÷ 10 kWh/l ÷ 0,9 → rund **0,11**\n"
-            "• **Pellets** 350 €/t ÷ 4800 kWh/t ÷ 0,9 → rund **0,08**\n"
-            "• **Fernwärme**: der Arbeitspreis deines Wärmevertrags\n"
-            "• **Wärmepumpe**: Arbeitspreis ÷ Jahresarbeitszahl, bei 0,34 € "
-            "und JAZ 3,5 → rund **0,10**. Sie macht aus einer Kilowattstunde "
-            "dreieinhalb - ein Heizstab nur eine.\n\n"
-            "Leer: Es gilt der Arbeitspreis, und die Anlage rechnet sich "
-            "reicher, als sie ist.",
-            "What **one kilowatt hour of the replaced energy** costs, divided "
-            "by the efficiency. Your price, not somebody's - the numbers here "
-            "are just the arithmetic:\n\n"
-            "• **Natural gas** 0.11 €/kWh ÷ 0.92 boiler → about **0.12**. Gas "
-            "bills state kWh; cubic metres times calorific value (about 10) "
-            "gives kWh.\n"
-            "• **LPG** 0.80 €/l ÷ 6.6 kWh/l ÷ 0.92 → about **0.13**\n"
-            "• **Heating oil** 1.00 €/l ÷ 10 kWh/l ÷ 0.9 → about **0.11**\n"
-            "• **Pellets** 350 €/t ÷ 4800 kWh/t ÷ 0.9 → about **0.08**\n"
-            "• **District heating**: your heat contract's energy price\n"
-            "• **Heat pump**: energy price ÷ seasonal performance factor, at "
-            "0.34 € and SPF 3.5 → about **0.10**. It turns one kilowatt hour "
-            "into three and a half - an immersion heater only into one.\n\n"
-            "Empty: the energy price applies, and the system looks better off "
-            "than it is.",
+            "Der Preis, **wie er auf deiner Rechnung steht** - nicht "
+            "umgerechnet. Umrechnen ist Arbeit der Integration: Wie viele "
+            "Kilowattstunden in einem Liter, einem Kubikmeter oder einer Tonne "
+            "stecken, weiß sie, und den Wirkungsgrad fragt sie darunter "
+            "ab.\n\nWelche Einheit gemeint ist, sagst du im Feld daneben. "
+            "Erdgas wird meist je kWh oder je m³ abgerechnet, Flüssiggas je "
+            "Liter oder Kilogramm, Heizöl je Liter, Pellets je Tonne, "
+            "Fernwärme je kWh.\n\nWeil sich das ständig ändert, ist das "
+            "Feld darunter meistens das bessere: eine Entität, die den Preis "
+            "liefert.\n\nLeer: Es gilt der Arbeitspreis, und die Anlage "
+            "rechnet sich reicher, als sie ist.",
+            "The price **as it appears on your bill** - not converted. "
+            "Converting is the integration's job: it knows how many kilowatt "
+            "hours are in a litre, a cubic metre or a tonne, and it asks for "
+            "the efficiency below.\n\nWhich unit you mean is set in the "
+            "field next to it. Natural gas is usually billed per kWh or per "
+            "m³, LPG per litre or kilogram, heating oil per litre, pellets "
+            "per tonne, district heating per kWh.\n\nBecause this changes "
+            "constantly, the field below is usually the better one: an entity "
+            "providing the price.\n\nEmpty: the energy price applies, and "
+            "the system looks better off than it is.",
+        ),
+        "diverter_price_unit": (
+            "Worauf sich der Preis bezieht - **genau so, wie er abgerechnet "
+            "wird**. Die Integration rechnet daraus Kilowattstunden:\n\n"
+            "• Erdgas: je kWh oder je m³ (rund 10 kWh je m³)\n"
+            "• Flüssiggas: je Liter (6,57 kWh), je kg (12,87 kWh)\n"
+            "• Heizöl: je Liter (10 kWh), je kg (11,9 kWh)\n"
+            "• Pellets: je kg (4,8 kWh) oder je Tonne (4800 kWh)\n"
+            "• Fernwärme und Wärmepumpe: je kWh\n\n"
+            "Passt die Einheit nicht zum Brennstoff - Heizöl je Kubikmeter "
+            "gibt es nicht -, wird nichts umgerechnet und es gilt der "
+            "Arbeitspreis. Lieber keine Zahl als eine erfundene.\n\n"
+            "Die Heizwerte sind die üblichen; je nach Qualität schwanken sie "
+            "um ein paar Prozent. Wer es genauer braucht, trägt den Preis "
+            "gleich je Kilowattstunde ein.",
+            "What the price refers to - **exactly as it is billed**. The "
+            "integration converts it into kilowatt hours:\n\n"
+            "• Natural gas: per kWh or per m³ (about 10 kWh per m³)\n"
+            "• LPG: per litre (6.57 kWh), per kg (12.87 kWh)\n"
+            "• Heating oil: per litre (10 kWh), per kg (11.9 kWh)\n"
+            "• Pellets: per kg (4.8 kWh) or per tonne (4800 kWh)\n"
+            "• District heating and heat pump: per kWh\n\n"
+            "If the unit does not fit the fuel - there is no heating oil per "
+            "cubic metre - nothing is converted and the energy price applies. "
+            "Better no number than an invented one.\n\nThe calorific values "
+            "are the usual ones; they vary by a few percent with quality. If "
+            "you need it exact, enter the price per kilowatt hour directly.",
         ),
         "diverter_price_entity": (
-            "Eine Entität, die diesen Wert liefert - für alles, was am Markt "
-            "schwankt. Gas und Öl tun das wie Strom, und wer den Preis ohnehin "
-            "schon als Sensor im Haus hat, soll ihn nicht zweimal "
-            "pflegen.\n\nSie hat Vorrang vor der festen Zahl darüber; meldet "
-            "sie gerade nichts Brauchbares, gilt wieder die Zahl. **Achtung:** "
-            "Gemeint ist der Wert je kWh *nach* Wirkungsgrad. Ein Sensor, der "
-            "den reinen Gaspreis liefert, ist um den Kesselwirkungsgrad zu "
-            "niedrig - dafür genügt ein Vorlagensensor, der einmal teilt.",
-            "An entity providing this value - for everything that moves with "
-            "the market. Gas and oil do, just like electricity, and anyone who "
-            "already has the price as a sensor should not maintain it "
-            "twice.\n\nIt takes precedence over the fixed number above; if it "
-            "reports nothing usable, the number applies again. **Note:** this "
-            "is the value per kWh *after* efficiency. A sensor giving the raw "
-            "gas price is too low by the boiler efficiency - a template sensor "
-            "that divides once is enough.",
+            "Eine Entität, die diesen Preis liefert - **der bessere Weg für "
+            "alles, was am Markt schwankt.** Gas und Öl tun das wie Strom; "
+            "eine feste Zahl ist morgen falsch.\n\nSie hat Vorrang vor der "
+            "festen Zahl darüber; meldet sie gerade nichts Brauchbares, gilt "
+            "wieder die Zahl. Gemeint ist derselbe Preis in derselben "
+            "Einheit - umgerechnet wird auch hier automatisch.",
+            "An entity providing this price - **the better way for anything "
+            "that moves with the market.** Gas and oil do, just like "
+            "electricity; a fixed number is wrong tomorrow.\n\nIt takes "
+            "precedence over the fixed number above; if it reports nothing "
+            "usable, the number applies again. It means the same price in the "
+            "same unit - conversion happens here too.",
+        ),
+        "diverter_efficiency": (
+            "Wie viel Wärme die **ersetzte** Heizung aus ihrem Brennstoff "
+            "macht, in Prozent. Sie braucht mehr als eine Kilowattstunde "
+            "Brennstoff für eine Kilowattstunde Wärme - genau darum geht "
+            "es.\n\n• Gasbrennwertkessel: rund **92**\n"
+            "• Älterer Gas- oder Ölkessel: **80** bis **88**\n"
+            "• Pelletkessel: rund **90**\n"
+            "• Fernwärme: **100** - übergeben wird Wärme, nicht Brennstoff\n"
+            "• **Wärmepumpe: die Jahresarbeitszahl mal hundert.** Bei JAZ 3,5 "
+            "also 350. Sie macht aus einer Kilowattstunde Strom dreieinhalb "
+            "Kilowattstunden Wärme - ein Heizstab nur eine. Deshalb ist der "
+            "Überschuss in einem Haus mit Wärmepumpe deutlich weniger wert, "
+            "und das soll die Rechnung auch sagen.\n\n100 heißt: nicht "
+            "umrechnen.",
+            "How much heat the **replaced** heating makes from its fuel, in "
+            "percent. It needs more than one kilowatt hour of fuel for one "
+            "kilowatt hour of heat - that is the whole point.\n\n"
+            "• Condensing gas boiler: about **92**\n"
+            "• Older gas or oil boiler: **80** to **88**\n"
+            "• Pellet boiler: about **90**\n"
+            "• District heating: **100** - what arrives is heat, not fuel\n"
+            "• **Heat pump: the seasonal performance factor times a "
+            "hundred.** At SPF 3.5 that is 350. It turns one kilowatt hour of "
+            "electricity into three and a half kilowatt hours of heat - an "
+            "immersion heater only into one. That is why surplus is worth "
+            "much less in a house with a heat pump, and the calculation "
+            "should say so.\n\n100 means: do not convert.",
         ),
         "power_entity": (
             "Nur, wenn du den Hausverbrauch **misst** - etwa mit einem zweiten "
@@ -1280,7 +1337,8 @@ HAUSFELDER = [
     "calculate", "power_entity", "energy_entity",
     "diverter_name", "diverter_power_entity", "diverter_energy_entity",
     "diverter_solar_power_entity", "diverter_solar_energy_entity",
-    "diverter_fuel", "diverter_price", "diverter_price_entity",
+    "diverter_fuel", "diverter_price", "diverter_price_unit",
+    "diverter_price_entity", "diverter_efficiency",
 ]
 ANZEIGEFELDER = ["animate", "show_strings", "show_phases", "sensor_interval"]
 KOSTENFELDER = [

@@ -735,3 +735,36 @@ def test_ohne_durchschnittspreis_gilt_der_heutige():
     leer = {"import": None, "export": None, "own": None, "anlage:a1": None}
     ergebnis = r.rechnen(leer, PREISE, {}, anlagen, jetzt=jetzt)
     assert ergebnis["plants"]["a1"]["savings"] == round(1000 * 0.34, 2)
+
+
+def test_grundpreis_laeuft_nur_ueber_die_gemessene_zeit():
+    """Nach dem Zurücksetzen darf keine Zählergebühr für alte Jahre dastehen.
+
+    Der Gesamtzeitraum beginnt mit der Inbetriebnahme - daran hängt die
+    Amortisation. Der Grundpreis darf aber nur über die Zeit laufen, in der
+    wirklich gemessen wurde: Sonst stehen nach dem Leeren Hunderte Euro
+    Netzentgelt neben null Kilowattstunden, und niemand versteht, woher.
+    """
+    rechner = _rechner()
+    anlagen = [{
+        "id": "a1",
+        "name": "Dach",
+        "commissioned": (_jetzt() - timedelta(days=1200)).date().isoformat(),
+    }]
+    preise = {"price": 0.30, "base": 15.0}
+    rechner.rechnen({"import": 100.0}, preise, {}, anlagen)
+    gesamt = rechner.rechnen({"import": 100.0}, preise, {}, anlagen)["periods"]["total"]
+
+    # Der Zeitraum beginnt vor über drei Jahren ...
+    assert _tage(gesamt["start"]) > 1000
+    # ... gemessen wurde aber gerade erst, und nur darauf zählt der Grundpreis.
+    assert gesamt["cost"] is not None
+    assert gesamt["cost"] < 1.0, gesamt["cost"]
+
+
+def _tage(marke):
+    """Wie lange die Marke her ist - sie darf ein Datum oder ein Zeitpunkt sein."""
+    wann = datetime.fromisoformat(str(marke))
+    if wann.tzinfo is None:
+        wann = wann.replace(tzinfo=_jetzt().tzinfo)
+    return (_jetzt() - wann).days

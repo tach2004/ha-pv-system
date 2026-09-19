@@ -146,6 +146,11 @@ function prozent(wert, sprache) {
   return einheit(wert, "%", 0, sprache);
 }
 
+/** Eine Energiemenge in Kilowattstunden, mit einer Nachkommastelle. */
+function kwh(wert, sprache) {
+  return einheit(wert, "kWh", 1, sprache);
+}
+
 /** Ein Geldbetrag in der eingestellten Währung. */
 function geld(wert, waehrung, sprache) {
   const n = zahl(wert);
@@ -548,6 +553,15 @@ class PvSystemCard extends HTMLElement {
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
       .kennzahl .v2:empty { display: none; }
+      .kennzahl .v:has(> span:first-child:empty) { display: none; }
+      /* Das Wort hinter der Zahl: klein, grau, mit etwas Luft davor. Es sagt,
+         welche der beiden gleich großen Zahlen welche ist. */
+      .kennzahl .vwort {
+        font-size: 10px; font-weight: 400;
+        color: var(--secondary-text-color, #727272);
+        margin-left: 4px;
+      }
+      .kennzahl .vwort:empty { margin-left: 0; }
 
       /* Das kleine „i“ - in HTML als Kreis, im SVG als eigenes Zeichen. Es
          steht überall dort, wo ein Klick etwas öffnet, und nirgendwo sonst. */
@@ -1656,7 +1670,9 @@ class PvSystemCard extends HTMLElement {
       ["pv", "Erzeugung"],
       ["haus", "Verbrauch"],
       ["autarkie", "Autarkie"],
-      ["peak", "Installiert"],
+      // Zwei Zahlen gleichen Ranges: Was auf dem Dach liegt und was im
+      // Keller steht. Beide gleich groß, jede mit ihrem Wort dahinter.
+      ["peak", "Installiert", true],
       ["akku", "Speicher"],
     ];
     // Die beiden Geldkacheln nur, wenn ein Preis hinterlegt ist - sonst
@@ -1665,7 +1681,7 @@ class PvSystemCard extends HTMLElement {
     if (kosten.configured) {
       felder.push(["ertrag", "Ertrag heute"], ["kosten", "Kosten heute"]);
     }
-    for (const [schluessel, beschriftung] of felder) {
+    for (const [schluessel, beschriftung, zweizeilig] of felder) {
       const geldkachel = schluessel === "ertrag" || schluessel === "kosten";
       const z = e("div", {
         class: geldkachel ? "kennzahl block" : "kennzahl",
@@ -1682,9 +1698,21 @@ class PvSystemCard extends HTMLElement {
       // man raten, welche Kachel sich öffnen lässt und welche nur dasteht.
       if (geldkachel) kopf.appendChild(e("span", { class: "info", text: "i" }));
       z.appendChild(kopf);
-      const wert = e("div", { class: "v", text: "–" });
-      z.appendChild(wert);
-      this._refs.set(`kpi:${schluessel}`, wert);
+      // Eine Wertzeile trägt die Zahl groß und - wo es zwei davon gibt -
+      // dahinter klein, worum es sich handelt. Sonst stünden in einer Kachel
+      // zwei fette Zahlen ohne Beschriftung untereinander.
+      const zeile = (name) => {
+        const reihe = e("div", { class: "v" });
+        const zahl = e("span", { text: "–" });
+        reihe.appendChild(zahl);
+        const wort = e("span", { class: "vwort", text: "" });
+        reihe.appendChild(wort);
+        this._refs.set(`kpi:${name}`, zahl);
+        this._refs.set(`kpi:${name}:wort`, wort);
+        z.appendChild(reihe);
+      };
+      zeile(schluessel);
+      if (zweizeilig) zeile(`${schluessel}2`);
       // Eine zweite, kleinere Zeile für das, was sonst umbrechen würde: beim
       // Speicher die Kapazität, bei der Autarkie der Eigenverbrauch. Die
       // Kachelbreite bleibt dieselbe - auf dem Telefon stehen sonst plötzlich
@@ -1961,45 +1989,51 @@ class PvSystemCard extends HTMLElement {
     this._setzen("kpi:pv", watt(t.pv_power, l));
     this._setzen("kpi:haus", watt(d.house.house_power, l));
     this._setzen("kpi:netz", wattVz(netzleistung, l));
-    // Ladestand groß, Leistung klein darunter: zwei Zahlen, die sich beide
-    // dauernd ändern. Die eingebaute Kapazität ändert sich nie und steht
-    // deshalb bei "Installiert" - dort, wo auch die Modulleistung steht.
+    // Ladestand groß, Leistung und Kapazität klein darunter.
     const akkuP = zahl(t.battery_power);
+    const akkuKap = zahl(t.battery_capacity);
     this._setzen("kpi:akku", t.battery_count ? prozent(t.battery_soc, l) : "–");
-    this._setzen(
-      "kpi:akku:zusatz",
-      t.battery_count && akkuP !== null && Math.abs(akkuP) > 10
-        ? `${akkuP > 0 ? "+" : "−"}${watt(Math.abs(akkuP), l)}`
-        : ""
-    );
+    const akkuZeile = [];
+    if (akkuP !== null && Math.abs(akkuP) > 10) {
+      akkuZeile.push(`${akkuP > 0 ? "+" : "−"}${watt(Math.abs(akkuP), l)}`);
+    }
+    if (akkuKap) akkuZeile.push(`${kwh(akkuKap, l)}`);
+    this._setzen("kpi:akku:zusatz", t.battery_count ? akkuZeile.join(" · ") : "");
     this._setzen("kpi:autarkie", prozent(d.house.self_sufficiency, l));
+    // Immer da, auch ohne Zahl: Nachts wird nichts erzeugt, das im Haus
+    // bleiben könnte - die Quote ist dann nicht null, sondern unbestimmt, und
+    // ein Strich sagt das. Eine Kachel, die abends eine Zeile verliert, sieht
+    // aus wie ein Fehler.
     this._setzen(
       "kpi:autarkie:zusatz",
-      d.house.self_consumption === null || d.house.self_consumption === undefined
-        ? ""
-        : `Eigen ${prozent(d.house.self_consumption, l)}`
+      `Eigen ${prozent(d.house.self_consumption, l)}`
     );
     // Was fest verbaut ist, steht beisammen: oben das Dach, darunter der
-    // Speicher. Zwei Zahlen, die sich nur ändern, wenn jemand schraubt.
-    const akkuKap = zahl(t.battery_capacity);
+    // Speicher. Zwei Zahlen gleichen Ranges, also auch gleich groß - das Wort
+    // dahinter klein, damit man weiß, welche welche ist.
+    // Beide Zahlen gleich groß, denn sie sind gleich wichtig. Platz dafür
+    // entsteht, indem die Einheit ins kleine Wort dahinter wandert: In 92
+    // Pixel passt "4,81 kWp Module" nicht, "4,81" und daneben klein
+    // "kWp Module" schon. Die Einheit steht damit auch gleich neben dem, was
+    // sie meint.
     this._setzen(
       "kpi:peak",
       t.pv_peak
-        ? `${(t.pv_peak / 1000).toLocaleString(l, {
+        ? (t.pv_peak / 1000).toLocaleString(l, {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
-          })} kWp`
+          })
         : "–"
     );
+    this._setzen("kpi:peak:wort", t.pv_peak ? "kWp PV" : "");
     this._setzen(
-      "kpi:peak:zusatz",
-      akkuKap
-        ? `${akkuKap.toLocaleString(l, {
-            minimumFractionDigits: 1,
-            maximumFractionDigits: 1,
-          })} kWh Speicher`
-        : ""
+      "kpi:peak2",
+      akkuKap ? akkuKap.toLocaleString(l, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }) : ""
     );
+    this._setzen("kpi:peak2:wort", akkuKap ? "kWh Akku" : "");
 
     const k = d.costs || {};
     if (k.configured) {

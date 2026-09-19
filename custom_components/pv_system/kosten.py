@@ -275,6 +275,13 @@ class Kostenrechner:
             # den Gesamtzeitraum - heute und diesen Monat ist es nicht passiert.
             if periode == PERIOD_TOTAL:
                 mengen = _dazu(mengen, vorher)
+                # Zwei Daten, und sie sind nicht dasselbe: Der Zeitraum beginnt
+                # mit der ältesten Inbetriebnahme - daran hängt die
+                # Amortisation. *Gemessen* wird erst, seit die Integration
+                # läuft, und nur darüber darf der Grundpreis verteilt werden.
+                # Sonst stünden nach einem Zurücksetzen Hunderte Euro
+                # Zählergebühr neben null Kilowattstunden.
+                mengen["measured_since"] = mengen.get("start")
                 mengen["start"] = _fruehester_beginn(anlagen, mengen.get("start"))
             zeitraeume[periode] = self._geld(
                 mengen, arbeitspreis, verguetung, grundpreis, jetzt, umleitpreis
@@ -445,7 +452,13 @@ class Kostenrechner:
 
         kosten = None
         if preis is not None or frueher is not None:
-            anteil = _tage_seit(zeitraum.get("start"), jetzt) / TAGE_JE_MONAT
+            # Der Grundpreis läuft über die gemessene Zeit, nicht über die
+            # ganze Laufzeit der Anlage: Für die Jahre vor der Einrichtung ist
+            # kein Netzentgelt bekannt, und "Bezug davor" trägt nur Arbeitspreis.
+            anteil = (
+                _tage_seit(zeitraum.get("measured_since") or zeitraum.get("start"), jetzt)
+                / TAGE_JE_MONAT
+            )
             kosten = gespeichert["cost"] + grundpreis * anteil
             if frueher is not None:
                 kosten += vorher.get("import", 0.0) * frueher
@@ -581,6 +594,9 @@ class Kostenrechner:
 
         return {
             "start": mengen.get("start"),
+            # Nur der Gesamtzeitraum trägt das; Tag, Monat und Jahr sind
+            # durchgehend gemessen und brauchen keine zweite Zeitmarke.
+            "measured_since": mengen.get("measured_since"),
             "import_kwh": bezug,
             "export_kwh": einspeisung,
             "own_kwh": eigen,

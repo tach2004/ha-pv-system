@@ -62,12 +62,14 @@ from .const import (
     CONF_CURRENCY,
     CONF_CURRENCY_PRICE,
     CONF_CURRENCY_PRICE_ENTITY,
+    CONF_DIVERTER_EFFICIENCY,
     CONF_DIVERTER_ENERGY,
     CONF_DIVERTER_FUEL,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
     CONF_DIVERTER_PRICE_ENTITY,
+    CONF_DIVERTER_PRICE_UNIT,
     CONF_DIVERTER_SOLAR_ENERGY,
     CONF_DIVERTER_SOLAR_POWER,
     CONF_ENABLED,
@@ -126,7 +128,9 @@ from .const import (
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
     CONF_TILT,
+    DEFAULT_DIVERTER_EFFICIENCY,
     FUEL_ELECTRICITY,
+    HEIZWERT,
     PHASES,
     SIGN_POSITIVE_DISCHARGE,
     SIGN_POSITIVE_EXPORT,
@@ -1096,8 +1100,20 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "fuel": conf[CONF_DIVERTER_FUEL],
             # Wie beim Arbeitspreis: Die Entität gewinnt, die feste Zahl ist
             # der Rückfall. Gas und Öl wechseln am Markt wie Strom.
-            "price": self._preis(
+            "unit_price": self._preis(
                 conf[CONF_DIVERTER_PRICE_ENTITY], conf[CONF_DIVERTER_PRICE]
+            ),
+            "price_unit": conf[CONF_DIVERTER_PRICE_UNIT],
+            "efficiency": conf[CONF_DIVERTER_EFFICIENCY],
+            # Was daraus je Kilowattstunde Wärme wird - die einzige Zahl, mit
+            # der die Kostenrechnung etwas anfangen kann.
+            "price": _wert_je_kwh(
+                self._preis(
+                    conf[CONF_DIVERTER_PRICE_ENTITY], conf[CONF_DIVERTER_PRICE]
+                ),
+                conf[CONF_DIVERTER_PRICE_UNIT],
+                conf[CONF_DIVERTER_FUEL],
+                conf[CONF_DIVERTER_EFFICIENCY],
             ),
             "count": len(conf[CONF_DIVERTER_POWER]) + len(conf[CONF_DIVERTER_ENERGY]),
             "enabled": bool(conf[CONF_DIVERTER_ENERGY] or conf[CONF_DIVERTER_POWER]),
@@ -1148,3 +1164,34 @@ def _monatspreis(wert: float | None, einheit: str) -> float | None:
     if wert is None:
         return None
     return wert / 12.0 if einheit == BASE_PER_YEAR else wert
+
+
+def _wert_je_kwh(
+    preis: float | None, einheit: str, brennstoff: str, wirkungsgrad: float | None
+) -> float | None:
+    """Aus dem Preis je Einheit den Wert je Kilowattstunde Wärme machen.
+
+    Niemand soll einen Heizwert im Kopf haben müssen, und erst recht keine
+    Division von Hand pflegen, wenn der Preis aus einer Entität kommt: Ein
+    Flüssiggaspreis steht je Liter am Markt, ein Gaspreis je Kubikmeter oder je
+    Kilowattstunde, Pellets je Tonne. Hier wird daraus eine Zahl.
+
+    Der Wirkungsgrad teilt: Ein Gaskessel braucht für eine Kilowattstunde Wärme
+    rund 1/0,92 Kilowattstunden Gas. Bei der Wärmepumpe ist es dieselbe
+    Rechnung mit der Jahresarbeitszahl - 350 % heißt, aus einer Kilowattstunde
+    Strom werden dreieinhalb Kilowattstunden Wärme.
+
+    Ersetzt der Verbraucher gar nichts, weil es Strom bleibt, gibt es keinen
+    anderen Wert: Dann gilt der Arbeitspreis, und das sagt ``None``.
+    """
+    if preis is None or brennstoff == FUEL_ELECTRICITY:
+        return None
+    kwh_je_einheit = HEIZWERT.get(brennstoff, {}).get(einheit)
+    if not kwh_je_einheit:
+        # Diese Einheit passt nicht zu diesem Brennstoff - Heizöl je Kubikmeter
+        # gibt es nicht. Lieber keine Zahl als eine erfundene.
+        return None
+    anteil = (wirkungsgrad or DEFAULT_DIVERTER_EFFICIENCY) / 100.0
+    if anteil <= 0:
+        return None
+    return round(preis / kwh_je_einheit / anteil, 5)

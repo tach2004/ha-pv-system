@@ -412,12 +412,14 @@
       "house": {
         "data": {
           "calculate": "Calculate house consumption",
+          "diverter_efficiency": "Efficiency of the replaced heating",
           "diverter_energy_entity": "Surplus load meter",
           "diverter_fuel": "Replaces",
           "diverter_name": "Surplus load",
           "diverter_power_entity": "Surplus load power",
-          "diverter_price": "Value per kWh replaced: fixed number",
-          "diverter_price_entity": "Value per kWh replaced: entity instead of fixed number",
+          "diverter_price": "Price of what is replaced: fixed number",
+          "diverter_price_entity": "Price of what is replaced: entity instead of fixed number",
+          "diverter_price_unit": "Price of what is replaced: per",
           "diverter_solar_energy_entity": "Of that from PV/battery: meter",
           "diverter_solar_power_entity": "Of that from PV/battery: power",
           "energy_entity": "Consumption meter",
@@ -425,12 +427,14 @@
         },
         "data_description": {
           "calculate": "Consumption = inverter power + grid power. A measured value takes precedence.",
+          "diverter_efficiency": "How much heat the **replaced** heating makes from its fuel, in percent. It needs more than one kilowatt hour of fuel for one kilowatt hour of heat - that is the whole point.\n\n• Condensing gas boiler: about **92**\n• Older gas or oil boiler: **80** to **88**\n• Pellet boiler: about **90**\n• District heating: **100** - what arrives is heat, not fuel\n• **Heat pump: the seasonal performance factor times a hundred.** At SPF 3.5 that is 350. It turns one kilowatt hour of electricity into three and a half kilowatt hours of heat - an immersion heater only into one. That is why surplus is worth much less in a house with a heat pump, and the calculation should say so.\n\n100 means: do not convert.",
           "diverter_energy_entity": "kWh counters of these loads. **Several are allowed** - they are added up.\n\nThese kilowatt hours really do flow in the house. Whether they save money depends on what they replace: heating with them instead of gas saves gas, not electricity - so they are valued separately in the savings, with the two fields further down.\n\nEmpty: the surplus counts like any other self-consumption.",
           "diverter_fuel": "What this load replaces. It decides what one diverted kilowatt hour is worth.\n\nNatural gas, LPG, oil, pellets, district heating or heat pump: the value is that fuel's price per kWh - see the fields below.\n\n“Nothing - it stays electricity”: a home battery or a car burns nothing, it moves electricity to later. Then a kilowatt hour is worth exactly the energy price, and the fields below are ignored.",
           "diverter_name": "What the load is called on the card, e.g. “immersion heater”.",
           "diverter_power_entity": "What the surplus loads currently draw - the immersion heater in the hot water tank, the wallbox in surplus charging, the heat pump's buffer tank. **Several are allowed**; they are added up.\n\nThis means everything that only runs **because** there is surplus and puts energy into a store - hot water, a car battery, a buffer tank. A fridge does not count: it runs anyway.\n\nThis power is subtracted from house consumption to give the **base load** - what your household would have used without the surplus. Self-sufficiency and self-consumption still use the **whole** house consumption; the base load stands beside it because only it is comparable from month to month.",
-          "diverter_price": "What **one kilowatt hour of the replaced energy** costs, divided by the efficiency. Your price, not somebody's - the numbers here are just the arithmetic:\n\n• **Natural gas** 0.11 €/kWh ÷ 0.92 boiler → about **0.12**. Gas bills state kWh; cubic metres times calorific value (about 10) gives kWh.\n• **LPG** 0.80 €/l ÷ 6.6 kWh/l ÷ 0.92 → about **0.13**\n• **Heating oil** 1.00 €/l ÷ 10 kWh/l ÷ 0.9 → about **0.11**\n• **Pellets** 350 €/t ÷ 4800 kWh/t ÷ 0.9 → about **0.08**\n• **District heating**: your heat contract's energy price\n• **Heat pump**: energy price ÷ seasonal performance factor, at 0.34 € and SPF 3.5 → about **0.10**. It turns one kilowatt hour into three and a half - an immersion heater only into one.\n\nEmpty: the energy price applies, and the system looks better off than it is.",
-          "diverter_price_entity": "An entity providing this value - for everything that moves with the market. Gas and oil do, just like electricity, and anyone who already has the price as a sensor should not maintain it twice.\n\nIt takes precedence over the fixed number above; if it reports nothing usable, the number applies again. **Note:** this is the value per kWh *after* efficiency. A sensor giving the raw gas price is too low by the boiler efficiency - a template sensor that divides once is enough.",
+          "diverter_price": "The price **as it appears on your bill** - not converted. Converting is the integration's job: it knows how many kilowatt hours are in a litre, a cubic metre or a tonne, and it asks for the efficiency below.\n\nWhich unit you mean is set in the field next to it. Natural gas is usually billed per kWh or per m³, LPG per litre or kilogram, heating oil per litre, pellets per tonne, district heating per kWh.\n\nBecause this changes constantly, the field below is usually the better one: an entity providing the price.\n\nEmpty: the energy price applies, and the system looks better off than it is.",
+          "diverter_price_entity": "An entity providing this price - **the better way for anything that moves with the market.** Gas and oil do, just like electricity; a fixed number is wrong tomorrow.\n\nIt takes precedence over the fixed number above; if it reports nothing usable, the number applies again. It means the same price in the same unit - conversion happens here too.",
+          "diverter_price_unit": "What the price refers to - **exactly as it is billed**. The integration converts it into kilowatt hours:\n\n• Natural gas: per kWh or per m³ (about 10 kWh per m³)\n• LPG: per litre (6.57 kWh), per kg (12.87 kWh)\n• Heating oil: per litre (10 kWh), per kg (11.9 kWh)\n• Pellets: per kg (4.8 kWh) or per tonne (4800 kWh)\n• District heating and heat pump: per kWh\n\nIf the unit does not fit the fuel - there is no heating oil per cubic metre - nothing is converted and the energy price applies. Better no number than an invented one.\n\nThe calorific values are the usual ones; they vary by a few percent with quality. If you need it exact, enter the price per kilowatt hour directly.",
           "diverter_solar_energy_entity": "The same as a kWh counter: the load's kilowatt hours that came from PV or battery. **Several are allowed.**\n\nIf set, only this counter feeds the savings - the remainder is ordinary grid consumption at the energy price.",
           "diverter_solar_power_entity": "**Only if you can measure it separately.** The part of the power above that is currently coming from PV or battery.\n\nWhy it matters: an immersion heater runs on surplus in July and on grid power in January. The same kilowatt hour is free energy once and a full-price bill the next time. Only the part that came from your own system is valued with the price of what it replaces.\n\nEmpty: what the name says applies - all of it came from surplus. For a true surplus controller that is correct.",
           "energy_entity": "A kWh counter over **everything consumed in the house** - grid import *and* self-used solar together. Not the import meter: that one lives under “Grid and meter” and only counts what came from the grid.\n\nWhat for: it is the second route to self-consumption. Normally the integration computes “generated minus exported”; without a yield meter it falls back to “consumed minus imported” - and that is what this is for.\n\nEmpty: perfectly fine as long as your plants have a yield meter.",
@@ -629,6 +633,15 @@
         "lpg": "LPG",
         "oil": "Heating oil",
         "pellets": "Pellets or wood"
+      }
+    },
+    "diverter_price_unit": {
+      "options": {
+        "kg": "kilogram",
+        "kwh": "kilowatt hour (kWh)",
+        "liter": "litre",
+        "m3": "cubic metre (m³)",
+        "ton": "tonne"
       }
     },
     "grid_sign": {
