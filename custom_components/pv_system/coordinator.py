@@ -144,7 +144,7 @@ _LOGGER = logging.getLogger(__name__)
 CONF_NAME = "name"
 
 # Wie lange nach der letzten Zustandsänderung gewartet wird, bevor gerechnet
-# wird. Ein Shelly meldet drei Phasen einzeln - ohne diese Sammelzeit liefe die
+# wird. Ein Smartmeter meldet drei Phasen einzeln - ohne diese Sammelzeit liefe die
 # Rechnung dreimal für denselben Messmoment.
 SAMMELZEIT = 0.8
 
@@ -485,7 +485,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """P = U · I in alle drei Richtungen ergänzen.
 
         Wer zwei der drei Größen misst, hat auch die dritte. Ein MPPT meldet
-        gern Spannung und Strom, ein Shelly nur die Leistung, ein BMS nur den
+        gern Spannung und Strom, ein Zwischenzaehler nur die Leistung, ein BMS nur den
         Strom - statt in der Karte Striche zu zeigen, wird gerechnet.
 
         Division nur bei einer Spannung über 1 V: Ein Gerät im Standby meldet
@@ -959,7 +959,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
           paar Watt. Die stecken im Netzbezug schon drin und dürfen nicht noch
           einmal abgezogen werden - sonst kämen bei -2 W Abgabe und 16 W Bezug
           14 W heraus, obwohl das Haus 16 W zieht. Also null.
-        * Ein Hybrid (Victron MultiPlus und Verwandte) zieht dagegen richtig
+        * Ein Hybridwechselrichter zieht dagegen richtig
           Leistung aus dem Netz, um die Batterie zu laden. Das ist kein
           Hausverbrauch, sondern Speicherladung - diese Leistung wird abgezogen.
           Ohne das stünden beim Laden mit 1 kW über 1000 W Hausverbrauch da.
@@ -1030,21 +1030,31 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # die andere falsch wäre, sondern weil nur diese von Monat zu Monat
         # vergleichbar ist: Der Hausverbrauch schwankt mit der Sonne, der
         # Grundverbrauch mit dem Haushalt.
+        #
+        # Abgezogen wird nur der Teil, der *aus Überschuss* lief. Der Rest ist
+        # kein Überschussverbrauch mehr, sondern ein ganz gewöhnliches Gerät am
+        # Netz - ein Heizstab, der im Januar aus dem Netz nachheizt, gehört in
+        # den Grundverbrauch wie jede andere Last auch. Ihn trotzdem
+        # abzuziehen machte den Grundverbrauch zu klein und die Quote darüber
+        # zu schön.
+        #
+        # Ohne den Trennsensor gilt, was der Name sagt: alles kam aus
+        # Überschuss, also wird alles abgezogen.
+        ueberschussanteil = umleitersonne if conf[CONF_DIVERTER_SOLAR_POWER] else umleiterleistung
         bezugsgroesse = verbrauch
-        if verbrauch is not None and umleiterleistung:
-            bezugsgroesse = max(0.0, verbrauch - umleiterleistung)
-        # Netzbezug ohne den Anteil, den der Verbraucher selbst aus dem Netz
-        # gezogen hat - sonst belastete er eine Quote, aus der er herausgerechnet
-        # wurde. Ohne getrennten Sensor gilt, was der Name sagt: Ein
-        # Überschussverbraucher zieht nichts aus dem Netz, also ist der Abzug
-        # null und der ganze Bezug gehört dem Grundverbrauch.
+        if verbrauch is not None and ueberschussanteil:
+            bezugsgroesse = max(0.0, verbrauch - ueberschussanteil)
+
+        # Der Netzbezug bleibt ungeteilt: Was der Verbraucher aus dem Netz
+        # gezogen hat, steckt jetzt im Grundverbrauch - und sein Bezug gehört
+        # dorthin, wo sein Verbrauch steht.
+        grundautarkie = _quote(bezugsgroesse, netz["import_power"])
+
+        # Was der Überschussverbraucher gerade aus dem Netz zieht. Nur bekannt,
+        # wenn jemand es getrennt misst; sonst ist es die Annahme "nichts".
         netzumleitung = None
         if conf[CONF_DIVERTER_SOLAR_POWER] and umleiterleistung is not None:
             netzumleitung = max(0.0, umleiterleistung - (umleitersonne or 0.0))
-        grundbezug = netz["import_power"]
-        if grundbezug is not None and netzumleitung:
-            grundbezug = max(0.0, grundbezug - netzumleitung)
-        grundautarkie = _quote(bezugsgroesse, grundbezug)
 
         # Bezugsgröße für den Eigenverbrauch ist die erzeugte Leistung am Modul,
         # nicht die Abgabe des Wechselrichters. Bei einer DC-gekoppelten Anlage
@@ -1069,7 +1079,6 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "house": verbrauch,
                 "base": bezugsgroesse,
                 "import": netz["import_power"],
-                "base_import": grundbezug,
                 "export": netz["export_power"],
                 "yield": erzeugung,
             }

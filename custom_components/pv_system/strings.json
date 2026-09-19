@@ -306,7 +306,7 @@
           "input_current_entity": "String current coming from the modules. Together with input voltage it gives the module power.",
           "input_voltage_entity": "The voltage coming from the modules - often three digits on an MPPT.",
           "manufacturer": "Display only - the card shows manufacturer and model together.",
-          "max_current": "Display only, e.g. 85 A on an MPPT 250/85.",
+          "max_current": "Display only, e.g. 85 A on a 250/85 MPPT.",
           "model": "Display only, e.g. the type designation from the label.",
           "name": "Name of this controller, e.g. “MPPT roof east”.",
           "output_current_entity": "Charging current towards the battery. Without a power sensor the charging power is computed from it.",
@@ -345,7 +345,7 @@
           "prior_import": "**Your import meter's reading on the day you set this integration up.** A one-off number you read once and never touch again - not a sensor.\n\nExample: your import meter reads 5000 kWh today and you set up today. Then you enter 5000.\n\nWhat for: from today the integration only counts differences. Without this number the total period would start at zero grid cost and the balance would look better than it is. Day, month and year are untouched.\n\nEmpty: the total period starts today. That is right if you only want to count from now on.",
           "prior_price": "What one kilowatt hour cost on average before the integration started counting - electricity three years ago was not priced like today. Applies to that earlier time only. Empty: today's price is used."
         },
-        "description": "Everything is derived from the meter readings you entered under “Grid and meter” - not from extrapolated power. Day, month and year start counting the moment you enter a price here - the time before is covered by the figures at each plant.\n\nYou may change the price at any time: only what has accrued since the last calculation is valued. A price increase applies from the day you enter it and does not rewrite the past.\n\nWhat a plant cost and since when it runs belongs to that plant under “Costs of this plant”. The site's investment is the sum of its plants, its start the earliest commissioning - nobody needs to enter either again here.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
+        "description": "Everything is derived from the meter readings you entered under “Grid and meter” - not from extrapolated power. Day, month and year start counting the moment you enter a price here - the time before is covered by the figures at each plant.\n\nYou may change the price at any time: only what has accrued since the last calculation is valued. A price increase applies from the day you enter it and does not rewrite the past.\n\nWhat a plant cost and since when it runs belongs to that plant under “Costs of this plant”. The site's investment is the sum of its plants, its start the earliest commissioning - nobody needs to enter either again here.\n\n**Wherever an entity and a fixed number sit side by side, the entity always wins.** The number is only the fallback for when the entity reports nothing usable - a stalled tariff fetch, a sensor gone unavailable.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Costs and yield"
       },
       "display": {
@@ -400,7 +400,7 @@
           "l3_current_entity": "Current on L3, in A. Purely informative.",
           "l3_power_entity": "Power on L3 - like L1 only needed if your meter reports phases individually.",
           "l3_voltage_entity": "Voltage on L3, around 230 V. Purely informative.",
-          "meter_model": "Display only, e.g. “Shelly Pro 3EM Gen2”.",
+          "meter_model": "Display only, e.g. “Three-phase smart meter”.",
           "name": "Name of the grid connection. It sits above the box on the card.",
           "phases": "Phases of the house connection. Almost always three - only change it if you know otherwise.",
           "power_entity": "The total across all phases at the house connection. The most important field here.",
@@ -412,31 +412,11 @@
       "house": {
         "data": {
           "calculate": "Calculate house consumption",
-          "diverter_efficiency": "Efficiency of the replaced heating",
-          "diverter_energy_entity": "Surplus load meter",
-          "diverter_fuel": "Replaces",
-          "diverter_name": "Surplus load",
-          "diverter_power_entity": "Surplus load power",
-          "diverter_price": "Price of what is replaced: fixed number",
-          "diverter_price_entity": "Price of what is replaced: entity instead of fixed number",
-          "diverter_price_unit": "Price of what is replaced: per",
-          "diverter_solar_energy_entity": "Of that from PV/battery: meter",
-          "diverter_solar_power_entity": "Of that from PV/battery: power",
           "energy_entity": "Consumption meter",
           "power_entity": "Measured house consumption"
         },
         "data_description": {
           "calculate": "Consumption = inverter power + grid power. A measured value takes precedence.",
-          "diverter_efficiency": "How much heat the **replaced** heating makes from its fuel, in percent. It needs more than one kilowatt hour of fuel for one kilowatt hour of heat - that is the whole point.\n\n• Condensing gas boiler: about **92**\n• Older gas or oil boiler: **80** to **88**\n• Pellet boiler: about **90**\n• District heating: **100** - what arrives is heat, not fuel\n• **Heat pump: the seasonal performance factor times a hundred.** At SPF 3.5 that is 350. It turns one kilowatt hour of electricity into three and a half kilowatt hours of heat - an immersion heater only into one. That is why surplus is worth much less in a house with a heat pump, and the calculation should say so.\n\n100 means: do not convert.",
-          "diverter_energy_entity": "kWh counters of these loads. **Several are allowed** - they are added up.\n\nThese kilowatt hours really do flow in the house. Whether they save money depends on what they replace: heating with them instead of gas saves gas, not electricity - so they are valued separately in the savings, with the two fields further down.\n\nEmpty: the surplus counts like any other self-consumption.",
-          "diverter_fuel": "What this load replaces. It decides what one diverted kilowatt hour is worth.\n\nNatural gas, LPG, oil, pellets, district heating or heat pump: the value is that fuel's price per kWh - see the fields below.\n\n“Nothing - it stays electricity”: a home battery or a car burns nothing, it moves electricity to later. Then a kilowatt hour is worth exactly the energy price, and the fields below are ignored.",
-          "diverter_name": "What the load is called on the card, e.g. “immersion heater”.",
-          "diverter_power_entity": "What the surplus loads currently draw - the immersion heater in the hot water tank, the wallbox in surplus charging, the heat pump's buffer tank. **Several are allowed**; they are added up.\n\nThis means everything that only runs **because** there is surplus and puts energy into a store - hot water, a car battery, a buffer tank. A fridge does not count: it runs anyway.\n\nThis power is subtracted from house consumption to give the **base load** - what your household would have used without the surplus. Self-sufficiency and self-consumption still use the **whole** house consumption; the base load stands beside it because only it is comparable from month to month.",
-          "diverter_price": "The price **as it appears on your bill** - not converted. Converting is the integration's job: it knows how many kilowatt hours are in a litre, a cubic metre or a tonne, and it asks for the efficiency below.\n\nWhich unit you mean is set in the field next to it. Natural gas is usually billed per kWh or per m³, LPG per litre or kilogram, heating oil per litre, pellets per tonne, district heating per kWh.\n\nBecause this changes constantly, the field below is usually the better one: an entity providing the price.\n\nEmpty: the energy price applies, and the system looks better off than it is.",
-          "diverter_price_entity": "An entity providing this price - **the better way for anything that moves with the market.** Gas and oil do, just like electricity; a fixed number is wrong tomorrow.\n\nIt takes precedence over the fixed number above; if it reports nothing usable, the number applies again. It means the same price in the same unit - conversion happens here too.",
-          "diverter_price_unit": "What the price refers to - **exactly as it is billed**. The integration converts it into kilowatt hours:\n\n• Natural gas: per kWh or per m³ (about 10 kWh per m³)\n• LPG: per litre (6.57 kWh), per kg (12.87 kWh)\n• Heating oil: per litre (10 kWh), per kg (11.9 kWh)\n• Pellets: per kg (4.8 kWh) or per tonne (4800 kWh)\n• District heating and heat pump: per kWh\n\nIf the unit does not fit the fuel - there is no heating oil per cubic metre - nothing is converted and the energy price applies. Better no number than an invented one.\n\nThe calorific values are the usual ones; they vary by a few percent with quality. If you need it exact, enter the price per kilowatt hour directly.",
-          "diverter_solar_energy_entity": "The same as a kWh counter: the load's kilowatt hours that came from PV or battery. **Several are allowed.**\n\nIf set, only this counter feeds the savings - the remainder is ordinary grid consumption at the energy price.",
-          "diverter_solar_power_entity": "**Only if you can measure it separately.** The part of the power above that is currently coming from PV or battery.\n\nWhy it matters: an immersion heater runs on surplus in July and on grid power in January. The same kilowatt hour is free energy once and a full-price bill the next time. Only the part that came from your own system is valued with the price of what it replaces.\n\nEmpty: what the name says applies - all of it came from surplus. For a true surplus controller that is correct.",
           "energy_entity": "A kWh counter over **everything consumed in the house** - grid import *and* self-used solar together. Not the import meter: that one lives under “Grid and meter” and only counts what came from the grid.\n\nWhat for: it is the second route to self-consumption. Normally the integration computes “generated minus exported”; without a yield meter it falls back to “consumed minus imported” - and that is what this is for.\n\nEmpty: perfectly fine as long as your plants have a yield meter.",
           "power_entity": "Only if you **measure** house consumption - with a second meter behind the house connection, say. In watts, not a meter reading.\n\nNormally leave it empty: the integration then derives it from grid power plus inverter output, which for a grid-parallel system is just as correct."
         },
@@ -452,6 +432,7 @@
           "plants": "Plants",
           "reset": "Clear cost counters",
           "save": "Save and close",
+          "surplus": "Surplus",
           "tidy": "Duplicate sensors"
         },
         "title": "PV system"
@@ -481,13 +462,13 @@
           "enabled": "Off when this plant has no inverter of its own.",
           "energy_entity": "kWh meter for what this device has delivered in total. The cost calculation uses it as generation - only what the inverter delivers can go to the grid.",
           "frequency_entity": "Grid frequency as measured by this device - around 50 Hz.",
-          "hybrid": "On when the device can also charge from the grid (e.g. Victron MultiPlus).",
+          "hybrid": "On when the device can also charge from the grid - a hybrid inverter with grid charging.",
           "manufacturer": "Display only - the card shows manufacturer and model together.",
           "mode_entity": "Operating mode as text, e.g. “grid-tied” or “off-grid”.",
           "model": "Display only, e.g. the type designation from the label.",
           "name": "Name of this inverter, e.g. “GTN1000 L3”.",
           "phase": "Which phase this single-phase inverter feeds into.",
-          "power_entity": "AC output power - the built-in sensor or an inline meter such as a Shelly. House consumption is derived from this figure.",
+          "power_entity": "AC output power - the built-in sensor or an inline meter such as a inline meter. House consumption is derived from this figure.",
           "rated_power_w": "Continuous rating from the label. The load bar is based on it.",
           "temperature_entity": "Temperature of the inverter itself."
         },
@@ -514,7 +495,7 @@
           "count": "How many modules belong to this plant.",
           "current_entity": "String current (DC) on the module side. May be left empty.",
           "energy_entity": "A kWh meter for this array's yield, if you have one. May be left empty.",
-          "manufacturer": "The module manufacturer, e.g. “Trina”. Display only.",
+          "manufacturer": "The module manufacturer. Display only.",
           "model": "The module type, e.g. “Vertex S 405”. Display only.",
           "parallel": "Four in series, two such strings in parallel makes eight modules.",
           "peak_wp": "Peak power of a single module as printed on its label.",
@@ -590,6 +571,34 @@
         },
         "description": "The way out when the amounts no longer add up - typically after a meter swap, or when the wrong entity briefly sat in the import meter field. Day, month and year heal themselves at the next rollover; the total period carries the error until somebody clears it.\n\nThe total period has **two sources**, which is why there are two checkboxes.\n\n---\n\n**1. Measured since the first run**\n\n{stand}\n\nThis lives in the integration's own store. The first box throws it away and re-anchors every counter at today's reading - immediately, not on save.\n\n---\n\n**2. From the configuration: the “before” figures**\n\n{vorher}\n\nThat is where amounts come from that stand next to zero measured kilowatt hours and are still correct. The second box removes those fields from the configuration - it only takes effect with “Save and close”.\n\nUsually you do **not** want it: these numbers are your real history, and without them the payback starts at zero. It helps if you mistyped or want to start over.\n\nInvestment and commissioning stay either way - those are facts about the system, not meter readings. Neither can be undone.",
         "title": "Clear cost counters"
+      },
+      "surplus": {
+        "data": {
+          "diverter_efficiency": "Efficiency of the replaced heating",
+          "diverter_energy_entity": "Surplus load meter",
+          "diverter_fuel": "Replaces",
+          "diverter_name": "Surplus load",
+          "diverter_power_entity": "Surplus load power",
+          "diverter_price": "Price of what is replaced: fixed number",
+          "diverter_price_entity": "Price of what is replaced: entity instead of fixed number",
+          "diverter_price_unit": "Price of what is replaced: per",
+          "diverter_solar_energy_entity": "Of that from PV/battery: meter",
+          "diverter_solar_power_entity": "Of that from PV/battery: power"
+        },
+        "data_description": {
+          "diverter_efficiency": "How much heat the **replaced** heating makes from its fuel, in percent. It needs more than one kilowatt hour of fuel for one kilowatt hour of heat - that is the whole point.\n\n• Condensing gas boiler: about **92**\n• Older gas or oil boiler: **80** to **88**\n• Pellet boiler: about **90**\n• District heating: **100** - what arrives is heat, not fuel\n• **Heat pump: the seasonal performance factor times a hundred.** At SPF 3.5 that is 350. It turns one kilowatt hour of electricity into three and a half kilowatt hours of heat - an immersion heater only into one. That is why surplus is worth much less in a house with a heat pump, and the calculation should say so.\n\n100 means: do not convert.",
+          "diverter_energy_entity": "kWh counters of these loads. **Several are allowed** - they are added up.\n\nThese kilowatt hours really do flow in the house. Whether they save money depends on what they replace: heating with them instead of gas saves gas, not electricity - so they are valued separately in the savings, with the two fields further down.\n\nEmpty: the surplus counts like any other self-consumption.",
+          "diverter_fuel": "What this load replaces. It decides what one diverted kilowatt hour is worth.\n\nNatural gas, LPG, oil, pellets, district heating or heat pump: the value is that fuel's price per kWh - see the fields below.\n\n“Nothing - it stays electricity”: a home battery or a car burns nothing, it moves electricity to later. Then a kilowatt hour is worth exactly the energy price, and the fields below are ignored.",
+          "diverter_name": "What the load is called on the card, e.g. “immersion heater”.",
+          "diverter_power_entity": "What the surplus loads currently draw - the immersion heater in the hot water tank, the wallbox in surplus charging, the heat pump's buffer tank. **Several are allowed**; they are added up.\n\nThis means everything that only runs **because** there is surplus and puts energy into a store - hot water, a car battery, a buffer tank. A fridge does not count: it runs anyway.\n\nThis power is subtracted from house consumption to give the **base load** - what your household would have used without the surplus. Self-sufficiency and self-consumption still use the **whole** house consumption; the base load stands beside it because only it is comparable from month to month.",
+          "diverter_price": "The price **as it appears on your bill** - not converted. Converting is the integration's job: it knows how many kilowatt hours are in a litre, a cubic metre or a tonne, and it asks for the efficiency below.\n\nWhich unit you mean is set in the field next to it. Natural gas is usually billed per kWh or per m³, LPG per litre or kilogram, heating oil per litre, pellets per tonne, district heating per kWh.\n\nBecause this changes constantly, the field below is usually the better one: an entity providing the price.\n\nEmpty: the energy price applies, and the system looks better off than it is.",
+          "diverter_price_entity": "An entity providing this price - **the better way for anything that moves with the market.** Gas and oil do, just like electricity; a fixed number is wrong tomorrow.\n\nIt takes precedence over the fixed number above; if it reports nothing usable, the number applies again. It means the same price in the same unit - conversion happens here too.",
+          "diverter_price_unit": "What the price refers to - **exactly as it is billed**. The integration converts it into kilowatt hours:\n\n• Natural gas: per kWh or per m³ (about 10 kWh per m³)\n• LPG: per litre (6.57 kWh), per kg (12.87 kWh)\n• Heating oil: per litre (10 kWh), per kg (11.9 kWh)\n• Pellets: per kg (4.8 kWh) or per tonne (4800 kWh)\n• District heating and heat pump: per kWh\n\nIf the unit does not fit the fuel - there is no heating oil per cubic metre - nothing is converted and the energy price applies. Better no number than an invented one.\n\nThe calorific values are the usual ones; they vary by a few percent with quality. If you need it exact, enter the price per kilowatt hour directly.",
+          "diverter_solar_energy_entity": "The same as a kWh counter: the load's kilowatt hours that came from PV or battery. **Several are allowed.**\n\nIf set, only this counter feeds the savings - the remainder is ordinary grid consumption at the energy price.",
+          "diverter_solar_power_entity": "**Only if you can measure it separately.** The part of the power above that is currently coming from PV or battery.\n\nWhy it matters: an immersion heater runs on surplus in July and on grid power in January. The same kilowatt hour is free energy once and a full-price bill the next time. Only the part that came from your own system is valued with the price of what it replaces.\n\nEmpty: what the name says applies - all of it came from surplus. For a true surplus controller that is correct."
+        },
+        "description": "Loads that **only run because there is surplus** and put energy into a store: the immersion heater in the hot water tank, the wallbox in surplus charging, the heat pump's buffer tank. A fridge does not count - it runs anyway.\n\nThey are a topic of their own because their kilowatt hours **replace not electricity but gas, oil, heat** - and are therefore valued differently from any other self-consumption.\n\nEverything here may be left empty. If you have no such load, skip this step.\n\n**Wherever an entity and a fixed number sit side by side, the entity always wins.** The number is only the fallback for when the entity reports nothing usable. The same applies to energy price, feed-in tariff and base fee.",
+        "title": "Surplus"
       },
       "tidy": {
         "data": {

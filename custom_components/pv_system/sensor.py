@@ -1078,7 +1078,7 @@ class AnlagenSensor(AnlagenKostenSensor, PvBasis):
         if beschreibung.spiegel and beschreibung.spiegel(anlage):
             self._attr_entity_registry_enabled_default = False
         # Das Gerät ist die ganze Anlage, nicht ihr Dach. Stünde hier der
-        # Modulhersteller, läse sich die Geräteliste als "Anlage Soyo, Modell
+        # Modulhersteller, läse sich die Geräteliste als "Anlage Dach Süd, Modell
         # Vertex S 405" - und der Laderegler, die Batterie und der
         # Wechselrichter, die am selben Gerät hängen, wären damit falsch
         # beschriftet. Modul, Regler und Wechselrichter stehen mit Hersteller

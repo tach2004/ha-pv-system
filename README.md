@@ -8,7 +8,7 @@ Eine Integration mit eigener Lovelace-Karte, die eine Photovoltaikanlage als
 Netz und Haus – für beliebig viele Anlagen an einem Standort.
 
 Die Integration misst nichts selbst. Sie nimmt die Sensoren, die ohnehin im
-System stehen – Shelly, Victron, Fronius, ein BMS über MQTT –, bringt sie auf
+System stehen – Zähler, Wechselrichter, Laderegler, ein BMS über MQTT –, bringt sie auf
 gemeinsame Einheiten und setzt daraus ein Bild zusammen.
 
 ![Vorschau hell](docs/vorschau-hell.png)
@@ -152,6 +152,7 @@ PV-System
 │             └── Anlage 2 ...
 ├── Netz und Zähler          Gesamt- und Phasenleistung, Vorzeichen
 ├── Haus und Verbrauch       gemessen oder gerechnet
+├── Überschuss               Heizstab, Wallbox & Co – was sie ersetzen
 ├── Kosten und Ertrag        Arbeitspreis, Vergütung, Grundpreis, Zeit davor
 ├── Doppelte Sensoren        Kopien abschalten, mit Liste vorher
 ├── Kostenzähler leeren      Notausgang, wenn die Bilanz nicht stimmt
@@ -165,6 +166,13 @@ ihrem Platz – umsortieren benennt also nichts um und bricht keine Automation.
 Jedes Feld trägt einen Hinweistext, der sagt, welcher Sensor gemeint ist und
 was passiert, wenn man es leer lässt. Fast alles darf leer bleiben; nur die
 mit `*` markierten Felder sind nötig.
+
+**Wo eine Entität und eine feste Zahl nebeneinander stehen, gewinnt immer die
+Entität.** Das gilt überall gleich – Arbeitspreis, Einspeisevergütung,
+Grundpreis, Preis des Ersetzten. Die feste Zahl ist der Rückfall für den
+Moment, in dem die Entität nichts Brauchbares meldet: ein hängender
+Tarifabruf, ein Sensor auf `unavailable`. Lieber mit dem alten Preis rechnen
+als gar nicht.
 
 Änderungen sammeln sich im Menü und werden mit **„Speichern und schließen"**
 übernommen.
@@ -191,6 +199,14 @@ Ein Klick auf einen Block öffnet die Einzelheiten darunter. Wo das geht, sitzt
 ein kleines **ⓘ** in der Ecke – auf dem Telefon sagt sonst nichts, welcher
 Kasten sich öffnen lässt. Werte mit gepunkteter Unterstreichung führen zur
 Original-Entität.
+
+Im **Batteriekasten** sagen zwei Farben, ob alles in Ordnung ist. Der
+Füllstandsbalken wechselt wie die Balken in Home Assistant: unter 50 % orange,
+unter 20 % rot. Die Zellentemperatur steht blau unter 5 °C, grün bis 30 °C,
+orange bis 40 °C und darüber rot – und an **beiden Enden blinkt sie**, weil
+eine Lithiumzelle dort weder geladen werden darf noch lange gesund bleibt. Wer
+Animationen abgeschaltet hat, bekommt statt des Blinkens einen Schimmer um die
+Zahl.
 
 Die Kennzahlenleiste steht von links nach rechts in der Reihenfolge, in der man
 danach fragt: **Netz · Erzeugung · Verbrauch · Autarkie · Installiert ·
@@ -258,6 +274,10 @@ Anlagen zur selben Zeit liefern, und liegt daneben, wenn eine nach Osten und
 eine nach Westen zeigt. In der Karte steht deshalb „geschätzt" daneben.
 
 ### Überschussverbraucher
+
+Eigener Schritt in der Konfiguration: **Überschuss**, zwischen *Haus und
+Verbrauch* und *Kosten und Ertrag*. Zehn Felder, die zusammen eine einzige
+Frage beantworten – und wer keinen solchen Verbraucher hat, überspringt ihn.
 
 Die Frage, an der sich jede Amortisation entscheidet: **Was ist eine selbst
 genutzte Kilowattstunde wert?**
@@ -365,6 +385,24 @@ Das Problem am Hausverbrauch ist, dass er zwei Fragen gleichzeitig beantwortet:
 Deshalb beide: **Hausverbrauch** ist alles, **Grundverbrauch** ist das Haus ohne
 Überschussverbraucher. Im Hauskasten steht der eine oben, der andere unten.
 
+**Abgezogen wird nur, was wirklich aus Überschuss lief.** Das ist der Grund,
+warum es *Davon aus PV/Batterie* gibt: Ein Heizstab, der im Januar aus dem Netz
+nachheizt, ist in diesem Moment kein Überschussverbraucher mehr, sondern eine
+Last wie der Backofen – und gehört in den Grundverbrauch wie jede andere auch.
+Ihn trotzdem abzuziehen machte den Grundverbrauch zu klein und die Quote
+darüber zu schön.
+
+| Verbraucher | davon aus PV/Batterie | Grundverbrauch |
+|---|---|---|
+| 1500 W | 1500 W | Hausverbrauch − 1500 W |
+| 1500 W | 400 W | Hausverbrauch − 400 W |
+| 1500 W | 0 W | Hausverbrauch (voller Abzug entfällt) |
+| 1500 W | *kein Sensor* | Hausverbrauch − 1500 W |
+
+Der **Netzbezug bleibt dabei ungeteilt**: Was der Verbraucher aus dem Netz
+gezogen hat, steckt jetzt im Grundverbrauch – und sein Bezug gehört dorthin,
+wo sein Verbrauch steht.
+
 Bei mehreren Anlagen wird der umgeleitete Anteil nach der Erzeugung aufgeteilt –
 wie die Einspeisung auch, und mit derselben Einschränkung: Es stimmt, solange
 die Anlagen zur selben Zeit liefern.
@@ -459,7 +497,7 @@ Eines bleibt ehrlich zu sagen: **Ohne Preis keine Geldsensoren.** Bleibt der
 Arbeitspreis leer, entsteht keine einzige Entität dieser Art – statt zwei
 Dutzend, die dauerhaft „unbekannt" anzeigen.
 
-Fällt ein Zähler zurück – Gerätetausch, ein zurückgesetzter Shelly –, wird die
+Fällt ein Zähler zurück – Gerätetausch, ein zurückgesetzter Zwischenzähler –, wird die
 Marke neu gesetzt, statt eine negative Differenz auszuweisen.
 
 ## Jedes Feld, und was es bewirkt
@@ -512,15 +550,20 @@ Das ist der Hausanschluss: ein Zähler für alles, was rein- und rausgeht.
 | **Hausverbrauch rechnen** | an/aus | Rechnet `Netzleistung + Wechselrichterabgabe`. Bei einer Netzparallelanlage ist das exakt, nicht geschätzt | an |
 | **Leistung** | W | Nur wenn du den Hausverbrauch **misst**. Hat dann Vorrang vor der Rechnung | Wird gerechnet – der Normalfall |
 | **Verbrauchszähler** | kWh | Alles, was im Haus verbraucht wurde: Netzbezug **und** selbst genutzter Solarstrom. **Nicht** der Bezugszähler. Zweiter Weg zum Eigenverbrauch (`verbraucht − bezogen`), wenn keine Anlage einen Ertragszähler hat | In Ordnung, solange ein Ertragszähler da ist |
+
+### Überschuss
+
+| Feld | Einheit | Was passiert damit | Leer? |
+|---|---|---|---|
 | **Überschussverbraucher** | Text | Name in der Karte, z. B. „Heizstab“ | „Überschuss“ |
-| **Leistung Überschussverbraucher** | W, mehrere | Was sie gerade ziehen. Wird vom Hausverbrauch abgezogen → **Grundverbrauch** | Kein Grundverbrauch |
+| **Leistung Überschussverbraucher** | W, mehrere | Was sie gerade ziehen. Der Anteil aus Überschuss wird vom Hausverbrauch abgezogen → **Grundverbrauch** | Kein Grundverbrauch |
 | **Zähler Überschussverbraucher** | kWh, mehrere | Diese kWh werden in der Ersparnis mit dem Preis des Ersetzten bewertet statt mit dem Arbeitspreis | Überschuss zählt wie normaler Eigenverbrauch |
-| **Davon aus PV/Batterie: Leistung** | W, mehrere | Der Anteil, der gerade aus der eigenen Anlage kommt. Trennt Sommer- von Winterbetrieb | Alles gilt als Überschuss |
+| **Davon aus PV/Batterie: Leistung** | W, mehrere | Der Anteil, der gerade aus der eigenen Anlage kommt. **Nur er geht vom Grundverbrauch ab** | Alles gilt als Überschuss |
 | **Davon aus PV/Batterie: Zähler** | kWh, mehrere | Dasselbe als Zählerstand. Ist er gesetzt, geht nur er in die Ersparnis ein – der Rest ist Netzbezug zum Arbeitspreis | Alles gilt als Überschuss |
 | **Ersetzt** | Auswahl | Erdgas, Flüssiggas, Heizöl, Pellets, Fernwärme, Wärmepumpe oder „Nichts – es bleibt Strom“. Bei „Strom“ werden die Preisfelder ignoriert | Erdgas |
 | **Preis des Ersetzten: feste Zahl** | Geld | Der Preis von der Rechnung, **nicht umgerechnet** | Es gilt der Arbeitspreis |
 | **… : je** | Auswahl | kWh, Liter, m³, kg oder Tonne – die Einheit, in der abgerechnet wird | kWh |
-| **… : Entität statt fester Zahl** | Entität | Für Preise, die am Markt schwanken. Hat Vorrang, wird genauso umgerechnet | Nur die feste Zahl |
+| **… : Entität statt fester Zahl** | Entität | Für Preise, die am Markt schwanken. **Hat Vorrang**, wird genauso umgerechnet | Nur die feste Zahl |
 | **Wirkungsgrad der ersetzten Heizung** | % | Gasbrennwert rund 92, alter Kessel 80–88, Fernwärme 100, **Wärmepumpe = JAZ × 100** | 100 (nicht umrechnen) |
 
 ### Kosten und Ertrag (Standort)
@@ -680,7 +723,7 @@ eingetragen hast, bleibt abgeschaltet.** Er stünde sonst zweimal in Home
 Assistant und schriebe auch zweimal in die Datenbank.
 
 Das ist kein Schönheitsfehler, sondern der Hauptposten. Bei drei Anlagen
-entstehen rund achtzig Entitäten; ein Shelly Pro 3EM meldet sich jede Sekunde.
+entstehen rund achtzig Entitäten; ein dreiphasiger Smartmeter meldet sich jede Sekunde.
 Achtzig Zeilen je Sekunde sind über den Tag ein paar Millionen – und ein gutes
 Gigabyte.
 

@@ -7,7 +7,7 @@ Warum die Integration so gebaut ist, wie sie gebaut ist.
 Die Energieübersicht von Home Assistant zeigt Bilanzen: Was ist über den Tag
 erzeugt, verbraucht, bezogen worden. Sie zeigt nicht, **wie die Anlage
 aussieht**. Ob acht Module an einem Laderegler hängen oder an drei, ob die
-Batterie am 24-V- oder am 48-V-Zweig sitzt, auf welcher Phase der Soyo
+Batterie am 24-V- oder am 48-V-Zweig sitzt, auf welcher Phase der kleine
 einspeist – davon weiß sie nichts, und sie braucht es auch nicht.
 
 Genau das ist hier die Aufgabe. Diese Integration führt keine eigene Statistik.
@@ -30,15 +30,15 @@ verlassen möchte man sich darauf nicht.
 
 ### Warum eine Sammelzeit von 0,8 Sekunden
 
-Ein Shelly Pro 3EM meldet drei Phasen einzeln. Ohne Sammelzeit liefe die
+Ein dreiphasiger Smartmeter meldet jede Phase einzeln. Ohne Sammelzeit liefe die
 Rechnung dreimal für denselben Messmoment, und die ersten beiden Durchläufe
 zeigten eine Summe, die es nie gab. Der `Debouncer` läuft mit `immediate=True`:
 Die erste Änderung wirkt sofort, die Nachzügler werden eingesammelt.
 
 ## Einheiten sind nicht optional
 
-Ein Shelly meldet Leistung in W, ein Fronius-Modbus-Sensor in kW, ein
-Victron-MQTT-Sensor manchmal ohne Einheit. Würde die Integration die Zahlen
+Ein Zähler meldet Leistung in W, ein Modbus-Sensor in kW, ein
+MQTT-Sensor manchmal ohne Einheit. Würde die Integration die Zahlen
 ungeprüft addieren, käme eine Summe heraus, die um den Faktor 1000 daneben
 liegt – und niemand sähe es der Karte an.
 
@@ -114,9 +114,9 @@ zurückhaltend.
 
 Gesucht wird die Aufteilung mit den wenigsten parallelen Strings, bei der die
 Anzahl glatt aufgeht und **kein String länger als sechs Module** wird. Die Zahl
-kommt von der Eingangsspannung: Ein verbreiteter Laderegler wie der Victron
-MPPT 250/85 verträgt 250 V, ein Modul liefert im Leerlauf gut 40 V. Acht Module
-werden so zu 4S2P.
+kommt von der Eingangsspannung: Ein verbreiteter MPPT-Laderegler der
+250-Volt-Klasse verträgt 250 V, ein Modul liefert im Leerlauf gut 40 V. Acht
+Module werden so zu 4S2P.
 
 Geht es nicht auf – sieben Module etwa –, bleibt es bei einem einzigen String.
 Sieben in einer Reihe ist unwahrscheinlich, aber ehrlicher als 1S7P.

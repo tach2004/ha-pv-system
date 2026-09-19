@@ -1,7 +1,7 @@
 """PV-System – Anlagen, Speicher und Netz als Flussdiagramm.
 
 Die Integration misst nichts selbst. Sie nimmt die Sensoren, die ohnehin im
-System stehen - Shelly, Victron, Fronius, ein BMS über MQTT -, bringt sie auf
+System stehen - Zähler, Wechselrichter, Laderegler, ein BMS über MQTT -, bringt sie auf
 gemeinsame Einheiten und setzt daraus ein Bild zusammen: Module, Laderegler,
 Batterie, Wechselrichter, Phase, Netz. Für jede Anlage getrennt und in der
 Summe.

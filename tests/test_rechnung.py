@@ -411,7 +411,7 @@ if __name__ == "__main__":
 
 
 def test_hybrid_laedt_aus_dem_netz_und_das_ist_kein_hausverbrauch():
-    """Ein MultiPlus, der die Batterie aus dem Netz lädt, ist kein Verbraucher.
+    """Ein Hybrid, der die Batterie aus dem Netz lädt, ist kein Verbraucher.
 
     Ohne diese Unterscheidung stünden beim Laden mit 1 kW über 1000 W
     Hausverbrauch da, obwohl im Haus nur ein paar Watt laufen.

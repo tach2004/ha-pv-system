@@ -1,7 +1,7 @@
 """Messwerte aus fremden Entitäten lesen und auf eine Einheit bringen.
 
-Warum überhaupt: Die Quellen kommen von beliebigen Geräten. Ein Shelly meldet
-Leistung in W, ein Fronius-Modbus-Sensor in kW, ein Victron-MQTT-Sensor manchmal
+Warum überhaupt: Die Quellen kommen von beliebigen Geräten. Ein Zähler meldet
+Leistung in W, ein Modbus-Sensor in kW, ein MQTT-Sensor manchmal
 ohne Einheit. Würde die Integration die Zahlen ungeprüft addieren, käme eine
 Summe heraus, die um den Faktor 1000 daneben liegt - und niemand sähe es der
 Karte an. Deshalb wird jeder Wert über die Einheit seines Sensors umgerechnet.

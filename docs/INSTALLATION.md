@@ -87,8 +87,8 @@ Batterie die Klemmenspannung.
 | Laderegler     | Ausgangsspannung     | Batterieseite, also 24 V, 48 V …       |
 | Batterie       | Ladestand            | SoC des BMS                            |
 | Batterie       | Leistung             | BMS-Leistung oder Spannung × Strom     |
-| Wechselrichter | Leistung             | AC-Ausgangsleistung, oft über Shelly   |
-| Netz           | Gesamtleistung       | Shelly Pro 3EM, SDM630, Smart Meter    |
+| Wechselrichter | Leistung             | AC-Ausgangsleistung, oft per Zwischenzähler |
+| Netz           | Gesamtleistung       | Smartmeter, Zwischenzähler, Modbus-Zähler |
 
 Fehlt die Leistung am Laderegler oder an der Batterie, werden Spannung und
 Strom multipliziert. Fehlt der PV-Leistungssensor, springt die Leistung des
