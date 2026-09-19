@@ -200,6 +200,12 @@ ein kleines **ⓘ** in der Ecke – auf dem Telefon sagt sonst nichts, welcher
 Kasten sich öffnen lässt. Werte mit gepunkteter Unterstreichung führen zur
 Original-Entität.
 
+Die **Phasenzeilen sitzen in Pillen auf der Kastenkante**, im Zähler wie im
+Haus: `L1 →  −980 W`. Ein Stück der Pille ragt hinaus, die Linie des Kastens
+ist dort unterbrochen, und genau an dieser Kante endet die Phasenleitung mit
+ihrem Anschlusspunkt. Damit gehört jede Zahl sichtbar zu ihrer Leitung, statt
+nur zufällig auf deren Höhe zu stehen.
+
 Im **Batteriekasten** sagen zwei Farben, ob alles in Ordnung ist. Der
 Füllstandsbalken wechselt wie die Balken in Home Assistant: unter 50 % orange,
 unter 20 % rot. Die Zellentemperatur steht blau unter 5 °C, grün bis 30 °C,
