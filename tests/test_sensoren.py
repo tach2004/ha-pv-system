@@ -755,3 +755,51 @@ def test_der_ertragszaehler_springt_nicht_auf_den_modulzaehler_um():
     )
     koordinator._berechnen()
     assert gesehen["own"] == 5000.0
+
+
+# ------------------------------------------------------ Takt des Statussensors
+
+
+def _status(takt=0):
+    koordinator, sensoren = _sensoren(
+        _aufbau(display={"sensor_interval": 30, "card_interval": takt})
+    )
+    return koordinator, sensoren["status"]
+
+
+def test_ohne_takt_schreibt_der_status_bei_jeder_rechnung():
+    """Die Voreinstellung: Die Karte folgt sekundengenau."""
+    koordinator, status = _status(takt=0)
+    status.hass = koordinator.hass
+    geschrieben = []
+    status.async_write_ha_state = lambda: geschrieben.append(1)
+    for _ in range(3):
+        status._handle_coordinator_update()
+    assert len(geschrieben) == 3
+
+
+def test_mit_takt_wird_der_status_gebremst():
+    """Der größte Posten in der Zustandstabelle lässt sich drosseln."""
+    koordinator, status = _status(takt=5)
+    status.hass = koordinator.hass
+    geschrieben = []
+    status.async_write_ha_state = lambda: geschrieben.append(1)
+    for _ in range(3):
+        status._handle_coordinator_update()
+    # Der erste Lauf setzt die Uhr, die beiden folgenden fallen in den Takt.
+    assert len(geschrieben) == 1
+
+
+def test_ein_neues_wort_darf_den_takt_durchbrechen():
+    """„lädt" statt „speist ein" gehört sofort geschrieben."""
+    koordinator, status = _status(takt=60)
+    status.hass = koordinator.hass
+    geschrieben = []
+    status.async_write_ha_state = lambda: geschrieben.append(1)
+    status._handle_coordinator_update()
+    status._handle_coordinator_update()
+    assert len(geschrieben) == 1
+    # Die Batterie kehrt um - das ist eine Nachricht, kein Messwert.
+    koordinator.data["totals"]["battery_power"] = -900.0
+    status._handle_coordinator_update()
+    assert len(geschrieben) == 2

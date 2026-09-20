@@ -46,6 +46,7 @@ from .const import (
     ATTR_KEY,
     ATTR_PLANT_ID,
     ATTR_SYSTEM_ID,
+    CONF_CARD_INTERVAL,
     CONF_DISPLAY,
     CONF_ID,
     CONF_SENSOR_INTERVAL,
@@ -859,15 +860,14 @@ class PvBasis(CoordinatorEntity[PvSystemCoordinator], SensorEntity):
 
         Ein Netzzähler meldet sich jede Sekunde. Jede dieser Meldungen als
         eigenen Zustand aufzuzeichnen füllt die Datenbank, ohne dass jemand
-        das Ergebnis je ansieht: Die Karte holt ihre Zahlen ohnehin direkt vom
-        Koordinator und bleibt darum sekundengenau, ganz gleich, was hier
-        eingestellt ist.
+        das Ergebnis je ansieht: Auch ein Geldbetrag ändert sich mit jedem
+        Zählerschritt, und wer die Bezugskosten auf die Sekunde genau braucht,
+        hat ein anderes Problem. Die Langzeitstatistik von Home Assistant
+        rechnet in Fünf-Minuten-Blöcken - ein Takt von dreißig Sekunden
+        liefert ihr zehn Werte je Block.
 
-        Gedrosselt wird alles außer dem Statussensor: Auch ein Geldbetrag
-        ändert sich mit jedem Zählerschritt, und wer die Bezugskosten auf die
-        Sekunde genau braucht, hat ein anderes Problem. Die Langzeitstatistik
-        von Home Assistant rechnet in Fünf-Minuten-Blöcken - ein Takt von
-        dreißig Sekunden liefert ihr zehn Werte je Block.
+        Der Statussensor folgt einem eigenen Takt, weil an ihm die Karte
+        hängt - siehe dort.
         """
         takt = self.coordinator.config[CONF_DISPLAY][CONF_SENSOR_INTERVAL]
         if takt and self._taktgebunden:
@@ -1002,8 +1002,8 @@ class StatusSensor(PvBasis):
     Verbindung -, kommt sie über dieses Attribut trotzdem zu ihrem Bild.
     """
 
-    # Der Anker der Karte, und ein Wort statt einer Zahl: Er wechselt ein
-    # paar Mal am Tag und gehört dann sofort geschrieben.
+    # Nicht der gewöhnliche Takt: Dieser Sensor hat seinen eigenen, weil an
+    # ihm die Karte hängt.
     _taktgebunden = False
 
     _attr_translation_key = "status"
@@ -1015,6 +1015,31 @@ class StatusSensor(PvBasis):
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._entry_id}_status"
         self._attr_device_info = self._standort_geraet
+        self._wort: str | None = None
+
+    def _handle_coordinator_update(self) -> None:
+        """Der Takt der Karte - und der größte Posten in der Zustandstabelle.
+
+        Dieser Sensor ist der einzige, der bei jeder Rechnung schreibt, und
+        das aus gutem Grund: Die Karte liest die ganze Struktur aus seinen
+        Attributen. Sein Takt ist damit der Takt der Karte.
+
+        Er ist aber auch der Preis dafür. Bei rund einer Rechnung je Sekunde
+        entstehen etwa hunderttausend Zustände am Tag - mehr als alle übrigen
+        Sensoren dieser Integration zusammen. Die Attribute selbst landen
+        nicht in der Datenbank (siehe recorder.py), die Zeilen schon.
+
+        Wer das nicht will, stellt unter *Darstellung* einen Takt ein. Das
+        Wort selbst - "lädt", "speist ein" - wird davon nie aufgehalten: Es
+        wechselt ein paar Mal am Tag und gehört dann sofort geschrieben.
+        """
+        takt = self.coordinator.config[CONF_DISPLAY][CONF_CARD_INTERVAL]
+        wort = self.native_value
+        if takt and wort == self._wort and monotonic() - self._geschrieben < takt:
+            return
+        self._wort = wort
+        self._geschrieben = monotonic()
+        super()._handle_coordinator_update()
 
     @property
     def native_value(self) -> str | None:

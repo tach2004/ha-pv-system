@@ -852,11 +852,61 @@ bleibt es – von selbst schaltet die Integration nie etwas ab.
 
 ### Takt
 
-Unter *Darstellung und Aufzeichnung* steht, wie oft die Sensoren einen neuen
-Wert schreiben dürfen – **voreingestellt alle 30 Sekunden**. Die Karte hängt
-nicht daran. Wer die Sekunde braucht, trägt 0 ein; wer die Datenbank schonen
-will, 60 oder mehr. Die Langzeitstatistik von Home Assistant rechnet in
+Unter *Darstellung und Aufzeichnung* stehen **zwei** Takte.
+
+**Messwerte höchstens alle … Sekunden** – voreingestellt **30**. Betrifft alle
+Messsensoren. Die Langzeitstatistik von Home Assistant rechnet in
 Fünf-Minuten-Blöcken; dreißig Sekunden liefern ihr zehn Werte je Block.
+
+**Karte höchstens alle … Sekunden** – voreingestellt **0**, also sekundengenau.
+Betrifft nur den Statussensor. Und der verdient einen eigenen Absatz.
+
+### Der Statussensor ist der große Posten
+
+Die Karte liest die ganze Anlagenstruktur aus den **Attributen von
+`sensor.pv_system_status`**. Er ist damit der einzige Sensor, der bei jeder
+Rechnung schreiben muss – rund einmal je Sekunde. Gemessen in einem
+Debug-Protokoll:
+
+| Entität | Zustandswechsel in 105 s |
+|---|---|
+| `sensor.pv_system_status` | **130** |
+| jeder andere Sensor der Integration | ≤ 10 |
+
+Das sind etwa **hunderttausend Zustände am Tag** – mehr als alle übrigen
+Sensoren dieser Integration zusammen.
+
+**Die Attribute selbst landen nicht in der Datenbank.** Die Integration bringt
+dafür `recorder.py` mit, den dokumentierten Haken, mit dem eine Integration dem
+Recorder sagt, welche Attribute er überspringen soll – seit der ersten Fassung.
+Ohne ihn lägen bei jedem Zustandswechsel mehrere Kilobyte JSON in der
+Zustandstabelle.
+
+Was bleibt, sind die **Zeilen**. Drei Wege, sie loszuwerden:
+
+1. **Karte höchstens alle 2–5 Sekunden.** Mit dem Auge kaum zu sehen, aber ein
+   Bruchteil der Zeilen. Das Wort des Sensors – „lädt", „speist ein" – wird nie
+   aufgehalten, nur die Messwerte dahinter.
+2. **Den Sensor gar nicht aufzeichnen:**
+
+   ```yaml
+   recorder:
+     exclude:
+       entities:
+         - sensor.pv_system_status
+   ```
+
+3. Beides.
+
+**Bricht das etwas?** Nein. Die Karte liest den **lebenden Zustand** aus
+`hass.states`, nicht die Datenbank. Kosten, Ertrag und Amortisation rechnet der
+Koordinator aus deinen eigenen Zählern und merkt sich die Zwischenstände unter
+`.storage` – der Recorder kommt darin nicht vor. Verloren geht nur die
+*History* dieses einen Sensors, also die Antwort auf „was stand da gestern um
+drei?". Für ein Wort mit fünf möglichen Werten ist das kein Verlust.
+
+Was du **nicht** ausschließen solltest, sind die Geld- und Energiesensoren: An
+denen hängen die Langzeitstatistiken und das Energie-Dashboard.
 
 ### Autarkie und Eigenverbrauch
 

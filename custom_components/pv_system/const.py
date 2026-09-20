@@ -212,6 +212,19 @@ CONF_SHOW_PHASES: Final = "show_phases"
 CONF_SENSOR_INTERVAL: Final = "sensor_interval"
 DEFAULT_SENSOR_INTERVAL: Final = 30
 
+# Wie oft der Statussensor einen neuen Zustand schreibt, in Sekunden. Er ist
+# ein Sonderfall: An ihm haengt die ganze Struktur als Attribut, und die Karte
+# liest sie von dort. Sein Takt ist damit der Takt der Karte - und zugleich
+# der groesste Posten dieser Integration in der Zustandstabelle, weil er als
+# einziger Sensor bei jeder Rechnung schreibt.
+#
+# 0 heisst: bei jeder Rechnung, also rund einmal je Sekunde. Das ist die
+# Voreinstellung, weil eine Karte, die erst nach Sekunden folgt, nach einem
+# Fehler aussieht. Wem die Datenbank wichtiger ist als die letzte Sekunde,
+# stellt hier zwei bis fuenf ein.
+CONF_CARD_INTERVAL: Final = "card_interval"
+DEFAULT_CARD_INTERVAL: Final = 0
+
 # ----------------------------------------------------------------- Kosten
 # Die beiden Preise standen bis 0.0.3 unter "Darstellung". Sie sind dort
 # falsch aufgehoben, sobald aus ihnen gerechnet wird - deshalb ein eigener

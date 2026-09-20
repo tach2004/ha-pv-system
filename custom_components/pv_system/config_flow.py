@@ -51,6 +51,7 @@ from .const import (
     CONF_BATTERY_TEMPERATURE,
     CONF_BATTERY_VOLTAGE,
     CONF_CAPACITY,
+    CONF_CARD_INTERVAL,
     CONF_CHARGER,
     CONF_CHARGER_IN_CURRENT,
     CONF_CHARGER_IN_VOLTAGE,
@@ -413,6 +414,7 @@ def _felder_darstellung() -> dict[Any, Any]:
         vol.Optional(CONF_SHOW_STRINGS): bool,
         vol.Optional(CONF_SHOW_PHASES): bool,
         vol.Optional(CONF_SENSOR_INTERVAL): _zahl(0, 600, 5, "s"),
+        vol.Optional(CONF_CARD_INTERVAL): _zahl(0, 60, 1, "s"),
     }
 
 

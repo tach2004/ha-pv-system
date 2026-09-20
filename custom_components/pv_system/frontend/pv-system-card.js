@@ -641,6 +641,10 @@ class PvSystemCard extends HTMLElement {
       }
       .kennzahl .v2:empty { display: none; }
       .kennzahl .v:has(> span:first-child:empty) { display: none; }
+      /* Die zweite Überschrift steht wie die erste, nur mit etwas Luft
+         darüber - sie beginnt eine neue Angabe, keine Fortsetzung. */
+      .kennzahl .k.zweit { margin-top: 5px; }
+      .kennzahl .k.zweit:has(> span:empty) { display: none; }
       /* Das Wort hinter der Zahl: klein, grau, mit etwas Luft davor. Es sagt,
          welche der beiden gleich großen Zahlen welche ist. */
       .kennzahl .vwort {
@@ -1815,12 +1819,15 @@ class PvSystemCard extends HTMLElement {
     const felder = [
       ["netz", "Netz"],
       ["pv", "Erzeugung"],
-      ["haus", "Verbrauch"],
+      // Hausverbrauch und Grundverbrauch untereinander, jeder mit seiner
+      // eigenen Überschrift: Zwei Wattzahlen ohne Beschriftung wären nicht
+      // auseinanderzuhalten.
+      ["haus", "Verbrauch", { untereinander: true, kopf: "Grundverbrauch" }],
       // Zwei Quoten untereinander, beide in voller Größe: Sie beantworten
       // verwandte Fragen - die eine schaut auf den Zähler, die andere auf das
       // Dach. Nebeneinander mussten sie kleiner werden, weil "100 %" und
       // "85 %" zusammen 105 Pixel brauchen und die Kachel innen 92 hat.
-      ["autarkie", "Autarkie", { untereinander: true }],
+      ["autarkie", "Autarkie", { untereinander: true, kopf: "Eigenverbrauch" }],
       // Zwei Zahlen gleichen Ranges: Was auf dem Dach liegt und was im
       // Keller steht. Beide gleich groß, jede mit ihrem Wort dahinter.
       ["peak", "Installiert", { untereinander: true }],
@@ -1865,8 +1872,22 @@ class PvSystemCard extends HTMLElement {
         this._refs.set(`kpi:${name}:wort`, wort);
         eltern.appendChild(reihe);
       };
+      // Eine zweite Überschrift über der zweiten Zahl, in derselben Größe wie
+      // die erste. Wo die Einheit den Unterschied schon macht - "kWp" gegen
+      // "kWh", Prozent gegen Watt -, bleibt sie weg und das Wort steht klein
+      // hinter der Zahl.
+      const kopfzeile = (text, name) => {
+        const reihe = e("div", { class: "k zweit" });
+        const wort = e("span", { class: "kname", text });
+        reihe.appendChild(wort);
+        this._refs.set(`kpi:${name}:kopf`, wort);
+        z.appendChild(reihe);
+      };
       zeile(schluessel, z);
-      if (art.untereinander) zeile(`${schluessel}2`, z);
+      if (art.untereinander) {
+        if (art.kopf) kopfzeile(art.kopf, `${schluessel}2`);
+        zeile(`${schluessel}2`, z);
+      }
       // Eine zweite, kleinere Zeile für das, was sonst umbrechen würde: beim
       // Speicher die Kapazität, bei der Autarkie der Eigenverbrauch. Die
       // Kachelbreite bleibt dieselbe - auf dem Telefon stehen sonst plötzlich
@@ -2149,12 +2170,11 @@ class PvSystemCard extends HTMLElement {
     this._setzen("kpi:haus", watt(d.house.house_power, l));
     // Der Grundverbrauch gehört neben den Hausverbrauch, nicht nur in den
     // Kasten: Wer die Kennzahlenleiste liest, soll denselben Unterschied
-    // sehen wie im Bild darüber.
+    // sehen wie im Bild darüber. Ohne Überschussverbraucher gibt es keinen
+    // Unterschied - dann bleibt die Zeile weg, samt ihrer Überschrift.
     const umleiterAn = d.house.diverter && d.house.diverter.enabled;
-    this._setzen(
-      "kpi:haus:zusatz",
-      umleiterAn ? `Grund ${watt(d.house.base_power, l)}` : ""
-    );
+    this._setzen("kpi:haus2:kopf", umleiterAn ? "Grundverbrauch" : "");
+    this._setzen("kpi:haus2", umleiterAn ? watt(d.house.base_power, l) : "");
     this._setzen("kpi:netz", wattVz(netzleistung, l));
     // Ladestand und Leistung untereinander, beide in voller Größe; die
     // eingebaute Kapazität klein darunter, weil sie sich nie ändert.
@@ -2178,7 +2198,6 @@ class PvSystemCard extends HTMLElement {
     // unterscheiden sich die Einheiten, hier stünden zwei Prozentzahlen ohne
     // Unterschied untereinander.
     this._setzen("kpi:autarkie2", prozent(d.house.self_consumption, l));
-    this._setzen("kpi:autarkie2:wort", "Eigenv.");
     // Was fest verbaut ist, steht beisammen: oben das Dach, darunter der
     // Speicher. Zwei Zahlen gleichen Ranges, also auch gleich groß - das Wort
     // dahinter klein, damit man weiß, welche welche ist.

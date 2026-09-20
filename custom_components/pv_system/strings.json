@@ -354,13 +354,15 @@
       "display": {
         "data": {
           "animate": "Animate flow lines",
+          "card_interval": "Card at most every",
           "sensor_interval": "Measurements at most every",
           "show_phases": "Draw phases individually",
           "show_strings": "Draw string layout"
         },
         "data_description": {
           "animate": "The dots on the lines move with the power. Off if the dashboard stutters on an old tablet.",
-          "sensor_interval": "How often this integration's measurement sensors may write a new value to the database. The card does not depend on it - it reads along directly and stays second by second. 0 means: on every measurement, and that makes the database grow fast.",
+          "card_interval": "**This integration's biggest contributor to the database.**\n\nThe card reads the whole system structure from the status sensor's attributes. Its rate is therefore the card's rate - and it is the only sensor that writes on every calculation. That is about a hundred thousand states a day, more than all other sensors together.\n\nThe attributes themselves are not stored; the rows are.\n\n**0** (default): the card follows second by second. **2 to 5**: barely slower to the eye, but a fraction of the rows. The sensor's word - “charging”, “exporting” - is never held back.\n\nTo get rid of the rows entirely, exclude the sensor from recording in `configuration.yaml`. The card keeps working: it reads the live state, not the database.",
+          "sensor_interval": "How often this integration's measurement sensors may write a new value to the database. The card does not depend on it - its rate is the field below. 0 means: on every measurement, and that makes the database grow fast.\n\nLong-term statistics work in five-minute blocks; thirty seconds give them ten values per block.",
           "show_phases": "Three phase lines between meter and house, each with its own flow. Off leaves a single AC line - right for a single-phase system and noticeably flatter.",
           "show_strings": "Draws the modules individually, in series and parallel. Off gives a narrower card."
         },

@@ -39,6 +39,7 @@ from .const import (
     CONF_BATTERY_TEMPERATURE,
     CONF_BATTERY_VOLTAGE,
     CONF_CAPACITY,
+    CONF_CARD_INTERVAL,
     CONF_CHARGER,
     CONF_CHARGER_IN_CURRENT,
     CONF_CHARGER_IN_VOLTAGE,
@@ -132,6 +133,7 @@ from .const import (
     CONF_TILT,
     DEFAULT_BASE_PRICE_UNIT,
     DEFAULT_CAPACITY,
+    DEFAULT_CARD_INTERVAL,
     DEFAULT_CURRENCY,
     DEFAULT_DIVERTER_EFFICIENCY,
     DEFAULT_DIVERTER_FUEL,
@@ -449,6 +451,9 @@ def darstellung_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         CONF_SHOW_PHASES: bool(roh.get(CONF_SHOW_PHASES, True)),
         CONF_SENSOR_INTERVAL: _ganz(
             roh.get(CONF_SENSOR_INTERVAL), DEFAULT_SENSOR_INTERVAL, tiefstens=0, hoechstens=600
+        ),
+        CONF_CARD_INTERVAL: _ganz(
+            roh.get(CONF_CARD_INTERVAL), DEFAULT_CARD_INTERVAL, tiefstens=0, hoechstens=60
         ),
     }
 
