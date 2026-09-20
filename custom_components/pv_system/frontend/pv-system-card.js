@@ -623,18 +623,6 @@ class PvSystemCard extends HTMLElement {
       .kennzahl .kname {
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
-      /* Zweispaltige Kachel: Überschriften und Zahlen in derselben Aufteilung
-         untereinander, damit jede Zahl unter ihrem Wort steht. Die Zahl ist
-         eine Spur kleiner als in den einspaltigen Kacheln - "100 %" und
-         "85 %" brauchen in voller Größe zusammen 105 Pixel, die Kachel hat
-         innen 92. Klein genug ist sie immer noch die größte Schrift der
-         Kachel, und beide Quoten stehen nebeneinander, wo sie hingehören. */
-      .kennzahl .paar { display: flex; gap: 6px; justify-content: space-between; }
-      .kennzahl .paar .v { flex: 0 1 auto; min-width: 0; font-size: 13px; }
-      /* Der Abstand der Überschriften bleibt bei vier Pixeln: "Autarkie" und
-         "Eigenv." brauchen zusammen neunzig, und die Kachel hat
-         zweiundneunzig. Bei sechs stand dort "Autar…". */
-      .kennzahl .kname.zweit { text-align: right; }
       /* Nicht umbrechen: Lieber eine Zahl abgeschnitten als eine Kachel, die
          plötzlich doppelt so hoch ist und das Raster darunter verschiebt. */
       .kennzahl .v {
@@ -647,6 +635,9 @@ class PvSystemCard extends HTMLElement {
       .kennzahl .v2 {
         font-size: 9px; color: var(--secondary-text-color, #727272);
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        /* Etwas Luft nach oben: Ohne sie klebte der Grundverbrauch am
+           Hausverbrauch darüber, als gehörte er zur selben Zahl. */
+        margin-top: 3px;
       }
       .kennzahl .v2:empty { display: none; }
       .kennzahl .v:has(> span:first-child:empty) { display: none; }
@@ -1825,10 +1816,11 @@ class PvSystemCard extends HTMLElement {
       ["netz", "Netz"],
       ["pv", "Erzeugung"],
       ["haus", "Verbrauch"],
-      // Zwei Quoten nebeneinander: Sie beantworten verwandte Fragen und
-      // gehören zusammengelesen - die eine schaut auf den Zähler, die
-      // andere auf das Dach.
-      ["autarkie", "Autarkie", { neben: "Eigenv." }],
+      // Zwei Quoten untereinander, beide in voller Größe: Sie beantworten
+      // verwandte Fragen - die eine schaut auf den Zähler, die andere auf das
+      // Dach. Nebeneinander mussten sie kleiner werden, weil "100 %" und
+      // "85 %" zusammen 105 Pixel brauchen und die Kachel innen 92 hat.
+      ["autarkie", "Autarkie", { untereinander: true }],
       // Zwei Zahlen gleichen Ranges: Was auf dem Dach liegt und was im
       // Keller steht. Beide gleich groß, jede mit ihrem Wort dahinter.
       ["peak", "Installiert", { untereinander: true }],
@@ -1856,14 +1848,6 @@ class PvSystemCard extends HTMLElement {
       const name = e("span", { class: "kname", text: beschriftung });
       kopf.appendChild(name);
       this._refs.set(`kpi:${schluessel}:name`, name);
-      // Die zweite Überschrift einer zweispaltigen Kachel. Leer bleibt sie,
-      // wo die Zahl für sich spricht - beim Speicher sagt das Vorzeichen,
-      // was die zweite Spalte meint.
-      if (art.neben !== undefined) {
-        const zweit = e("span", { class: "kname zweit", text: art.neben });
-        kopf.appendChild(zweit);
-        this._refs.set(`kpi:${schluessel}2:name`, zweit);
-      }
       // Das kleine „i“ sagt: Hier steckt mehr dahinter. Ohne Zeichen musste
       // man raten, welche Kachel sich öffnen lässt und welche nur dasteht.
       if (geldkachel) kopf.appendChild(e("span", { class: "info", text: "i" }));
@@ -1881,17 +1865,8 @@ class PvSystemCard extends HTMLElement {
         this._refs.set(`kpi:${name}:wort`, wort);
         eltern.appendChild(reihe);
       };
-      if (art.neben !== undefined) {
-        // Nebeneinander: zwei Zahlen gleicher Größe in einer Reihe, die
-        // Überschriften darüber in derselben Aufteilung.
-        const paar = e("div", { class: "paar" });
-        zeile(schluessel, paar);
-        zeile(`${schluessel}2`, paar);
-        z.appendChild(paar);
-      } else {
-        zeile(schluessel, z);
-        if (art.untereinander) zeile(`${schluessel}2`, z);
-      }
+      zeile(schluessel, z);
+      if (art.untereinander) zeile(`${schluessel}2`, z);
       // Eine zweite, kleinere Zeile für das, was sonst umbrechen würde: beim
       // Speicher die Kapazität, bei der Autarkie der Eigenverbrauch. Die
       // Kachelbreite bleibt dieselbe - auf dem Telefon stehen sonst plötzlich
@@ -2195,11 +2170,15 @@ class PvSystemCard extends HTMLElement {
     // 92 - und das Vorzeichen sagt dasselbe kürzer.
     this._setzen("kpi:akku:zusatz", t.battery_count && akkuKap ? kwh(akkuKap, l) : "");
     this._setzen("kpi:autarkie", prozent(d.house.self_sufficiency, l));
-    // Der Eigenverbrauch steht daneben, nicht darunter: Beide Quoten sind
-    // gleich wichtig und werden zusammen gelesen. Auch ohne Zahl steht er da
-    // - nachts wird nichts erzeugt, das im Haus bleiben könnte, die Quote ist
-    // dann nicht null, sondern unbestimmt, und ein Strich sagt das.
+    // Der Eigenverbrauch darunter, in derselben Größe. Auch ohne Zahl steht er
+    // da - nachts wird nichts erzeugt, das im Haus bleiben könnte, die Quote
+    // ist dann nicht null, sondern unbestimmt, und ein Strich sagt das.
+    //
+    // Das Wort dahinter ist hier nötig, anders als beim Speicher: Dort
+    // unterscheiden sich die Einheiten, hier stünden zwei Prozentzahlen ohne
+    // Unterschied untereinander.
     this._setzen("kpi:autarkie2", prozent(d.house.self_consumption, l));
+    this._setzen("kpi:autarkie2:wort", "Eigenv.");
     // Was fest verbaut ist, steht beisammen: oben das Dach, darunter der
     // Speicher. Zwei Zahlen gleichen Ranges, also auch gleich groß - das Wort
     // dahinter klein, damit man weiß, welche welche ist.
