@@ -72,6 +72,9 @@ const ZAEHLER_B = 108;    // Breite des Zählerkastens
 const PILLE_B = 86;       // Gesamtbreite, Überstand eingerechnet
 const PILLE_H = 15;       // Höhe
 const PILLE_UEBER = 8;    // wie weit sie über die Kastenkante hinausragt
+// Platz, den die Erzeugungszahl über einer Phase braucht - "↑ 12,34 kW" ist
+// der längste Fall. Danach richtet sich, welchen Stränge sie ausweicht.
+const PHASENZAHL_B = 58;
 const HAUS_B = 152;       // Breite des Hauskastens
 const BAND_OBEN = 40;     // Titel und Modell über der ersten Phasenzeile
 const BAND_UNTEN = 16;    // Luft unter der letzten Phasenzeile
@@ -491,6 +494,15 @@ class PvSystemCard extends HTMLElement {
       .wert  { font-size: 14px; font-weight: 700; }
       .klein { font-size: 10px; fill: var(--secondary-text-color, #727272); }
       .mini  { font-size: 9px;  fill: var(--secondary-text-color, #727272); }
+      /* Schrift, die über Leitungen liegen kann: Der Rand in der Kartenfarbe
+         wird zuerst gezeichnet und stellt die Zeichen frei. Ohne ihn läuft
+         eine senkrechte Leitung mitten durch die Ziffern. */
+      .freistellen {
+        paint-order: stroke;
+        stroke: var(--card-background-color, #fff);
+        stroke-width: 3.5;
+        stroke-linejoin: round;
+      }
       .mittig { text-anchor: middle; }
       .rechts { text-anchor: end; }
 
@@ -611,6 +623,18 @@ class PvSystemCard extends HTMLElement {
       .kennzahl .kname {
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
+      /* Zweispaltige Kachel: Überschriften und Zahlen in derselben Aufteilung
+         untereinander, damit jede Zahl unter ihrem Wort steht. Die Zahl ist
+         eine Spur kleiner als in den einspaltigen Kacheln - "100 %" und
+         "85 %" brauchen in voller Größe zusammen 105 Pixel, die Kachel hat
+         innen 92. Klein genug ist sie immer noch die größte Schrift der
+         Kachel, und beide Quoten stehen nebeneinander, wo sie hingehören. */
+      .kennzahl .paar { display: flex; gap: 6px; justify-content: space-between; }
+      .kennzahl .paar .v { flex: 0 1 auto; min-width: 0; font-size: 13px; }
+      /* Der Abstand der Überschriften bleibt bei vier Pixeln: "Autarkie" und
+         "Eigenv." brauchen zusammen neunzig, und die Kachel hat
+         zweiundneunzig. Bei sechs stand dort "Autar…". */
+      .kennzahl .kname.zweit { text-align: right; }
       /* Nicht umbrechen: Lieber eine Zahl abgeschnitten als eine Kachel, die
          plötzlich doppelt so hoch ist und das Raster darunter verschiebt. */
       .kennzahl .v {
@@ -679,8 +703,20 @@ class PvSystemCard extends HTMLElement {
         cursor: pointer; border: 0; background: none; font-size: 18px; line-height: 1;
         color: var(--secondary-text-color, #727272);
       }
-      .zeilen { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; font-size: 13px; }
-      .zeilen .k { color: var(--secondary-text-color, #727272); }
+      /* Eine sehr helle Linie unter jeder Zeile. Beschriftung links und Wert
+         rechts stehen bei breiten Karten weit auseinander - ohne Führung
+         verrutscht das Auge eine Zeile, und man liest den falschen Wert. */
+      .zeilen { display: grid; grid-template-columns: 1fr auto; gap: 0; font-size: 13px; }
+      .zeilen > * {
+        padding: 2.5px 0;
+        border-bottom: 1px solid var(--divider-color, #cfd8dc);
+        border-bottom-color: color-mix(in srgb, var(--divider-color, #cfd8dc) 45%, transparent);
+      }
+      .zeilen > *:nth-last-child(-n + 2) { border-bottom: 0; }
+      /* Der Abstand zwischen Beschriftung und Wert steckt im Innenrand, nicht
+         in einer Spaltenlücke: Sonst risse die Linie in der Mitte ab und säße
+         als zwei Stummel da, statt das Auge herüberzuführen. */
+      .zeilen .k { color: var(--secondary-text-color, #727272); padding-right: 14px; }
       .zeilen .v { text-align: right; font-variant-numeric: tabular-nums; }
       .zeilen .k.klickbar { cursor: pointer; text-decoration: underline dotted; }
 
@@ -1361,11 +1397,31 @@ class PvSystemCard extends HTMLElement {
         );
       }
 
-      // Erzeugung auf dieser Phase, über der Linie kurz vor dem Haus.
+      // Erzeugung auf dieser Phase, über der Linie kurz vor dem Haus. Dort
+      // steht bei drei Anlagen oft der Strang der letzten Spalte senkrecht im
+      // Weg: Die Zahl liefe mitten hindurch. Sie weicht ihm deshalb nach
+      // links aus - an jedem Abgriff, der in ihre Breite fällt, vorbei. Von
+      // rechts nach links, damit auch zwei dicht beieinander stehende
+      // Stränge nacheinander umgangen werden.
+      // Im Weg stehen nicht nur die Stränge dieser Phase: Ein Strang zur
+      // zweiten Phase läuft von oben an der ersten vorbei. Gemieden wird
+      // deshalb alles, was auf dieser Zeile oder darunter ankommt.
+      let ende = rechts - 8;
+      const kreuzend = g.abgriffe
+        .slice(i)
+        .flat()
+        .map((a) => a.x)
+        .sort((a, b) => b - a);
+      for (const x of kreuzend) {
+        if (x > ende - PHASENZAHL_B && x < ende + 2) ende = x - 7;
+      }
+      // Und darunter trotzdem ein Rand in der Kartenfarbe: Wo es wirklich eng
+      // wird - viele Anlagen auf einer Phase -, bleibt die Zahl lesbar, statt
+      // in einer Leitung zu verschwinden.
       this._ref(
         leitungen,
         `phase:${i}`,
-        e("text", { class: "mini rechts", x: rechts - 8, y: y - 8 })
+        e("text", { class: "mini rechts freistellen", x: ende, y: y - 8 })
       );
     }
   }
@@ -1769,10 +1825,13 @@ class PvSystemCard extends HTMLElement {
       ["netz", "Netz"],
       ["pv", "Erzeugung"],
       ["haus", "Verbrauch"],
-      ["autarkie", "Autarkie"],
+      // Zwei Quoten nebeneinander: Sie beantworten verwandte Fragen und
+      // gehören zusammengelesen - die eine schaut auf den Zähler, die
+      // andere auf das Dach.
+      ["autarkie", "Autarkie", { neben: "Eigenv." }],
       // Zwei Zahlen gleichen Ranges: Was auf dem Dach liegt und was im
       // Keller steht. Beide gleich groß, jede mit ihrem Wort dahinter.
-      ["peak", "Installiert", true],
+      ["peak", "Installiert", { untereinander: true }],
       ["akku", "Speicher"],
     ];
     // Die beiden Geldkacheln nur, wenn ein Preis hinterlegt ist - sonst
@@ -1781,7 +1840,7 @@ class PvSystemCard extends HTMLElement {
     if (kosten.configured) {
       felder.push(["ertrag", "Ertrag heute"], ["kosten", "Kosten heute"]);
     }
-    for (const [schluessel, beschriftung, zweizeilig] of felder) {
+    for (const [schluessel, beschriftung, art = {}] of felder) {
       const geldkachel = schluessel === "ertrag" || schluessel === "kosten";
       const z = e("div", {
         class: geldkachel ? "kennzahl block" : "kennzahl",
@@ -1794,6 +1853,14 @@ class PvSystemCard extends HTMLElement {
       const name = e("span", { class: "kname", text: beschriftung });
       kopf.appendChild(name);
       this._refs.set(`kpi:${schluessel}:name`, name);
+      // Die zweite Überschrift einer zweispaltigen Kachel. Leer bleibt sie,
+      // wo die Zahl für sich spricht - beim Speicher sagt das Vorzeichen,
+      // was die zweite Spalte meint.
+      if (art.neben !== undefined) {
+        const zweit = e("span", { class: "kname zweit", text: art.neben });
+        kopf.appendChild(zweit);
+        this._refs.set(`kpi:${schluessel}2:name`, zweit);
+      }
       // Das kleine „i“ sagt: Hier steckt mehr dahinter. Ohne Zeichen musste
       // man raten, welche Kachel sich öffnen lässt und welche nur dasteht.
       if (geldkachel) kopf.appendChild(e("span", { class: "info", text: "i" }));
@@ -1801,7 +1868,7 @@ class PvSystemCard extends HTMLElement {
       // Eine Wertzeile trägt die Zahl groß und - wo es zwei davon gibt -
       // dahinter klein, worum es sich handelt. Sonst stünden in einer Kachel
       // zwei fette Zahlen ohne Beschriftung untereinander.
-      const zeile = (name) => {
+      const zeile = (name, eltern) => {
         const reihe = e("div", { class: "v" });
         const zahl = e("span", { text: "–" });
         reihe.appendChild(zahl);
@@ -1809,10 +1876,19 @@ class PvSystemCard extends HTMLElement {
         reihe.appendChild(wort);
         this._refs.set(`kpi:${name}`, zahl);
         this._refs.set(`kpi:${name}:wort`, wort);
-        z.appendChild(reihe);
+        eltern.appendChild(reihe);
       };
-      zeile(schluessel);
-      if (zweizeilig) zeile(`${schluessel}2`);
+      if (art.neben !== undefined) {
+        // Nebeneinander: zwei Zahlen gleicher Größe in einer Reihe, die
+        // Überschriften darüber in derselben Aufteilung.
+        const paar = e("div", { class: "paar" });
+        zeile(schluessel, paar);
+        zeile(`${schluessel}2`, paar);
+        z.appendChild(paar);
+      } else {
+        zeile(schluessel, z);
+        if (art.untereinander) zeile(`${schluessel}2`, z);
+      }
       // Eine zweite, kleinere Zeile für das, was sonst umbrechen würde: beim
       // Speicher die Kapazität, bei der Autarkie der Eigenverbrauch. Die
       // Kachelbreite bleibt dieselbe - auf dem Telefon stehen sonst plötzlich
@@ -2067,7 +2143,7 @@ class PvSystemCard extends HTMLElement {
     this._setzen(
       "house:quoten",
       `Autark ${prozent(d.house.self_sufficiency, l)} · ` +
-        `Eigen ${prozent(d.house.self_consumption, l)}`
+        `Eigenv. ${prozent(d.house.self_consumption, l)}`
     );
 
     // Was auf jeder Phase im Haus bleibt.
@@ -2093,8 +2169,19 @@ class PvSystemCard extends HTMLElement {
     // Kennzahlenleiste
     this._setzen("kpi:pv", watt(t.pv_power, l));
     this._setzen("kpi:haus", watt(d.house.house_power, l));
+    // Der Grundverbrauch gehört neben den Hausverbrauch, nicht nur in den
+    // Kasten: Wer die Kennzahlenleiste liest, soll denselben Unterschied
+    // sehen wie im Bild darüber.
+    const umleiterAn = d.house.diverter && d.house.diverter.enabled;
+    this._setzen(
+      "kpi:haus:zusatz",
+      umleiterAn ? `Grund ${watt(d.house.base_power, l)}` : ""
+    );
     this._setzen("kpi:netz", wattVz(netzleistung, l));
-    // Ladestand groß, Leistung und Kapazität klein darunter.
+    // Ladestand groß, Leistung und Kapazität klein darunter. Nebeneinander
+    // passen sie nicht: "79 %" und "−466 W" brauchen in der großen Schrift
+    // zusammen 120 Pixel, die Kachel hat innen 92 - und bei "−1,23 kW" wird
+    // es noch enger. Lieber klein und vollständig als groß und abgeschnitten.
     const akkuP = zahl(t.battery_power);
     const akkuKap = zahl(t.battery_capacity);
     this._setzen("kpi:akku", t.battery_count ? prozent(t.battery_soc, l) : "–");
@@ -2105,14 +2192,11 @@ class PvSystemCard extends HTMLElement {
     if (akkuKap) akkuZeile.push(`${kwh(akkuKap, l)}`);
     this._setzen("kpi:akku:zusatz", t.battery_count ? akkuZeile.join(" · ") : "");
     this._setzen("kpi:autarkie", prozent(d.house.self_sufficiency, l));
-    // Immer da, auch ohne Zahl: Nachts wird nichts erzeugt, das im Haus
-    // bleiben könnte - die Quote ist dann nicht null, sondern unbestimmt, und
-    // ein Strich sagt das. Eine Kachel, die abends eine Zeile verliert, sieht
-    // aus wie ein Fehler.
-    this._setzen(
-      "kpi:autarkie:zusatz",
-      `Eigen ${prozent(d.house.self_consumption, l)}`
-    );
+    // Der Eigenverbrauch steht daneben, nicht darunter: Beide Quoten sind
+    // gleich wichtig und werden zusammen gelesen. Auch ohne Zahl steht er da
+    // - nachts wird nichts erzeugt, das im Haus bleiben könnte, die Quote ist
+    // dann nicht null, sondern unbestimmt, und ein Strich sagt das.
+    this._setzen("kpi:autarkie2", prozent(d.house.self_consumption, l));
     // Was fest verbaut ist, steht beisammen: oben das Dach, darunter der
     // Speicher. Zwei Zahlen gleichen Ranges, also auch gleich groß - das Wort
     // dahinter klein, damit man weiß, welche welche ist.
@@ -2611,9 +2695,26 @@ class PvSystemCard extends HTMLElement {
     const gesamt = zeit.total || {};
     zeilen.push(
       ["Ertrag gesamt", geld(gesamt.yield, w, l)],
+      // Der Grundpreis läuft seit dem ersten Lauf mit - getrennt
+      // ausgewiesen, weil er unabhängig vom Verbrauch anfällt.
+      ...(gesamt.base_cost
+        ? [["davon Grundpreis gesamt", geld(gesamt.base_cost, w, l)]]
+        : []),
       ["Bilanz gesamt", geld(gesamt.balance, w, l)],
       ["Investition aller Anlagen", k.investment === null ? "–" : geld(k.investment, w, l)],
       ["Amortisation", einheit(k.payback_progress, "%", 1, l)],
+      // Dieselbe Auskunft in Geld: Vor der Amortisation steht hier, wie viel
+      // noch fehlt; danach, was die Anlage über ihre Anschaffung hinaus
+      // eingebracht hat. Die Prozentzahl allein sagt bei 140 % nicht, wie
+      // viel das ist.
+      [
+        zahl(k.payback_surplus) !== null && zahl(k.payback_surplus) >= 0
+          ? "Davon Gewinn"
+          : "Noch abzuzahlen",
+        k.payback_surplus === null || k.payback_surplus === undefined
+          ? "–"
+          : geld(Math.abs(k.payback_surplus), w, l),
+      ],
       [
         "Noch",
         k.payback_years === null || k.payback_years === undefined
@@ -2669,6 +2770,14 @@ class PvSystemCard extends HTMLElement {
       ["Ertrag gesamt", geld(k.yield, w, l)],
       ["Investition", k.investment ? geld(k.investment, w, l) : "–"],
       ["Amortisation", einheit(k.payback_progress, "%", 1, l)],
+      [
+        zahl(k.payback_surplus) !== null && zahl(k.payback_surplus) >= 0
+          ? "Davon Gewinn"
+          : "Noch abzuzahlen",
+        k.payback_surplus === null || k.payback_surplus === undefined
+          ? "–"
+          : geld(Math.abs(k.payback_surplus), w, l),
+      ],
       [
         "Noch",
         k.payback_years === null || k.payback_years === undefined

@@ -103,6 +103,9 @@
       "payback_progress": {
         "name": "Amortisation"
       },
+      "payback_surplus": {
+        "name": "Gewinn nach Investition"
+      },
       "payback_years": {
         "name": "Restliche Amortisationszeit"
       },

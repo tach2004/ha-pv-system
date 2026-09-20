@@ -55,6 +55,7 @@ from .const import (
     KEY_FEED_IN_REVENUE,
     KEY_GRID_COST,
     KEY_PAYBACK_PROGRESS,
+    KEY_PAYBACK_SURPLUS,
     KEY_PAYBACK_YEARS,
     KEY_PLANT_PAYBACK_PROGRESS,
     KEY_PLANT_PAYBACK_YEARS,
@@ -491,6 +492,17 @@ KOSTEN: tuple[PvSensorDescription, ...] = (
         icon="mdi:calendar-clock",
         wert=lambda d: d["costs"]["payback_years"],
         extra=lambda d: {"yield_per_year": d["costs"]["yield_year"]},
+        wenn=lambda c: bool(c["costs"]["investment"]),
+    ),
+    # Dieselbe Auskunft in Geld statt in Prozent: Was die Anlagen über ihre
+    # Anschaffung hinaus eingebracht haben - und davor, wie viel noch fehlt.
+    PvSensorDescription(
+        key=KEY_PAYBACK_SURPLUS,
+        translation_key=KEY_PAYBACK_SURPLUS,
+        device_class=SensorDeviceClass.MONETARY,
+        suggested_display_precision=2,
+        icon="mdi:scale-balance",
+        wert=lambda d: d["costs"]["payback_surplus"],
         wenn=lambda c: bool(c["costs"]["investment"]),
     ),
 )

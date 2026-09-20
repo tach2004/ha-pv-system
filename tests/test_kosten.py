@@ -768,3 +768,91 @@ def _tage(marke):
     if wann.tzinfo is None:
         wann = wann.replace(tzinfo=_jetzt().tzinfo)
     return (_jetzt() - wann).days
+
+
+def test_ein_neuer_grundpreis_aendert_die_vergangenheit_nicht():
+    """Wie beim Arbeitspreis: Was gestern galt, bleibt gestern stehen.
+
+    Der Grundpreis wurde früher bei jeder Rechnung über die ganze Messzeit
+    neu hochgerechnet. Wer 2028 ein höheres Netzentgelt eintrug, änderte
+    damit rückwirkend, was 2026 gekostet hat.
+    """
+    rechner = _rechner(schritt=timedelta(days=30))
+    billig = {"price": 0.30, "base": 10.0}
+    teuer = {"price": 0.30, "base": 40.0}
+
+    rechner.rechnen({"import": 0.0}, billig, {})
+    # Drei Monate zu zehn Euro.
+    for _ in range(3):
+        gesamt = rechner.rechnen({"import": 0.0}, billig, {})["periods"]["total"]
+    assert 28.0 < gesamt["base_cost"] < 32.0, gesamt["base_cost"]
+
+    # Jetzt vervierfacht sich der Grundpreis. Die drei Monate davor bleiben,
+    # wie sie waren - dazu kommt nur der neue Monat zum neuen Satz.
+    gesamt = rechner.rechnen({"import": 0.0}, teuer, {})["periods"]["total"]
+    assert 68.0 < gesamt["base_cost"] < 72.0, gesamt["base_cost"]
+    # Die alte Rechnung hätte vier Monate zu vierzig Euro ergeben.
+    assert gesamt["base_cost"] < 120.0
+
+
+def test_ein_alter_speicher_faengt_nicht_bei_null_an():
+    """Beim Update darf die Gesamtsumme nicht um den Grundpreis einbrechen.
+
+    Ältere Fassungen führten den Grundpreis nicht mit, sondern rechneten ihn
+    bei jedem Lauf neu über die ganze Messzeit. Der Speicher beginnt deshalb
+    bei genau dem Betrag, den diese Rechnung ergab.
+    """
+    rechner = _rechner()
+    beginn = _jetzt() - timedelta(days=365)
+    # Ein Speicherstand, wie ihn eine Fassung vor dieser hinterlassen hat:
+    # Geld ohne den Posten "base".
+    rechner._rechner._marken["total"] = {
+        "start": beginn.isoformat(),
+        "werte": {},
+        "geld": {"cost": 100.0, "revenue": 0.0, "savings": 0.0},
+        "letzte": {"import": 0.0},
+    }
+    gesamt = rechner.rechnen(
+        {"import": 0.0}, {"price": 0.30, "base": 12.0}, {}
+    )["periods"]["total"]
+    # Zwölf Euro im Monat, ein Jahr lang - rund 146 Euro (365 / 30,44).
+    assert 140.0 < gesamt["base_cost"] < 150.0, gesamt["base_cost"]
+    assert gesamt["cost"] == round(100.0 + gesamt["base_cost"], 2)
+
+
+def test_amortisation_laeuft_ueber_hundert_prozent_weiter():
+    """Bei 100 % ist die Anlage bezahlt - ab da zählt der Gewinn."""
+    rechner = _rechner(schritt=timedelta(days=200))
+    anlagen = [{
+        "id": "a1",
+        "name": "Dach",
+        "investment": 1000.0,
+        "commissioned": (_jetzt() - timedelta(days=900)).date().isoformat(),
+        "prior_yield": 0.0,
+    }]
+    preise = {"price": 1.0, "feed_in": 1.0}
+    rechner.rechnen({"export": 0.0, "own": 0.0}, preise, {}, anlagen)
+    # 1500 kWh selbst genutzt zu einem Euro: 1500 Euro Ertrag bei 1000 Euro
+    # Investition.
+    daten = rechner.rechnen({"export": 0.0, "own": 1500.0}, preise, {}, anlagen)
+
+    assert daten["payback_progress"] > 100.0
+    assert daten["payback_surplus"] == 500.0
+    # Nichts mehr abzuzahlen.
+    assert daten["payback_years"] == 0.0
+
+
+def test_vor_der_amortisation_ist_der_ueberschuss_negativ():
+    """Dann sagt er, wie viel noch fehlt."""
+    rechner = _rechner(schritt=timedelta(days=200))
+    anlagen = [{
+        "id": "a1",
+        "name": "Dach",
+        "investment": 1000.0,
+        "commissioned": (_jetzt() - timedelta(days=900)).date().isoformat(),
+        "prior_yield": 0.0,
+    }]
+    preise = {"price": 1.0, "feed_in": 1.0}
+    rechner.rechnen({"export": 0.0, "own": 0.0}, preise, {}, anlagen)
+    daten = rechner.rechnen({"export": 0.0, "own": 300.0}, preise, {}, anlagen)
+    assert daten["payback_surplus"] == -700.0

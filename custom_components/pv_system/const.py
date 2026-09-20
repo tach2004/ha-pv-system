@@ -361,3 +361,7 @@ KEY_YIELD: Final = "yield_{period}"
 KEY_BALANCE: Final = "balance_{period}"
 KEY_PAYBACK_PROGRESS: Final = "payback_progress"
 KEY_PAYBACK_YEARS: Final = "payback_years"
+# Ertrag minus Investition. Vor der Amortisation negativ - so viel fehlt noch;
+# danach der Gewinn. Die Prozentzahl allein sagt bei 140 % nicht, wie viel Geld
+# das ist.
+KEY_PAYBACK_SURPLUS: Final = "payback_surplus"

@@ -200,6 +200,10 @@ ein kleines **ⓘ** in der Ecke – auf dem Telefon sagt sonst nichts, welcher
 Kasten sich öffnen lässt. Werte mit gepunkteter Unterstreichung führen zur
 Original-Entität.
 
+In den Detailtabellen liegt unter jeder Zeile eine **sehr helle Linie**. Bei
+breiten Karten stehen Beschriftung und Wert weit auseinander; ohne Führung
+verrutscht das Auge eine Zeile, und man liest den falschen Wert.
+
 Die **Phasenzeilen sitzen in Pillen auf der Kastenkante**, im Zähler wie im
 Haus: `L1 →  −980 W`. Ein Stück der Pille ragt hinaus, die Linie des Kastens
 ist dort unterbrochen, und genau an dieser Kante endet die Phasenleitung mit
@@ -217,8 +221,17 @@ Zahl.
 Die Kennzahlenleiste steht von links nach rechts in der Reihenfolge, in der man
 danach fragt: **Netz · Erzeugung · Verbrauch · Autarkie · Installiert ·
 Speicher**, und – sobald ein Arbeitspreis hinterlegt ist – **Ertrag heute ·
-Kosten heute**. Die Autarkiekachel trägt den Eigenverbrauch klein darunter, die
-Speicherkachel Leistung und eingebaute Kapazität.
+Kosten heute**.
+
+* **Autarkie** trägt den **Eigenverbrauch daneben**, in derselben Größe: zwei
+  Quoten, die zusammen gelesen werden.
+* **Verbrauch** trägt den **Grundverbrauch** klein darunter, sobald ein
+  Überschussverbraucher eingetragen ist – dieselbe Unterscheidung wie im
+  Hauskasten.
+* **Installiert** trägt Modulleistung und Speicherkapazität untereinander.
+* **Speicher** trägt Leistung und Kapazität klein darunter. Nebeneinander in
+  voller Größe passen sie nicht: `79 %` und `−466 W` brauchen zusammen 120
+  Pixel, die Kachel hat innen 92.
 
 Ein vollständiges Beispiel-Dashboard liegt in
 [dashboards/pv-system.yaml](dashboards/pv-system.yaml).
@@ -239,6 +252,7 @@ des Monats und des Jahres.
 | Ertrag             | Ersparnis + Einspeiseerlös                          |
 | Bilanz             | Ertrag − Bezugskosten                               |
 | Amortisation       | Ertrag seit Inbetriebnahme ÷ Investitionskosten     |
+| Gewinn nach Investition | Ertrag seit Inbetriebnahme − Investitionskosten |
 
 Die selbst genutzten Kilowattstunden entstehen aus *erzeugt minus
 eingespeist*, sobald ein Ertragszähler eingetragen ist – sonst aus
@@ -254,6 +268,30 @@ Minus – bei den meisten Häusern das ganze Jahr über. Positiv wird sie im
 Tageswert an einem sonnigen Tag, im Jahreswert bei einer sehr großen Anlage.
 Die Frage „lohnt sich die Anlage?" beantwortet nicht die Bilanz, sondern die
 **Amortisation**: Ertrag seit Inbetriebnahme gegen Investition.
+
+**Preisänderungen verändern die Vergangenheit nicht.** Das ist der Kern der
+ganzen Rechnung: Bei jedem Lauf wird nur die *Differenz* seit dem letzten Lauf
+bewertet, mit dem Preis, der in diesem Augenblick gilt, und auf einen
+Geldspeicher addiert. Wer 2028 einen neuen Tarif einträgt, ändert damit nicht,
+was 2026 gekostet hat.
+
+    bis zum ersten Lauf   → Durchschnittspreis davor
+    erster Lauf … heute   → jede Differenz zu ihrem damaligen Preis
+    ab der Preisänderung  → jede Differenz zum neuen Preis
+
+**Das gilt seit Fassung 1.1.9 auch für den Grundpreis.** Er lief vorher
+außerhalb des Speichers: Bei jedem Lauf wurde er über die ganze Messzeit neu
+hochgerechnet, sodass ein neues Netzentgelt rückwirkend galt. Jetzt wird auch
+er bei jeder Rechnung mit dem Satz aufaddiert, der gerade gilt.
+
+Der Grundpreis ist dabei **unabhängig von der Erzeugung** – er fällt an, egal
+wie viel die Anlage liefert. Deshalb steht er in der Detailtabelle als eigene
+Zeile, für jeden Zeitraum und für den Gesamtzeitraum.
+
+**Die Amortisation läuft über hundert Prozent weiter.** Sie dort anzuhalten
+hieße, die Auskunft genau dann wegzunehmen, wenn sie zum ersten Mal erfreulich
+wird. Daneben steht **Gewinn nach Investition** = Ertrag − Investition: davor
+negativ (so viel fehlt noch), danach der Gewinn. Es gibt ihn auch als Sensor.
 
 **Der Grundpreis läuft über die gemessene Zeit, nicht über die Laufzeit der
 Anlage.** Der Gesamtzeitraum beginnt mit der ältesten Inbetriebnahme – daran

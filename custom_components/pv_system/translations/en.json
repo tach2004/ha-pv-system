@@ -103,6 +103,9 @@
       "payback_progress": {
         "name": "Payback progress"
       },
+      "payback_surplus": {
+        "name": "Profit after investment"
+      },
       "payback_years": {
         "name": "Remaining payback time"
       },

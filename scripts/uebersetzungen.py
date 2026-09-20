@@ -120,6 +120,10 @@ KOSTENSENSOREN: dict[str, T] = {
     "yield_rate": ("Ertrag je Stunde", "Yield per hour"),
     "payback_progress": ("Amortisation", "Payback progress"),
     "payback_years": ("Restliche Amortisationszeit", "Remaining payback time"),
+    "payback_surplus": (
+        "Gewinn nach Investition",
+        "Profit after investment",
+    ),
 } | {
     muster.format(period=zeitraum): (
         f"{groesse[0]} {name[0]}",
