@@ -133,6 +133,18 @@ MAX_LEISTUNG_KW = 100.0
 # Start und dafür, dass zwei Zählerstände nie exakt gleichzeitig eintreffen.
 SPRUNG_TOLERANZ_KWH = 1.0
 
+# Wie weit ein Zählerstand zurückfallen darf, ohne als Zählertausch zu gelten.
+# Null wäre zu streng: Der Eigenverbrauch ist keine Messung, sondern die
+# Differenz zweier Zähler, die zu verschiedenen Zeiten melden. Meldet der
+# Einspeisezähler eine Sekunde vor dem Ertragszähler, fällt diese Differenz
+# kurz um ein paar Wattstunden zurück.
+#
+# Das als Tausch zu werten war der Fehler, der die Tagesersparnis im Sägezahn
+# laufen ließ: Bei jedem Wackler wurde neu verankert, und alles, was der Tag
+# bis dahin gesammelt hatte, war weg. Ein echter Tausch fällt auf null - bei
+# jedem gewachsenen Zähler weit mehr als diese Toleranz.
+RUECKFALL_TOLERANZ_KWH = 1.0
+
 
 class Kostenrechner:
     """Hält die Periodenmarken und rechnet daraus Geldbeträge."""
@@ -234,7 +246,7 @@ class Kostenrechner:
                 continue
             stunden = _tage_seit(vorher.get("zeit"), jetzt) * 24.0
             grenze = SPRUNG_TOLERANZ_KWH + MAX_LEISTUNG_KW * stunden
-            if stand < alt or stand - alt > grenze:
+            if alt - stand > RUECKFALL_TOLERANZ_KWH or stand - alt > grenze:
                 frisch.add(name)
         return frisch
 
@@ -567,11 +579,21 @@ class Kostenrechner:
             # Erster Wert überhaupt, oder es ist nicht mehr derselbe Zähler
             # (Reset, Gerätetausch, andere Entität): neu verankern statt eine
             # Differenz auszuweisen, die nie geflossen ist.
-            if verankert is None or stand < verankert or name in (frisch or ()):
+            #
+            # Ein kleiner Rückfall ist dagegen kein Tausch, sondern das Zittern
+            # zweier Zähler, die zu verschiedenen Zeiten melden. Dann bleibt
+            # der Anker stehen und die Menge wartet bei null, bis der Stand ihn
+            # wieder überholt. Vorher wurde auch hier neu verankert - und alles,
+            # was der Tag bis dahin gesammelt hatte, war weg.
+            if (
+                verankert is None
+                or verankert - stand > RUECKFALL_TOLERANZ_KWH
+                or name in (frisch or ())
+            ):
                 werte[name] = stand
                 verankert = stand
                 veraendert = True
-            mengen[name] = round(stand - verankert, 3)
+            mengen[name] = max(0.0, round(stand - verankert, 3))
         return mengen, veraendert
 
     @staticmethod

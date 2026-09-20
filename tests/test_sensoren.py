@@ -672,3 +672,86 @@ def test_ersetzt_strom_ignoriert_auch_die_einheit():
         diverter_price=0.80,
         diverter_price_unit="liter",
     ) is None
+
+
+# ------------------------------------------- Abrechnungszähler bleiben stabil
+
+
+def _mit_ertragszaehlern(**staende):
+    """Drei Anlagen mit Ertragszähler - und was der Kostenrechner davon sieht."""
+    anlagen = [
+        _anlage(k, "l1", inverter={"energy_entity": f"sensor.{k}_wr_e"})
+        for k in ("a1", "a2", "a3")
+    ]
+    aufbau = _aufbau(plants=anlagen, costs={"price_per_kwh": 0.35})
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 500, "W")
+    hass.states.setzen("sensor.netz", 0, "W")
+    for name, wert in staende.items():
+        hass.states.setzen(f"sensor.{name}_wr_e", wert, "kWh")
+
+    koordinator = PvSystemCoordinator(hass, ha_stubs.ConfigEntry("Zuhause", aufbau))
+    gesehen = {}
+    echt = koordinator.kosten.rechnen
+
+    def merken(zaehler, *rest, **kw):
+        gesehen.update(zaehler)
+        return echt(zaehler, *rest, **kw)
+
+    koordinator.kosten.rechnen = merken
+    koordinator._berechnen()
+    return gesehen
+
+
+def test_faellt_eine_anlage_aus_gibt_es_keinen_halben_ertrag():
+    """Sonst schrumpft die Summe um den Lebensertrag dieser Anlage.
+
+    ``units.add`` überspringt, was fehlt - für eine Anzeige richtig, für einen
+    Zählerstand fatal: Die Kostenrechnung hielte den Einbruch für einen
+    Zählertausch und finge von vorn an.
+    """
+    alle = _mit_ertragszaehlern(a1=1000.0, a2=2000.0, a3=3000.0)
+    assert alle["own"] == 6000.0
+
+    # Eine Anlage meldet gerade nichts. Dann gibt es keine Summe - nicht eine
+    # kleinere.
+    fehlt = _mit_ertragszaehlern(a1=1000.0, a3=3000.0)
+    assert fehlt["own"] is None
+
+
+def test_der_ertragszaehler_springt_nicht_auf_den_modulzaehler_um():
+    """Zwei verschiedene Zähler - der Sprung dazwischen sah aus wie ein Tausch."""
+    anlage = _anlage(
+        "a1", "l1",
+        inverter={"energy_entity": "sensor.wr_e"},
+        modules={"energy_entity": "sensor.pv_e"},
+    )
+    aufbau = _aufbau(plants=[anlage], costs={"price_per_kwh": 0.35})
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 500, "W")
+    hass.states.setzen("sensor.netz", 0, "W")
+    hass.states.setzen("sensor.pv_e", 5000, "kWh")
+    # Der Wechselrichterzähler ist eingetragen, meldet aber gerade nichts.
+    koordinator = PvSystemCoordinator(hass, ha_stubs.ConfigEntry("Zuhause", aufbau))
+    gesehen = {}
+    echt = koordinator.kosten.rechnen
+    koordinator.kosten.rechnen = lambda z, *r, **k: (
+        gesehen.update(z) or echt(z, *r, **k)
+    )
+    koordinator._berechnen()
+    # Kein stiller Umstieg auf die 5000 kWh des Modulzählers.
+    assert gesehen["own"] is None
+
+    # Ohne eingetragenen Wechselrichterzähler ist der Modulzähler der richtige.
+    ohne = _anlage("a1", "l1", modules={"energy_entity": "sensor.pv_e"})
+    koordinator = PvSystemCoordinator(
+        hass,
+        ha_stubs.ConfigEntry("Zuhause", _aufbau(plants=[ohne], costs={"price_per_kwh": 0.35})),
+    )
+    gesehen = {}
+    echt = koordinator.kosten.rechnen
+    koordinator.kosten.rechnen = lambda z, *r, **k: (
+        gesehen.update(z) or echt(z, *r, **k)
+    )
+    koordinator._berechnen()
+    assert gesehen["own"] == 5000.0

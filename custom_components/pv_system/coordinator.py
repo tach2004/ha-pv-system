@@ -276,7 +276,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         welche Zaehler eingetragen sind - siehe kosten.eigenverbrauch_kwh.
         """
         conf = self.config[CONF_COSTS]
-        erzeugung = units.first(summen["inverter_energy"], summen["pv_energy"])
+        erzeugung = _abrechnungsertrag(anlagen)
         umleiter = haus.get("diverter") or {}
         zaehler = {
             "import": netz["import_energy"],
@@ -312,9 +312,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # entsteht ihr Anteil an Einspeisung und Ersparnis - und damit ihre
         # eigene Amortisation.
         for anlage in anlagen:
-            zaehler[f"anlage:{anlage[CONF_ID]}"] = units.first(
-                anlage["inverter"]["energy"], anlage["modules"]["energy"]
-            )
+            zaehler[f"anlage:{anlage[CONF_ID]}"] = _anlagenzaehler(anlage)
 
         return self.kosten.rechnen(
             zaehler,
@@ -1091,8 +1089,13 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         umleiter = {
             "name": conf[CONF_DIVERTER_NAME],
             "power": units.rund(umleiterleistung),
+            # Vollständig oder gar nicht: Dieser Stand geht in die
+            # Kostenrechnung. Ein Sensor, der kurz aussetzt, dürfte sonst die
+            # Summe einbrechen lassen - und das sähe aus wie ein Zählertausch.
             "energy": units.rund(
-                units.add(*(units.kwh(self.hass, e) for e in conf[CONF_DIVERTER_ENERGY])),
+                units.vollstaendig(
+                    *(units.kwh(self.hass, e) for e in conf[CONF_DIVERTER_ENERGY])
+                ),
                 2,
             ),
             # Der Teil, der aus PV oder Batterie kam - und nur der wird mit
@@ -1100,7 +1103,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # bleibt beides None und die Rechnung nimmt den ganzen Betrag.
             "solar_power": units.rund(umleitersonne),
             "solar_energy": units.rund(
-                units.add(
+                units.vollstaendig(
                     *(units.kwh(self.hass, e) for e in conf[CONF_DIVERTER_SOLAR_ENERGY])
                 ),
                 2,
@@ -1204,3 +1207,44 @@ def _wert_je_kwh(
     if anteil <= 0:
         return None
     return round(preis / kwh_je_einheit / anteil, 5)
+
+
+def _anlagenzaehler(anlage: dict[str, Any]) -> float | None:
+    """Der Ertragszähler einer Anlage - und zwar immer derselbe.
+
+    Bisher stand hier ``first(wechselrichter, module)``: Fiel der
+    Wechselrichterzähler für einen Augenblick aus, sprang die Rechnung
+    stillschweigend auf den Modulzähler um. Das sind zwei verschiedene Zahlen,
+    und der Sprung dazwischen sah aus wie ein Zählertausch - die Tagesersparnis
+    fiel auf null und begann von vorn.
+
+    Welcher Zähler gilt, entscheidet jetzt allein die Konfiguration: Wer einen
+    Wechselrichterzähler eingetragen hat, wird an ihm gemessen. Meldet er
+    gerade nichts, gibt es für diesen Augenblick eben keine Zahl - das ist die
+    ehrliche Auskunft, und die Rechnung wartet, statt zu raten.
+    """
+    wr = anlage["inverter"]
+    if wr["enabled"] and (wr.get("entities") or {}).get("energy"):
+        return wr["energy"]
+    return anlage["modules"]["energy"]
+
+
+def _abrechnungsertrag(anlagen: list[dict[str, Any]]) -> float | None:
+    """Der Ertrag aller Anlagen zusammen - vollständig oder gar nicht.
+
+    ``units.add`` überspringt, was gerade fehlt. Für eine Anzeige ist das
+    richtig; für einen Zählerstand ist es fatal: Fällt bei drei Anlagen eine
+    für einen Augenblick aus, schrumpft die Summe um deren gesamten
+    Lebensertrag. Die Kostenrechnung hält das für einen Zählertausch und fängt
+    von vorn an.
+
+    Deshalb hier alles oder nichts. Anlagen ohne eingetragenen Ertragszähler
+    zählen nicht mit - sie fehlen nicht, sie gibt es nicht.
+    """
+    staende = [_anlagenzaehler(a) for a in anlagen]
+    gezaehlt = [w for w in staende if w is not None]
+    if not gezaehlt:
+        return None
+    if len(gezaehlt) != len(staende):
+        return None
+    return round(sum(gezaehlt), 3)

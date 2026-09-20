@@ -1832,7 +1832,10 @@ class PvSystemCard extends HTMLElement {
       // Zwei Zahlen gleichen Ranges: Was auf dem Dach liegt und was im
       // Keller steht. Beide gleich groß, jede mit ihrem Wort dahinter.
       ["peak", "Installiert", { untereinander: true }],
-      ["akku", "Speicher"],
+      // Ladestand und Leistung untereinander, beide groß. Nebeneinander
+      // passen sie nicht: "79 %" und "−466 W" brauchen zusammen 120 Pixel,
+      // die Kachel hat innen 92 - und bei "−1,23 kW" wird es noch enger.
+      ["akku", "Speicher", { untereinander: true }],
     ];
     // Die beiden Geldkacheln nur, wenn ein Preis hinterlegt ist - sonst
     // stünden dort zwei Striche ohne Aussicht, je etwas anzuzeigen.
@@ -2178,19 +2181,19 @@ class PvSystemCard extends HTMLElement {
       umleiterAn ? `Grund ${watt(d.house.base_power, l)}` : ""
     );
     this._setzen("kpi:netz", wattVz(netzleistung, l));
-    // Ladestand groß, Leistung und Kapazität klein darunter. Nebeneinander
-    // passen sie nicht: "79 %" und "−466 W" brauchen in der großen Schrift
-    // zusammen 120 Pixel, die Kachel hat innen 92 - und bei "−1,23 kW" wird
-    // es noch enger. Lieber klein und vollständig als groß und abgeschnitten.
+    // Ladestand und Leistung untereinander, beide in voller Größe; die
+    // eingebaute Kapazität klein darunter, weil sie sich nie ändert.
     const akkuP = zahl(t.battery_power);
     const akkuKap = zahl(t.battery_capacity);
     this._setzen("kpi:akku", t.battery_count ? prozent(t.battery_soc, l) : "–");
-    const akkuZeile = [];
-    if (akkuP !== null && Math.abs(akkuP) > 10) {
-      akkuZeile.push(`${akkuP > 0 ? "+" : "−"}${watt(Math.abs(akkuP), l)}`);
-    }
-    if (akkuKap) akkuZeile.push(`${kwh(akkuKap, l)}`);
-    this._setzen("kpi:akku:zusatz", t.battery_count ? akkuZeile.join(" · ") : "");
+    const laedt = t.battery_count && akkuP !== null && Math.abs(akkuP) > 10;
+    this._setzen(
+      "kpi:akku2",
+      laedt ? `${akkuP > 0 ? "+" : "−"}${watt(Math.abs(akkuP), l)}` : ""
+    );
+    // Ohne Wort dahinter: "−466 W gibt ab" braucht 104 Pixel, die Kachel hat
+    // 92 - und das Vorzeichen sagt dasselbe kürzer.
+    this._setzen("kpi:akku:zusatz", t.battery_count && akkuKap ? kwh(akkuKap, l) : "");
     this._setzen("kpi:autarkie", prozent(d.house.self_sufficiency, l));
     // Der Eigenverbrauch steht daneben, nicht darunter: Beide Quoten sind
     // gleich wichtig und werden zusammen gelesen. Auch ohne Zahl steht er da

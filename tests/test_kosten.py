@@ -856,3 +856,61 @@ def test_vor_der_amortisation_ist_der_ueberschuss_negativ():
     rechner.rechnen({"export": 0.0, "own": 0.0}, preise, {}, anlagen)
     daten = rechner.rechnen({"export": 0.0, "own": 300.0}, preise, {}, anlagen)
     assert daten["payback_surplus"] == -700.0
+
+
+# ------------------------------------------------------- Zittern statt Tausch
+
+
+def test_ein_zitternder_eigenverbrauch_wirft_den_tag_nicht_weg():
+    """Der Sägezahn: Die Tagesersparnis fiel bei jedem Wackler auf null.
+
+    Der Eigenverbrauch ist keine Messung, sondern *erzeugt minus eingespeist*.
+    Meldet der Einspeisezähler eine Sekunde vor dem Ertragszähler, fällt die
+    Differenz kurz um ein paar Wattstunden zurück. Das galt als Zählertausch -
+    und damit war alles weg, was der Tag bis dahin gesammelt hatte.
+    """
+    rechner = _rechner()
+    preise = {"price": 0.35}
+    rechner.rechnen({"own": 100.0}, preise, {})
+    # Der Tag läuft: zwei Kilowattstunden selbst genutzt.
+    tag = rechner.rechnen({"own": 102.0}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 0.70
+
+    # Jetzt das Zittern: Der Stand fällt um dreißig Wattstunden zurück. Der
+    # Anker bleibt stehen - die Ersparnis gibt genau diese dreißig
+    # Wattstunden ab und nicht den ganzen Tag.
+    tag = rechner.rechnen({"own": 101.97}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 0.69, "der Tag darf nicht von vorn beginnen"
+
+    # Und läuft danach weiter, ohne die Lücke doppelt zu zählen.
+    tag = rechner.rechnen({"own": 103.0}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 1.05
+
+
+def test_ein_echter_zaehlertausch_faellt_weiter_auf():
+    """Die Toleranz darf den Zählertausch nicht durchlassen."""
+    rechner = _rechner()
+    preise = {"price": 0.35}
+    rechner.rechnen({"own": 100.0}, preise, {})
+    rechner.rechnen({"own": 102.0}, preise, {})
+    # Ein neuer Zähler beginnt bei null - das sind hundert Kilowattstunden
+    # Rückfall, nicht dreißig Wattstunden.
+    tag = rechner.rechnen({"own": 0.0}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 0.0
+    # Und ab jetzt zählt der neue Zähler.
+    tag = rechner.rechnen({"own": 1.0}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 0.35
+
+
+def test_ein_fehlender_zaehler_haelt_an_statt_zu_verankern():
+    """Meldet der Zähler gerade nichts, wartet die Rechnung."""
+    rechner = _rechner()
+    preise = {"price": 0.35}
+    rechner.rechnen({"own": 100.0}, preise, {})
+    rechner.rechnen({"own": 102.0}, preise, {})
+    # Ein Aussetzer: kein Wert.
+    tag = rechner.rechnen({"own": None}, preise, {})["periods"]["day"]
+    assert tag["savings"] is None
+    # Danach steht der Tag wieder da, wo er war.
+    tag = rechner.rechnen({"own": 102.0}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 0.70

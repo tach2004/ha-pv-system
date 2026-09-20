@@ -180,6 +180,24 @@ def rund(wert: float | None, stellen: int = 1) -> float | None:
     return round(wert, stellen)
 
 
+def vollstaendig(*werte: float | None) -> float | None:
+    """Summe, die None wird, sobald einer der Werte fehlt.
+
+    Das Gegenstück zu :func:`add`. Für eine Anzeige ist es richtig, das
+    Fehlende zu überspringen - lieber vier von fünf Anlagen zeigen als nichts.
+    Für einen **Zählerstand** ist es fatal: Fällt ein Sensor für einen
+    Augenblick aus, schrumpft die Summe um seinen ganzen Lebensertrag, und die
+    Kostenrechnung hält das für einen Zählertausch.
+
+    Ohne jeden Wert kommt ebenfalls None zurück: Eine Summe aus nichts ist
+    nicht null, sondern unbekannt.
+    """
+    liste = list(werte)
+    if not liste or any(w is None for w in liste):
+        return None
+    return sum(liste)  # type: ignore[arg-type]
+
+
 def first(*werte: Any) -> Any:
     """Erster Wert, der nicht None ist."""
     for wert in werte:

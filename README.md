@@ -229,9 +229,10 @@ Kosten heute**.
   Überschussverbraucher eingetragen ist – dieselbe Unterscheidung wie im
   Hauskasten.
 * **Installiert** trägt Modulleistung und Speicherkapazität untereinander.
-* **Speicher** trägt Leistung und Kapazität klein darunter. Nebeneinander in
-  voller Größe passen sie nicht: `79 %` und `−466 W` brauchen zusammen 120
-  Pixel, die Kachel hat innen 92.
+* **Speicher** trägt Ladestand und Leistung untereinander, beide in voller
+  Größe, und die eingebaute Kapazität klein darunter. Nebeneinander passen sie
+  nicht: `79 %` und `−466 W` brauchen zusammen 120 Pixel, die Kachel hat innen
+  92.
 
 Ein vollständiges Beispiel-Dashboard liegt in
 [dashboards/pv-system.yaml](dashboards/pv-system.yaml).
@@ -257,6 +258,47 @@ des Monats und des Jahres.
 Die selbst genutzten Kilowattstunden entstehen aus *erzeugt minus
 eingespeist*, sobald ein Ertragszähler eingetragen ist – sonst aus
 *verbraucht minus bezogen*.
+
+### Ersparnis, Erlös, Ertrag – wo ist der Unterschied?
+
+Drei Begriffe, die leicht durcheinandergehen:
+
+| | Was es ist | Woher |
+|---|---|---|
+| **Ersparnis** | Strom, den du **nicht kaufen musstest** | selbst genutzte kWh × Arbeitspreis |
+| **Einspeiseerlös** | Geld, das du **bekommst** | eingespeiste kWh × Vergütung |
+| **Ertrag** | beides zusammen | Ersparnis + Erlös |
+
+Dein Beispiel: 2 kWh erzeugt, 2 kWh im Haus verbraucht, nichts eingespeist.
+Dann ist die **Ersparnis** 2 × 0,35 € = 0,70 €, der **Erlös** null – und der
+**Ertrag** ebenfalls 0,70 €. Wer keine Einspeisevergütung eingetragen hat,
+sieht Ertrag und Ersparnis deshalb immer gleich. Das ist kein Fehler, sondern
+der Erlös ist schlicht null.
+
+**Nicht zu verwechseln mit der Bilanz:** Die zieht die Bezugskosten wieder ab
+und ist deshalb meist negativ.
+
+### Warum ein Zählerstand kein Messwert ist
+
+Alles oben rechnet mit **Zählerständen**, nicht mit Leistungen. Ein Zählerstand
+darf nur wachsen. Fällt er zurück, ist das normalerweise ein anderer Zähler –
+Gerätetausch, Reset, eine andere Entität im Feld –, und die Differenz wäre
+Unsinn. Dann wird neu verankert statt gerechnet.
+
+Zwei Dinge machen das schwieriger, als es klingt, und beide waren bis
+Fassung 1.1.10 falsch gelöst:
+
+* **Der Eigenverbrauch ist kein Zähler**, sondern *erzeugt minus eingespeist* –
+  eine Differenz aus zwei Sensoren, die zu verschiedenen Zeiten melden. Meldet
+  der Einspeisezähler eine Sekunde vor dem Ertragszähler, fällt die Differenz
+  kurz um ein paar Wattstunden zurück. Das galt als Zählertausch, und die
+  Tagesersparnis fiel auf null. Jetzt gibt es eine Toleranz: Ein Rückfall unter
+  einer Kilowattstunde ist Zittern, kein Tausch – der Anker bleibt stehen.
+* **Eine Summe über mehrere Anlagen** übersprang, was gerade fehlte. Fällt bei
+  drei Anlagen eine für einen Augenblick aus, schrumpft die Summe um deren
+  gesamten Lebensertrag. Für Abrechnungszähler gilt jetzt: vollständig oder gar
+  nicht. Und welcher Zähler einer Anlage gilt, entscheidet allein die
+  Konfiguration – nicht mehr, welcher gerade antwortet.
 
 Der anteilige Grundpreis steht in der Karte als eigene Zeile. Ohne sie stünde
 an einem Tag ohne Netzbezug ein Betrag, den niemand erklären kann.
