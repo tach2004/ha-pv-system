@@ -120,6 +120,10 @@ KOSTENSENSOREN: dict[str, T] = {
     "yield_rate": ("Ertrag je Stunde", "Yield per hour"),
     "payback_progress": ("Amortisation", "Payback progress"),
     "payback_years": ("Restliche Amortisationszeit", "Remaining payback time"),
+    "payback_surplus": (
+        "Gewinn nach Investition",
+        "Profit after investment",
+    ),
 } | {
     muster.format(period=zeitraum): (
         f"{groesse[0]} {name[0]}",
@@ -314,6 +318,7 @@ FELDER: dict[str, T] = {
     "show_strings": ("Verschaltung zeichnen", "Draw string layout"),
     "show_phases": ("Phasen einzeln zeichnen", "Draw phases individually"),
     "sensor_interval": ("Messwerte höchstens alle", "Measurements at most every"),
+    "card_interval": ("Karte höchstens alle", "Card at most every"),
     "order": ("Platz in der Karte", "Position on the card"),
     "price_per_kwh": ("Arbeitspreis: feste Zahl je kWh", "Energy price: fixed per kWh"),
     "feed_in_price": (
@@ -1103,13 +1108,45 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
         "sensor_interval": (
             "Wie oft die Messsensoren dieser Integration einen neuen Wert in "
-            "die Datenbank schreiben dürfen. Die Karte hängt nicht daran - sie "
-            "liest direkt mit und bleibt sekundengenau. 0 heißt: bei jeder "
-            "Messung, und das lässt die Datenbank schnell wachsen.",
+            "die Datenbank schreiben dürfen. Die Karte hängt nicht daran - "
+            "ihren Takt stellt das Feld darunter. 0 heißt: bei jeder Messung, "
+            "und das lässt die Datenbank schnell wachsen.\n\nDie "
+            "Langzeitstatistik rechnet in Fünf-Minuten-Blöcken; dreißig "
+            "Sekunden liefern ihr zehn Werte je Block.",
             "How often this integration's measurement sensors may write a new "
-            "value to the database. The card does not depend on it - it reads "
-            "along directly and stays second by second. 0 means: on every "
-            "measurement, and that makes the database grow fast.",
+            "value to the database. The card does not depend on it - its rate "
+            "is the field below. 0 means: on every measurement, and that makes "
+            "the database grow fast.\n\nLong-term statistics work in "
+            "five-minute blocks; thirty seconds give them ten values per "
+            "block.",
+        ),
+        "card_interval": (
+            "**Der größte Posten dieser Integration in der Datenbank.**\n\n"
+            "Die Karte liest die ganze Anlagenstruktur aus den Attributen des "
+            "Statussensors. Dessen Takt ist deshalb der Takt der Karte - und "
+            "er ist der einzige Sensor, der bei jeder Rechnung schreibt. Das "
+            "sind rund hunderttausend Zustände am Tag, mehr als alle übrigen "
+            "Sensoren zusammen.\n\nDie Attribute selbst landen nicht in der "
+            "Datenbank; die Zeilen schon.\n\n**0** (Voreinstellung): Die "
+            "Karte folgt sekundengenau. **2 bis 5**: kaum sichtbar langsamer, "
+            "aber ein Bruchteil der Zeilen. Das Wort des Sensors - „lädt“, "
+            "„speist ein“ - wird nie aufgehalten.\n\nWer die Zeilen ganz "
+            "loswerden will, nimmt den Sensor in `configuration.yaml` aus der "
+            "Aufzeichnung heraus. Die Karte funktioniert weiter: Sie liest "
+            "den lebenden Zustand, nicht die Datenbank.",
+            "**This integration's biggest contributor to the database.**\n\n"
+            "The card reads the whole system structure from the status "
+            "sensor's attributes. Its rate is therefore the card's rate - and "
+            "it is the only sensor that writes on every calculation. That is "
+            "about a hundred thousand states a day, more than all other "
+            "sensors together.\n\nThe attributes themselves are not stored; "
+            "the rows are.\n\n**0** (default): the card follows second by "
+            "second. **2 to 5**: barely slower to the eye, but a fraction of "
+            "the rows. The sensor's word - \u201ccharging\u201d, "
+            "\u201cexporting\u201d - is never held back.\n\nTo get rid of "
+            "the rows entirely, exclude the sensor from recording in "
+            "`configuration.yaml`. The card keeps working: it reads the live "
+            "state, not the database.",
         ),
         "show_phases": (
             "Drei Phasenlinien zwischen Zähler und Haus, jede mit ihrem "
@@ -1340,7 +1377,9 @@ UEBERSCHUSSFELDER = [
     "diverter_fuel", "diverter_price", "diverter_price_unit",
     "diverter_price_entity", "diverter_efficiency",
 ]
-ANZEIGEFELDER = ["animate", "show_strings", "show_phases", "sensor_interval"]
+ANZEIGEFELDER = [
+    "animate", "show_strings", "show_phases", "sensor_interval", "card_interval",
+]
 KOSTENFELDER = [
     "price_per_kwh", "price_entity",
     "feed_in_price", "feed_in_entity",

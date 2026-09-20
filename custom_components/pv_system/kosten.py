@@ -133,6 +133,18 @@ MAX_LEISTUNG_KW = 100.0
 # Start und dafür, dass zwei Zählerstände nie exakt gleichzeitig eintreffen.
 SPRUNG_TOLERANZ_KWH = 1.0
 
+# Wie weit ein Zählerstand zurückfallen darf, ohne als Zählertausch zu gelten.
+# Null wäre zu streng: Der Eigenverbrauch ist keine Messung, sondern die
+# Differenz zweier Zähler, die zu verschiedenen Zeiten melden. Meldet der
+# Einspeisezähler eine Sekunde vor dem Ertragszähler, fällt diese Differenz
+# kurz um ein paar Wattstunden zurück.
+#
+# Das als Tausch zu werten war der Fehler, der die Tagesersparnis im Sägezahn
+# laufen ließ: Bei jedem Wackler wurde neu verankert, und alles, was der Tag
+# bis dahin gesammelt hatte, war weg. Ein echter Tausch fällt auf null - bei
+# jedem gewachsenen Zähler weit mehr als diese Toleranz.
+RUECKFALL_TOLERANZ_KWH = 1.0
+
 
 class Kostenrechner:
     """Hält die Periodenmarken und rechnet daraus Geldbeträge."""
@@ -234,7 +246,7 @@ class Kostenrechner:
                 continue
             stunden = _tage_seit(vorher.get("zeit"), jetzt) * 24.0
             grenze = SPRUNG_TOLERANZ_KWH + MAX_LEISTUNG_KW * stunden
-            if stand < alt or stand - alt > grenze:
+            if alt - stand > RUECKFALL_TOLERANZ_KWH or stand - alt > grenze:
                 frisch.add(name)
         return frisch
 
@@ -290,7 +302,8 @@ class Kostenrechner:
         # Gesamtzeitraum, und die muss vorher angelegt sein - sonst stünde dort
         # kein Periodenanfang, und die Amortisation rechnete ab 1970.
         gespeichert, neu_geld = self._geldspeicher(
-            zaehler, arbeitspreis, verguetung, jetzt, frisch, umleitpreis
+            zaehler, arbeitspreis, verguetung, jetzt, frisch, umleitpreis,
+            grundpreis,
         )
         veraendert = veraendert or neu_geld
 
@@ -367,6 +380,7 @@ class Kostenrechner:
         jetzt: datetime,
         frisch: set[str] | None = None,
         umleitpreis: float | None = None,
+        grundpreis: float = 0.0,
     ) -> tuple[dict[str, float], bool]:
         """Den seit dem ersten Lauf angefallenen Betrag fortschreiben.
 
@@ -387,12 +401,37 @@ class Kostenrechner:
         geld.setdefault("divert", 0.0)
         letzte: dict[str, Any] = marke.setdefault("letzte", {})
 
+        # Der Grundpreis läuft wie jeder andere Posten mit: bei jeder Rechnung
+        # die verstrichene Zeit mal dem Satz, der gerade gilt. Vorher wurde er
+        # bei jedem Lauf über die ganze Messzeit neu hochgerechnet - wer 2028
+        # einen neuen Zählerpreis eintrug, änderte damit rückwirkend, was 2026
+        # gekostet hat.
+        #
+        # Beim ersten Lauf nach dem Update steht der Speicher noch leer. Er
+        # beginnt dann bei genau dem Betrag, den die alte Rechnung ergab -
+        # sonst fiele die Gesamtsumme um den ganzen bisherigen Grundpreis.
+        if "base" not in geld:
+            geld["base"] = round(
+                grundpreis * _tage_seit(marke.get("start"), jetzt) / TAGE_JE_MONAT, 4
+            )
+            veraendert_grund = True
+        else:
+            veraendert_grund = False
+        seit = letzte.get("zeit")
+        letzte["zeit"] = dt_util.as_local(jetzt).isoformat()
+        if seit and grundpreis:
+            monate = _tage_seit(seit, jetzt) / TAGE_JE_MONAT
+            neu = round(geld["base"] + grundpreis * max(0.0, monate), 4)
+            if neu != geld["base"]:
+                geld["base"] = neu
+                veraendert_grund = True
+
         # Der Korrektursatz: Was eine umgeleitete Kilowattstunde *mehr oder
         # weniger* wert ist als eine gewöhnlich selbst genutzte. Damit genügt
         # ein einziger zusätzlicher Posten statt einer zweiten Rechnung.
         korrektur = _abstand(umleitpreis, preis) if preis is not None else None
 
-        veraendert = False
+        veraendert = veraendert_grund
         mengen: dict[str, float] = {}
         for name in ("import", "export", "own", "diverted"):
             stand = _zahl(zaehler.get(name))
@@ -450,16 +489,15 @@ class Kostenrechner:
             frueher = preis
         satz_vorher = _zahl(preise.get("prior_feed_in")) or _zahl(preise.get("feed_in"))
 
+        grundkosten = round(gespeichert.get("base", 0.0), 2)
         kosten = None
         if preis is not None or frueher is not None:
-            # Der Grundpreis läuft über die gemessene Zeit, nicht über die
-            # ganze Laufzeit der Anlage: Für die Jahre vor der Einrichtung ist
-            # kein Netzentgelt bekannt, und "Bezug davor" trägt nur Arbeitspreis.
-            anteil = (
-                _tage_seit(zeitraum.get("measured_since") or zeitraum.get("start"), jetzt)
-                / TAGE_JE_MONAT
-            )
-            kosten = gespeichert["cost"] + grundpreis * anteil
+            # Der Grundpreis kommt aus dem Speicher, nicht aus einer
+            # Hochrechnung: Er ist bei jeder Rechnung mit dem Satz aufaddiert
+            # worden, der damals galt. Für die Jahre vor der Einrichtung ist
+            # ohnehin kein Netzentgelt bekannt - "Bezug davor" trägt nur den
+            # Arbeitspreis.
+            kosten = gespeichert["cost"] + grundkosten
             if frueher is not None:
                 kosten += vorher.get("import", 0.0) * frueher
             kosten = round(kosten, 2)
@@ -487,6 +525,10 @@ class Kostenrechner:
         return {
             **zeitraum,
             "cost": kosten,
+            # Der Grundpreis getrennt ausgewiesen, wie in den anderen
+            # Zeiträumen auch - sonst erklärt niemand, warum ohne Netzbezug
+            # trotzdem Kosten stehen.
+            "base_cost": grundkosten or None,
             "revenue": erloes,
             "savings": ersparnis,
             "yield": ertrag,
@@ -537,11 +579,21 @@ class Kostenrechner:
             # Erster Wert überhaupt, oder es ist nicht mehr derselbe Zähler
             # (Reset, Gerätetausch, andere Entität): neu verankern statt eine
             # Differenz auszuweisen, die nie geflossen ist.
-            if verankert is None or stand < verankert or name in (frisch or ()):
+            #
+            # Ein kleiner Rückfall ist dagegen kein Tausch, sondern das Zittern
+            # zweier Zähler, die zu verschiedenen Zeiten melden. Dann bleibt
+            # der Anker stehen und die Menge wartet bei null, bis der Stand ihn
+            # wieder überholt. Vorher wurde auch hier neu verankert - und alles,
+            # was der Tag bis dahin gesammelt hatte, war weg.
+            if (
+                verankert is None
+                or verankert - stand > RUECKFALL_TOLERANZ_KWH
+                or name in (frisch or ())
+            ):
                 werte[name] = stand
                 verankert = stand
                 veraendert = True
-            mengen[name] = round(stand - verankert, 3)
+            mengen[name] = max(0.0, round(stand - verankert, 3))
         return mengen, veraendert
 
     @staticmethod
@@ -757,6 +809,10 @@ class Kostenrechner:
         )
         return {
             "payback_progress": werte["payback_progress"],
+            # Ertrag minus Investition: vorher, was noch fehlt; danach der
+            # Gewinn. Die Prozentzahl allein sagt bei 140 % nicht, wie viel
+            # Geld das ist.
+            "payback_surplus": werte["payback_surplus"],
             "payback_years": werte["payback_years"],
             "yield_year": werte["yield_year"],
         }
@@ -769,19 +825,35 @@ def _amortisation_werte(
     jetzt: datetime,
 ) -> dict[str, Any]:
     """Fortschritt, Restzeit und Jahresrate aus Ertrag und Investition."""
-    leer = {"payback_progress": None, "payback_years": None, "yield_year": None}
+    leer = {
+        "payback_progress": None,
+        "payback_surplus": None,
+        "payback_years": None,
+        "yield_year": None,
+    }
     if not investition or ertrag is None:
         return leer
 
     fortschritt = round(100.0 * ertrag / investition, 1)
+    # Was über die Investition hinausgeht. Vor der Amortisation ist das eine
+    # negative Zahl - so viel fehlt noch; danach ist es der Gewinn. Die
+    # Fortschrittszahl läuft bewusst über hundert Prozent weiter: Sie bei 100
+    # anzuhalten hieße, die Auskunft genau dann wegzunehmen, wenn sie zum
+    # ersten Mal erfreulich wird.
+    ueberschuss = round(ertrag - investition, 2)
     tage = _tage_seit(beginn, jetzt)
     if tage < MINDESTDAUER_TAGE or ertrag <= 0:
-        return {**leer, "payback_progress": fortschritt}
+        return {
+            **leer,
+            "payback_progress": fortschritt,
+            "payback_surplus": ueberschuss,
+        }
 
     je_jahr = ertrag / tage * 365.0
     rest = max(0.0, investition - ertrag)
     return {
         "payback_progress": fortschritt,
+        "payback_surplus": ueberschuss,
         "payback_years": round(rest / je_jahr, 1),
         "yield_year": round(je_jahr, 2),
     }

@@ -200,6 +200,10 @@ ein kleines **ⓘ** in der Ecke – auf dem Telefon sagt sonst nichts, welcher
 Kasten sich öffnen lässt. Werte mit gepunkteter Unterstreichung führen zur
 Original-Entität.
 
+In den Detailtabellen liegt unter jeder Zeile eine **sehr helle Linie**. Bei
+breiten Karten stehen Beschriftung und Wert weit auseinander; ohne Führung
+verrutscht das Auge eine Zeile, und man liest den falschen Wert.
+
 Die **Phasenzeilen sitzen in Pillen auf der Kastenkante**, im Zähler wie im
 Haus: `L1 →  −980 W`. Ein Stück der Pille ragt hinaus, die Linie des Kastens
 ist dort unterbrochen, und genau an dieser Kante endet die Phasenleitung mit
@@ -217,8 +221,18 @@ Zahl.
 Die Kennzahlenleiste steht von links nach rechts in der Reihenfolge, in der man
 danach fragt: **Netz · Erzeugung · Verbrauch · Autarkie · Installiert ·
 Speicher**, und – sobald ein Arbeitspreis hinterlegt ist – **Ertrag heute ·
-Kosten heute**. Die Autarkiekachel trägt den Eigenverbrauch klein darunter, die
-Speicherkachel Leistung und eingebaute Kapazität.
+Kosten heute**.
+
+* **Autarkie** trägt den **Eigenverbrauch daneben**, in derselben Größe: zwei
+  Quoten, die zusammen gelesen werden.
+* **Verbrauch** trägt den **Grundverbrauch** klein darunter, sobald ein
+  Überschussverbraucher eingetragen ist – dieselbe Unterscheidung wie im
+  Hauskasten.
+* **Installiert** trägt Modulleistung und Speicherkapazität untereinander.
+* **Speicher** trägt Ladestand und Leistung untereinander, beide in voller
+  Größe, und die eingebaute Kapazität klein darunter. Nebeneinander passen sie
+  nicht: `79 %` und `−466 W` brauchen zusammen 120 Pixel, die Kachel hat innen
+  92.
 
 Ein vollständiges Beispiel-Dashboard liegt in
 [dashboards/pv-system.yaml](dashboards/pv-system.yaml).
@@ -239,10 +253,52 @@ des Monats und des Jahres.
 | Ertrag             | Ersparnis + Einspeiseerlös                          |
 | Bilanz             | Ertrag − Bezugskosten                               |
 | Amortisation       | Ertrag seit Inbetriebnahme ÷ Investitionskosten     |
+| Gewinn nach Investition | Ertrag seit Inbetriebnahme − Investitionskosten |
 
 Die selbst genutzten Kilowattstunden entstehen aus *erzeugt minus
 eingespeist*, sobald ein Ertragszähler eingetragen ist – sonst aus
 *verbraucht minus bezogen*.
+
+### Ersparnis, Erlös, Ertrag – wo ist der Unterschied?
+
+Drei Begriffe, die leicht durcheinandergehen:
+
+| | Was es ist | Woher |
+|---|---|---|
+| **Ersparnis** | Strom, den du **nicht kaufen musstest** | selbst genutzte kWh × Arbeitspreis |
+| **Einspeiseerlös** | Geld, das du **bekommst** | eingespeiste kWh × Vergütung |
+| **Ertrag** | beides zusammen | Ersparnis + Erlös |
+
+Dein Beispiel: 2 kWh erzeugt, 2 kWh im Haus verbraucht, nichts eingespeist.
+Dann ist die **Ersparnis** 2 × 0,35 € = 0,70 €, der **Erlös** null – und der
+**Ertrag** ebenfalls 0,70 €. Wer keine Einspeisevergütung eingetragen hat,
+sieht Ertrag und Ersparnis deshalb immer gleich. Das ist kein Fehler, sondern
+der Erlös ist schlicht null.
+
+**Nicht zu verwechseln mit der Bilanz:** Die zieht die Bezugskosten wieder ab
+und ist deshalb meist negativ.
+
+### Warum ein Zählerstand kein Messwert ist
+
+Alles oben rechnet mit **Zählerständen**, nicht mit Leistungen. Ein Zählerstand
+darf nur wachsen. Fällt er zurück, ist das normalerweise ein anderer Zähler –
+Gerätetausch, Reset, eine andere Entität im Feld –, und die Differenz wäre
+Unsinn. Dann wird neu verankert statt gerechnet.
+
+Zwei Dinge machen das schwieriger, als es klingt, und beide waren bis
+Fassung 1.1.10 falsch gelöst:
+
+* **Der Eigenverbrauch ist kein Zähler**, sondern *erzeugt minus eingespeist* –
+  eine Differenz aus zwei Sensoren, die zu verschiedenen Zeiten melden. Meldet
+  der Einspeisezähler eine Sekunde vor dem Ertragszähler, fällt die Differenz
+  kurz um ein paar Wattstunden zurück. Das galt als Zählertausch, und die
+  Tagesersparnis fiel auf null. Jetzt gibt es eine Toleranz: Ein Rückfall unter
+  einer Kilowattstunde ist Zittern, kein Tausch – der Anker bleibt stehen.
+* **Eine Summe über mehrere Anlagen** übersprang, was gerade fehlte. Fällt bei
+  drei Anlagen eine für einen Augenblick aus, schrumpft die Summe um deren
+  gesamten Lebensertrag. Für Abrechnungszähler gilt jetzt: vollständig oder gar
+  nicht. Und welcher Zähler einer Anlage gilt, entscheidet allein die
+  Konfiguration – nicht mehr, welcher gerade antwortet.
 
 Der anteilige Grundpreis steht in der Karte als eigene Zeile. Ohne sie stünde
 an einem Tag ohne Netzbezug ein Betrag, den niemand erklären kann.
@@ -254,6 +310,30 @@ Minus – bei den meisten Häusern das ganze Jahr über. Positiv wird sie im
 Tageswert an einem sonnigen Tag, im Jahreswert bei einer sehr großen Anlage.
 Die Frage „lohnt sich die Anlage?" beantwortet nicht die Bilanz, sondern die
 **Amortisation**: Ertrag seit Inbetriebnahme gegen Investition.
+
+**Preisänderungen verändern die Vergangenheit nicht.** Das ist der Kern der
+ganzen Rechnung: Bei jedem Lauf wird nur die *Differenz* seit dem letzten Lauf
+bewertet, mit dem Preis, der in diesem Augenblick gilt, und auf einen
+Geldspeicher addiert. Wer 2028 einen neuen Tarif einträgt, ändert damit nicht,
+was 2026 gekostet hat.
+
+    bis zum ersten Lauf   → Durchschnittspreis davor
+    erster Lauf … heute   → jede Differenz zu ihrem damaligen Preis
+    ab der Preisänderung  → jede Differenz zum neuen Preis
+
+**Das gilt seit Fassung 1.1.9 auch für den Grundpreis.** Er lief vorher
+außerhalb des Speichers: Bei jedem Lauf wurde er über die ganze Messzeit neu
+hochgerechnet, sodass ein neues Netzentgelt rückwirkend galt. Jetzt wird auch
+er bei jeder Rechnung mit dem Satz aufaddiert, der gerade gilt.
+
+Der Grundpreis ist dabei **unabhängig von der Erzeugung** – er fällt an, egal
+wie viel die Anlage liefert. Deshalb steht er in der Detailtabelle als eigene
+Zeile, für jeden Zeitraum und für den Gesamtzeitraum.
+
+**Die Amortisation läuft über hundert Prozent weiter.** Sie dort anzuhalten
+hieße, die Auskunft genau dann wegzunehmen, wenn sie zum ersten Mal erfreulich
+wird. Daneben steht **Gewinn nach Investition** = Ertrag − Investition: davor
+negativ (so viel fehlt noch), danach der Gewinn. Es gibt ihn auch als Sensor.
 
 **Der Grundpreis läuft über die gemessene Zeit, nicht über die Laufzeit der
 Anlage.** Der Gesamtzeitraum beginnt mit der ältesten Inbetriebnahme – daran
@@ -772,11 +852,61 @@ bleibt es – von selbst schaltet die Integration nie etwas ab.
 
 ### Takt
 
-Unter *Darstellung und Aufzeichnung* steht, wie oft die Sensoren einen neuen
-Wert schreiben dürfen – **voreingestellt alle 30 Sekunden**. Die Karte hängt
-nicht daran. Wer die Sekunde braucht, trägt 0 ein; wer die Datenbank schonen
-will, 60 oder mehr. Die Langzeitstatistik von Home Assistant rechnet in
+Unter *Darstellung und Aufzeichnung* stehen **zwei** Takte.
+
+**Messwerte höchstens alle … Sekunden** – voreingestellt **30**. Betrifft alle
+Messsensoren. Die Langzeitstatistik von Home Assistant rechnet in
 Fünf-Minuten-Blöcken; dreißig Sekunden liefern ihr zehn Werte je Block.
+
+**Karte höchstens alle … Sekunden** – voreingestellt **0**, also sekundengenau.
+Betrifft nur den Statussensor. Und der verdient einen eigenen Absatz.
+
+### Der Statussensor ist der große Posten
+
+Die Karte liest die ganze Anlagenstruktur aus den **Attributen von
+`sensor.pv_system_status`**. Er ist damit der einzige Sensor, der bei jeder
+Rechnung schreiben muss – rund einmal je Sekunde. Gemessen in einem
+Debug-Protokoll:
+
+| Entität | Zustandswechsel in 105 s |
+|---|---|
+| `sensor.pv_system_status` | **130** |
+| jeder andere Sensor der Integration | ≤ 10 |
+
+Das sind etwa **hunderttausend Zustände am Tag** – mehr als alle übrigen
+Sensoren dieser Integration zusammen.
+
+**Die Attribute selbst landen nicht in der Datenbank.** Die Integration bringt
+dafür `recorder.py` mit, den dokumentierten Haken, mit dem eine Integration dem
+Recorder sagt, welche Attribute er überspringen soll – seit der ersten Fassung.
+Ohne ihn lägen bei jedem Zustandswechsel mehrere Kilobyte JSON in der
+Zustandstabelle.
+
+Was bleibt, sind die **Zeilen**. Drei Wege, sie loszuwerden:
+
+1. **Karte höchstens alle 2–5 Sekunden.** Mit dem Auge kaum zu sehen, aber ein
+   Bruchteil der Zeilen. Das Wort des Sensors – „lädt", „speist ein" – wird nie
+   aufgehalten, nur die Messwerte dahinter.
+2. **Den Sensor gar nicht aufzeichnen:**
+
+   ```yaml
+   recorder:
+     exclude:
+       entities:
+         - sensor.pv_system_status
+   ```
+
+3. Beides.
+
+**Bricht das etwas?** Nein. Die Karte liest den **lebenden Zustand** aus
+`hass.states`, nicht die Datenbank. Kosten, Ertrag und Amortisation rechnet der
+Koordinator aus deinen eigenen Zählern und merkt sich die Zwischenstände unter
+`.storage` – der Recorder kommt darin nicht vor. Verloren geht nur die
+*History* dieses einen Sensors, also die Antwort auf „was stand da gestern um
+drei?". Für ein Wort mit fünf möglichen Werten ist das kein Verlust.
+
+Was du **nicht** ausschließen solltest, sind die Geld- und Energiesensoren: An
+denen hängen die Langzeitstatistiken und das Energie-Dashboard.
 
 ### Autarkie und Eigenverbrauch
 

@@ -768,3 +768,149 @@ def _tage(marke):
     if wann.tzinfo is None:
         wann = wann.replace(tzinfo=_jetzt().tzinfo)
     return (_jetzt() - wann).days
+
+
+def test_ein_neuer_grundpreis_aendert_die_vergangenheit_nicht():
+    """Wie beim Arbeitspreis: Was gestern galt, bleibt gestern stehen.
+
+    Der Grundpreis wurde früher bei jeder Rechnung über die ganze Messzeit
+    neu hochgerechnet. Wer 2028 ein höheres Netzentgelt eintrug, änderte
+    damit rückwirkend, was 2026 gekostet hat.
+    """
+    rechner = _rechner(schritt=timedelta(days=30))
+    billig = {"price": 0.30, "base": 10.0}
+    teuer = {"price": 0.30, "base": 40.0}
+
+    rechner.rechnen({"import": 0.0}, billig, {})
+    # Drei Monate zu zehn Euro.
+    for _ in range(3):
+        gesamt = rechner.rechnen({"import": 0.0}, billig, {})["periods"]["total"]
+    assert 28.0 < gesamt["base_cost"] < 32.0, gesamt["base_cost"]
+
+    # Jetzt vervierfacht sich der Grundpreis. Die drei Monate davor bleiben,
+    # wie sie waren - dazu kommt nur der neue Monat zum neuen Satz.
+    gesamt = rechner.rechnen({"import": 0.0}, teuer, {})["periods"]["total"]
+    assert 68.0 < gesamt["base_cost"] < 72.0, gesamt["base_cost"]
+    # Die alte Rechnung hätte vier Monate zu vierzig Euro ergeben.
+    assert gesamt["base_cost"] < 120.0
+
+
+def test_ein_alter_speicher_faengt_nicht_bei_null_an():
+    """Beim Update darf die Gesamtsumme nicht um den Grundpreis einbrechen.
+
+    Ältere Fassungen führten den Grundpreis nicht mit, sondern rechneten ihn
+    bei jedem Lauf neu über die ganze Messzeit. Der Speicher beginnt deshalb
+    bei genau dem Betrag, den diese Rechnung ergab.
+    """
+    rechner = _rechner()
+    beginn = _jetzt() - timedelta(days=365)
+    # Ein Speicherstand, wie ihn eine Fassung vor dieser hinterlassen hat:
+    # Geld ohne den Posten "base".
+    rechner._rechner._marken["total"] = {
+        "start": beginn.isoformat(),
+        "werte": {},
+        "geld": {"cost": 100.0, "revenue": 0.0, "savings": 0.0},
+        "letzte": {"import": 0.0},
+    }
+    gesamt = rechner.rechnen(
+        {"import": 0.0}, {"price": 0.30, "base": 12.0}, {}
+    )["periods"]["total"]
+    # Zwölf Euro im Monat, ein Jahr lang - rund 146 Euro (365 / 30,44).
+    assert 140.0 < gesamt["base_cost"] < 150.0, gesamt["base_cost"]
+    assert gesamt["cost"] == round(100.0 + gesamt["base_cost"], 2)
+
+
+def test_amortisation_laeuft_ueber_hundert_prozent_weiter():
+    """Bei 100 % ist die Anlage bezahlt - ab da zählt der Gewinn."""
+    rechner = _rechner(schritt=timedelta(days=200))
+    anlagen = [{
+        "id": "a1",
+        "name": "Dach",
+        "investment": 1000.0,
+        "commissioned": (_jetzt() - timedelta(days=900)).date().isoformat(),
+        "prior_yield": 0.0,
+    }]
+    preise = {"price": 1.0, "feed_in": 1.0}
+    rechner.rechnen({"export": 0.0, "own": 0.0}, preise, {}, anlagen)
+    # 1500 kWh selbst genutzt zu einem Euro: 1500 Euro Ertrag bei 1000 Euro
+    # Investition.
+    daten = rechner.rechnen({"export": 0.0, "own": 1500.0}, preise, {}, anlagen)
+
+    assert daten["payback_progress"] > 100.0
+    assert daten["payback_surplus"] == 500.0
+    # Nichts mehr abzuzahlen.
+    assert daten["payback_years"] == 0.0
+
+
+def test_vor_der_amortisation_ist_der_ueberschuss_negativ():
+    """Dann sagt er, wie viel noch fehlt."""
+    rechner = _rechner(schritt=timedelta(days=200))
+    anlagen = [{
+        "id": "a1",
+        "name": "Dach",
+        "investment": 1000.0,
+        "commissioned": (_jetzt() - timedelta(days=900)).date().isoformat(),
+        "prior_yield": 0.0,
+    }]
+    preise = {"price": 1.0, "feed_in": 1.0}
+    rechner.rechnen({"export": 0.0, "own": 0.0}, preise, {}, anlagen)
+    daten = rechner.rechnen({"export": 0.0, "own": 300.0}, preise, {}, anlagen)
+    assert daten["payback_surplus"] == -700.0
+
+
+# ------------------------------------------------------- Zittern statt Tausch
+
+
+def test_ein_zitternder_eigenverbrauch_wirft_den_tag_nicht_weg():
+    """Der Sägezahn: Die Tagesersparnis fiel bei jedem Wackler auf null.
+
+    Der Eigenverbrauch ist keine Messung, sondern *erzeugt minus eingespeist*.
+    Meldet der Einspeisezähler eine Sekunde vor dem Ertragszähler, fällt die
+    Differenz kurz um ein paar Wattstunden zurück. Das galt als Zählertausch -
+    und damit war alles weg, was der Tag bis dahin gesammelt hatte.
+    """
+    rechner = _rechner()
+    preise = {"price": 0.35}
+    rechner.rechnen({"own": 100.0}, preise, {})
+    # Der Tag läuft: zwei Kilowattstunden selbst genutzt.
+    tag = rechner.rechnen({"own": 102.0}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 0.70
+
+    # Jetzt das Zittern: Der Stand fällt um dreißig Wattstunden zurück. Der
+    # Anker bleibt stehen - die Ersparnis gibt genau diese dreißig
+    # Wattstunden ab und nicht den ganzen Tag.
+    tag = rechner.rechnen({"own": 101.97}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 0.69, "der Tag darf nicht von vorn beginnen"
+
+    # Und läuft danach weiter, ohne die Lücke doppelt zu zählen.
+    tag = rechner.rechnen({"own": 103.0}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 1.05
+
+
+def test_ein_echter_zaehlertausch_faellt_weiter_auf():
+    """Die Toleranz darf den Zählertausch nicht durchlassen."""
+    rechner = _rechner()
+    preise = {"price": 0.35}
+    rechner.rechnen({"own": 100.0}, preise, {})
+    rechner.rechnen({"own": 102.0}, preise, {})
+    # Ein neuer Zähler beginnt bei null - das sind hundert Kilowattstunden
+    # Rückfall, nicht dreißig Wattstunden.
+    tag = rechner.rechnen({"own": 0.0}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 0.0
+    # Und ab jetzt zählt der neue Zähler.
+    tag = rechner.rechnen({"own": 1.0}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 0.35
+
+
+def test_ein_fehlender_zaehler_haelt_an_statt_zu_verankern():
+    """Meldet der Zähler gerade nichts, wartet die Rechnung."""
+    rechner = _rechner()
+    preise = {"price": 0.35}
+    rechner.rechnen({"own": 100.0}, preise, {})
+    rechner.rechnen({"own": 102.0}, preise, {})
+    # Ein Aussetzer: kein Wert.
+    tag = rechner.rechnen({"own": None}, preise, {})["periods"]["day"]
+    assert tag["savings"] is None
+    # Danach steht der Tag wieder da, wo er war.
+    tag = rechner.rechnen({"own": 102.0}, preise, {})["periods"]["day"]
+    assert tag["savings"] == 0.70

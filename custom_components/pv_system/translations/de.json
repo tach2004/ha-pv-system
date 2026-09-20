@@ -103,6 +103,9 @@
       "payback_progress": {
         "name": "Amortisation"
       },
+      "payback_surplus": {
+        "name": "Gewinn nach Investition"
+      },
       "payback_years": {
         "name": "Restliche Amortisationszeit"
       },
@@ -351,13 +354,15 @@
       "display": {
         "data": {
           "animate": "Flusslinien animieren",
+          "card_interval": "Karte höchstens alle",
           "sensor_interval": "Messwerte höchstens alle",
           "show_phases": "Phasen einzeln zeichnen",
           "show_strings": "Verschaltung zeichnen"
         },
         "data_description": {
           "animate": "Die Punkte auf den Leitungen laufen mit der Leistung mit. Aus, wenn das Dashboard auf einem alten Tablet ruckelt.",
-          "sensor_interval": "Wie oft die Messsensoren dieser Integration einen neuen Wert in die Datenbank schreiben dürfen. Die Karte hängt nicht daran - sie liest direkt mit und bleibt sekundengenau. 0 heißt: bei jeder Messung, und das lässt die Datenbank schnell wachsen.",
+          "card_interval": "**Der größte Posten dieser Integration in der Datenbank.**\n\nDie Karte liest die ganze Anlagenstruktur aus den Attributen des Statussensors. Dessen Takt ist deshalb der Takt der Karte - und er ist der einzige Sensor, der bei jeder Rechnung schreibt. Das sind rund hunderttausend Zustände am Tag, mehr als alle übrigen Sensoren zusammen.\n\nDie Attribute selbst landen nicht in der Datenbank; die Zeilen schon.\n\n**0** (Voreinstellung): Die Karte folgt sekundengenau. **2 bis 5**: kaum sichtbar langsamer, aber ein Bruchteil der Zeilen. Das Wort des Sensors - „lädt“, „speist ein“ - wird nie aufgehalten.\n\nWer die Zeilen ganz loswerden will, nimmt den Sensor in `configuration.yaml` aus der Aufzeichnung heraus. Die Karte funktioniert weiter: Sie liest den lebenden Zustand, nicht die Datenbank.",
+          "sensor_interval": "Wie oft die Messsensoren dieser Integration einen neuen Wert in die Datenbank schreiben dürfen. Die Karte hängt nicht daran - ihren Takt stellt das Feld darunter. 0 heißt: bei jeder Messung, und das lässt die Datenbank schnell wachsen.\n\nDie Langzeitstatistik rechnet in Fünf-Minuten-Blöcken; dreißig Sekunden liefern ihr zehn Werte je Block.",
           "show_phases": "Drei Phasenlinien zwischen Zähler und Haus, jede mit ihrem eigenen Fluss. Aus bleibt eine einzige Wechselstromleitung - richtig für eine einphasige Anlage und deutlich flacher.",
           "show_strings": "Zeichnet die Module einzeln, in Reihe und parallel. Aus ergibt eine schmalere Karte."
         },
