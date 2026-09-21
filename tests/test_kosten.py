@@ -1022,3 +1022,114 @@ def test_ohne_umleitpreis_zaehlt_der_heizstab_wie_jede_andere_last():
     r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
     ergebnis = r.rechnen({"own": 111.0, "diverted": 23.0}, preise, {})
     assert ergebnis["periods"]["day"]["savings"] == round(11.0 * 0.35, 2)
+
+
+# ------------------------------------------------- Der Heizstab am Abend
+#
+# Der Fehler, der die ganze Ersparnis verschoben hat: Ohne Trennzähler ging
+# der *volle* Zählerstand des Überschussverbrauchers in die Bewertung. Der
+# wächst aber auch dann, wenn das Gerät am Netz heizt. Weil der Betrag unten
+# auf den Eigenverbrauch gedeckelt wird, landete am Ende der gesamte
+# Eigenverbrauch beim Heizstab und nichts beim Haushalt - genau das, was in
+# der Karte stand: "Ersparnis heute 0,10 kWh, davon Haushalt 0,00".
+
+
+def test_ein_heizstab_am_netz_verschiebt_die_ersparnis_nicht():
+    """Der gemeldete Fall, nachgestellt.
+
+    Der Verbraucher hat tagsüber gelaufen und läuft abends am Netz weiter.
+    Sein Überschussanteil steht still, sein eigener Zähler nicht. Bewertet
+    werden darf nur der Anteil.
+    """
+    preise = {**PREISE, "price": 0.338, "diverted": 0.11}
+    r = _rechner()
+    r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
+    # Zehn kWh selbst genutzt, davon nichts aus Überschuss: Der Heizstab hing
+    # am Netz, sein Anteilszähler ist stehen geblieben.
+    ergebnis = r.rechnen({"own": 110.0, "diverted": 20.0}, preise, {})
+    tag = ergebnis["periods"]["day"]
+    assert tag["diverted_kwh"] == 0.0
+    assert tag["savings_diverted"] == 0.0
+    assert tag["savings_base"] == round(10.0 * 0.338, 2)
+    assert tag["savings"] == round(10.0 * 0.338, 2)
+
+
+def test_der_anteil_wird_weiter_getrennt_bewertet():
+    """Die Gegenprobe: Läuft er auf Überschuss, zählt er wie vorher."""
+    preise = {**PREISE, "price": 0.338, "diverted": 0.11}
+    r = _rechner()
+    r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
+    ergebnis = r.rechnen({"own": 110.0, "diverted": 26.0}, preise, {})
+    tag = ergebnis["periods"]["day"]
+    assert tag["diverted_kwh"] == 6.0
+    assert tag["savings_diverted"] == round(6.0 * 0.11, 2)
+    assert tag["savings_base"] == round(4.0 * 0.338, 2)
+
+
+# ----------------------------------------------- Die Umleitung, je Schritt
+#
+# Gedeckelt wird der Überschussanteil auf den Eigenverbrauch: Bewertet werden
+# kann nur, was auch selbst genutzt wurde. Das geschah früher auf der *Summe*
+# des Zeitraums - und das ging schief, sobald die Umleitung über einem Tag
+# mehr ergab als der Eigenverbrauch. Dann zog das Minimum den gesamten
+# Eigenverbrauch in den Umleitungstopf, und weil der abends weiterläuft (die
+# Batterie speist das Haus), lief der Umleitungsbetrag mit ihm mit.
+
+
+def _abend(r, preise, schritte, umleitung):
+    """Der Eigenverbrauch wächst, die Umleitung steht."""
+    verlauf = []
+    for own in schritte:
+        t = r.rechnen({"own": own, "diverted": umleitung}, preise, {})["periods"]["day"]
+        verlauf.append((t["savings_base"], t["savings_diverted"]))
+    return verlauf
+
+
+def test_der_heizstab_zieht_den_abend_nicht_mehr_an_sich():
+    """Der gemeldete Fall: Haushalt blieb bei 0,00, Heizstab lief mit."""
+    preise = {**PREISE, "price": 0.338, "diverted": 0.11}
+    r = _rechner()
+    r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
+    # Erster Schritt: Die Umleitung springt weiter vor als der Eigenverbrauch.
+    # Mehr als der Eigenverbrauch kann nicht umgeleitet worden sein.
+    verlauf = _abend(r, preise, [100.10, 100.20, 100.30, 100.40], 21.0)
+
+    heizstab = [h for _, h in verlauf]
+    haushalt = [g for g, _ in verlauf]
+    # Der Heizstab steht ab dem zweiten Schritt still ...
+    assert heizstab[1:] == [heizstab[0]] * 3, heizstab
+    # ... und der Haushalt wächst. Vorher blieb er bei 0,00.
+    assert haushalt == sorted(haushalt) and haushalt[-1] > haushalt[0], haushalt
+
+
+def test_was_mittags_umgeleitet_wurde_bleibt_bewertet():
+    """Die Gegenprobe: Der Anteil geht nicht verloren, er wächst nur nicht."""
+    preise = {**PREISE, "price": 0.338, "diverted": 0.11}
+    r = _rechner()
+    r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
+    # Mittag: 1 kWh in den Heizstab, 1,2 kWh insgesamt selbst genutzt.
+    mittag = r.rechnen({"own": 101.2, "diverted": 21.0}, preise, {})["periods"]["day"]
+    assert mittag["diverted_kwh"] == 1.0
+    assert mittag["savings_diverted"] == round(1.0 * 0.11, 2)
+    assert mittag["savings_base"] == round(0.2 * 0.338, 2)
+
+    # Abend: Der Heizstab ist aus, die Batterie speist das Haus.
+    abend = r.rechnen({"own": 101.5, "diverted": 21.0}, preise, {})["periods"]["day"]
+    assert abend["diverted_kwh"] == 1.0
+    assert abend["savings_diverted"] == mittag["savings_diverted"]
+    assert abend["savings_base"] == round(0.5 * 0.338, 2)
+
+
+def test_der_gedeckelte_stand_ueberlebt_einen_neustart():
+    """Er liegt im Speicher - sonst begänne die Deckelung täglich neu."""
+    hass = ha_stubs.HomeAssistant()
+    preise = {**PREISE, "price": 0.338, "diverted": 0.11}
+    r = _MitUhr(hass=hass, kennung="deckel")
+    r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
+    r.rechnen({"own": 101.2, "diverted": 21.0}, preise, {})
+    asyncio.run(r.async_speichern())
+    stand = r._umleitung
+
+    wieder = kosten.Kostenrechner(hass, "deckel")
+    asyncio.run(wieder.async_laden())
+    assert wieder._umleitung == stand

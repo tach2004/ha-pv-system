@@ -24,7 +24,7 @@
  */
 
 // Die Version kommt aus der URL, mit der die Integration die Karte einbindet
-// (…/pv-system-card.js?v=1.2.3). So steht sie nur in der manifest.json und
+// (…/pv-system-card.js?v=1.4.7). So steht sie nur in der manifest.json und
 // muss hier nicht gepflegt werden.
 const PV_VERSION =
   new URL(import.meta.url).searchParams.get("v") || "unbekannt";
@@ -718,6 +718,15 @@ class PvSystemCard extends HTMLElement {
       .zeilen .k { color: var(--secondary-text-color, #727272); padding-right: 14px; }
       .zeilen .v { text-align: right; font-variant-numeric: tabular-nums; }
       .zeilen .k.klickbar { cursor: pointer; text-decoration: underline dotted; }
+      /* Die Kostentabelle bringt drei gleich aufgebaute Blöcke hintereinander
+         - heute, Monat, Jahr. Ohne eine kräftigere Linie dazwischen liest
+         sich das als eine einzige lange Liste, in der man die Zeile verliert.
+         Innerhalb eines Blocks bleiben die feinen Linien, wie sie sind. */
+      .zeilen > .abschnitt {
+        border-top: 2px solid var(--divider-color, #cfd8dc);
+        margin-top: 5px;
+        padding-top: 5px;
+      }
 
       .formular { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
       .feld { display: flex; flex-direction: column; gap: 2px; }
@@ -2681,18 +2690,21 @@ class PvSystemCard extends HTMLElement {
     // nicht ändert. Neu gebaut wird nur, wenn wirklich andere Zeilen
     // gebraucht werden - beim Öffnen, bei einem Wechsel der Anlage, wenn ein
     // Überschussverbraucher dazukommt.
-    const kennung = zeilen.map(([name, , entity]) => `${name}\u0000${entity || ""}`).join("\u0001");
+    const kennung = zeilen
+      .map(([name, , entity, rand]) => `${name}\u0000${entity || ""}\u0000${rand || ""}`)
+      .join("\u0001");
     if (box.dataset.kennung !== kennung) {
       box.dataset.kennung = kennung;
       box.innerHTML = "";
-      for (const [name, , entity] of zeilen) {
-        const k = e("div", { class: entity ? "k klickbar" : "k", text: name });
+      for (const [name, , entity, rand] of zeilen) {
+        const klassen = [entity ? "k klickbar" : "k", rand || ""].join(" ").trim();
+        const k = e("div", { class: klassen, text: name });
         if (entity) {
           k.title = entity;
           k.addEventListener("click", () => this._mehrInfo(entity));
         }
         box.appendChild(k);
-        box.appendChild(e("div", { class: "v" }));
+        box.appendChild(e("div", { class: ["v", rand || ""].join(" ").trim() }));
       }
     }
     const werte = box.querySelectorAll(".v");
@@ -2746,7 +2758,15 @@ class PvSystemCard extends HTMLElement {
     for (const [name, wort] of zeitraeume) {
       const z = zeit[name] || {};
       zeilen.push(
-        [`Bezug ${wort}`, `${einheit(z.import_kwh, "kWh", 2, l)} · ${geld(z.cost, w, l)}`]
+        // Die erste Zeile jedes Zeitraums bekommt oben eine kräftigere Linie.
+        // Der dritte Eintrag ist sonst die Entität zum Verlinken - hier steht
+        // stattdessen der Hinweis, dass ein neuer Block beginnt.
+        [
+          `Bezug ${wort}`,
+          `${einheit(z.import_kwh, "kWh", 2, l)} · ${geld(z.cost, w, l)}`,
+          null,
+          "abschnitt",
+        ]
       );
       // Der Grundpreis steckt in den Bezugskosten. Ohne diese Zeile stünde an
       // einem Tag ohne Netzbezug ein Betrag da, den niemand erklären kann.
@@ -2805,7 +2825,7 @@ class PvSystemCard extends HTMLElement {
 
     const gesamt = zeit.total || {};
     zeilen.push(
-      ["Ertrag gesamt", geld(gesamt.yield, w, l)],
+      ["Ertrag gesamt", geld(gesamt.yield, w, l), null, "abschnitt"],
       // Der Grundpreis läuft seit dem ersten Lauf mit - getrennt
       // ausgewiesen, weil er unabhängig vom Verbrauch anfällt.
       ...(gesamt.base_cost
