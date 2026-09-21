@@ -425,6 +425,93 @@ def test_hybrid_laedt_aus_dem_netz_und_das_ist_kein_hausverbrauch():
     assert daten["house"]["house_power"] == 16
 
 
+def test_hybrid_im_standby_ist_sehr_wohl_hausverbrauch():
+    """Die 19 W, die ein Hybrid im Leerlauf zieht, verbraucht er wirklich.
+
+    Der Fall aus der Praxis: Batterie in Ruhe, nichts vom Dach, der
+    Wechselrichter meldet -19 W. Diese 19 W werden nicht gespeichert - sie
+    gehören zum Haus. Vorher wurden sie abgezogen, und der Hausverbrauch
+    stand um genau diesen Betrag zu niedrig da.
+    """
+    optionen = _aufbau()
+    optionen["plants"][2]["inverter"]["hybrid"] = True
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3", -19, "W")
+    hass.states.setzen("sensor.akku3_p", 0, "W")     # Batterie in Ruhe
+    hass.states.setzen("sensor.netz", 278, "W")
+    daten = k._berechnen()
+    assert daten["house"]["house_power"] == 278
+    assert daten["plants"][2]["inverter"]["dc_power"] == 0.0
+
+
+def test_hybrid_laedt_wirklich_nur_was_die_batterie_aufnimmt():
+    """Aus -1019 W werden nicht 1019 W Ladung, sondern die gemessenen 1000.
+
+    Die Differenz ist der Eigenverbrauch des Geräts. Er gehört zum Haus, die
+    Ladung nicht.
+    """
+    optionen = _aufbau()
+    optionen["plants"][2]["inverter"]["hybrid"] = True
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3", -1019, "W")
+    # Anlage 3 zählt positiv beim Entladen - Laden ist hier also negativ.
+    hass.states.setzen("sensor.akku3_p", -1000, "W")
+    hass.states.setzen("sensor.netz", 1035, "W")
+    daten = k._berechnen()
+    assert daten["plants"][2]["battery"]["power"] == 1000
+    assert daten["plants"][2]["inverter"]["dc_power"] == -1000.0
+    # 1035 W Bezug, davon 1000 W in die Batterie: 35 W bleiben fürs Haus -
+    # die 19 W des Wechselrichters und 16 W übriger Verbrauch.
+    assert daten["house"]["house_power"] == 35
+
+
+def test_was_vom_dach_kommt_laedt_nicht_aus_dem_netz():
+    """Lädt die Sonne, zeigt der Gleichstrang nach unten - nicht nach oben.
+
+    Sonst stünde bei jedem Sonnenstrahl eine Netzladung da, die es nicht gibt.
+    """
+    optionen = _aufbau()
+    optionen["plants"][2]["inverter"]["hybrid"] = True
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.mppt3_p", 1200, "W")   # Laderegler liefert
+    hass.states.setzen("sensor.akku3_p", -1000, "W")  # Batterie lädt
+    hass.states.setzen("sensor.wr3", -19, "W")        # Gerät im Leerlauf
+    daten = k._berechnen()
+    assert daten["plants"][2]["inverter"]["dc_power"] == 0.0
+
+
+def test_ohne_batteriesensor_bleibt_es_beim_alten_verhalten():
+    """Ohne Messwert lässt sich Standby nicht von Laden trennen.
+
+    Dann wird das Laden angenommen - das ist der Grund, aus dem jemand den
+    Haken setzt, und es ist das, was die Integration bisher tat.
+    """
+    optionen = _aufbau()
+    optionen["plants"][2]["inverter"]["hybrid"] = True
+    optionen["plants"][2]["battery"].pop("power_entity")
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3", -1000, "W")
+    hass.states.setzen("sensor.netz", 1016, "W")
+    daten = k._berechnen()
+    assert daten["house"]["house_power"] == 16
+
+
+def test_ohne_hybrid_gibt_es_keinen_weg_vom_netz_zur_batterie():
+    """Ein Einspeisewechselrichter kann nicht rückwärts laden.
+
+    Auch wenn die Batterie gerade lädt: Sie lädt dann über den Laderegler,
+    nicht über den Wechselrichter. Der Gleichstrang unter der Abzweigung
+    bleibt still.
+    """
+    optionen = _aufbau()
+    optionen["plants"][2]["inverter"]["hybrid"] = False
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3", -19, "W")
+    hass.states.setzen("sensor.akku3_p", -1000, "W")
+    daten = k._berechnen()
+    assert daten["plants"][2]["inverter"]["dc_power"] == 0.0
+
+
 def test_ohne_hybrid_bleibt_der_standby_im_netzbezug():
     """Der gewöhnliche Wechselrichter im Standby ist selbst ein Verbraucher."""
     optionen = _aufbau()

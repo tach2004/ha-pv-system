@@ -172,7 +172,7 @@ def test_der_dienst_findet_genau_die_abgeschalteten():
     """Was der Dienst abschalten würde, ist genau das, was schon aus ist."""
     koordinator, sensoren = _sensoren()
     kennungen = sensor.spiegel_kennungen(koordinator)
-    vorsatz = f"{koordinator.entry.entry_id}_"
+    vorsatz = f"{koordinator.config_entry.entry_id}_"
     gelistet = {k.replace(vorsatz, "") for k in kennungen}
     aus = {name for name in sensoren if not _an(sensoren, name)}
     # Der Dienst darf mehr kennen als angelegt wurde - eine Phase ohne
@@ -195,6 +195,35 @@ def test_der_takt_laesst_nur_einen_wert_je_zeitfenster_durch():
     for _ in range(50):
         entity._handle_coordinator_update()
     assert len(geschrieben) == 1, "der Takt greift nicht"
+
+
+def test_kurz_nach_dem_systemstart_geht_der_erste_wert_durch():
+    """Der Takt darf den allerersten Messwert nie schlucken.
+
+    monotonic() zählt ab einem beliebigen Punkt - unter Linux ab dem Start
+    des Systems. Mit einer Null als "noch nie geschrieben" wäre die Differenz
+    auf einer eben gestarteten Maschine kleiner als der Takt: Alles fiele
+    weg, und zwar so lange, bis die Uptime den Takt überholt.
+
+    In der Integration hieße das eine halbe Minute leere Sensoren nach einem
+    Neustart. Im Testlauf hieß es einen Fehlschlag auf einem frischen
+    CI-Runner - dort stand die Uhr bei wenigen Sekunden.
+    """
+    koordinator, s = _sensoren()
+    entity = s["pv_utilisation"]
+    assert entity._geschrieben is None, "vor dem ersten Schreiben: None"
+    geschrieben = []
+    entity.async_write_ha_state = lambda: geschrieben.append(1)
+
+    echte_uhr = sensor.monotonic
+    sensor.monotonic = lambda: 3.0          # Die Maschine läuft drei Sekunden
+    try:
+        for _ in range(5):
+            entity._handle_coordinator_update()
+    finally:
+        sensor.monotonic = echte_uhr
+    # Der erste geht durch, die vier danach fallen in den Takt.
+    assert len(geschrieben) == 1
 
 
 def test_ohne_takt_geht_jede_messung_durch():
@@ -803,3 +832,131 @@ def test_ein_neues_wort_darf_den_takt_durchbrechen():
     koordinator.data["totals"]["battery_power"] = -900.0
     status._handle_coordinator_update()
     assert len(geschrieben) == 2
+
+
+# ------------------------------------------------------- Recorder-Abmeldung
+#
+# Der Grund für diese drei Tests: In der Integration lag ab 0.0.1 eine
+# recorder.py mit einer Funktion, die Home Assistant längst nicht mehr
+# aufruft. Sie war importierbar, also fiel sie in keiner Prüfung auf - und
+# währenddessen wanderten je Zustandswechsel rund elf Kilobyte JSON in die
+# Datenbank. Was hier geprüft wird, ist deshalb nicht die Konstante, sondern
+# die Verbindung: Liefert der Sensor genau das, was er auch abmeldet?
+
+
+def test_die_struktur_wird_beim_recorder_abgemeldet():
+    """Jeder große Schlüssel steht in _unrecorded_attributes."""
+    fehlend = set(sensor.STRUKTUR) - set(sensor.StatusSensor._unrecorded_attributes)
+    assert not fehlend, f"nicht abgemeldet: {sorted(fehlend)}"
+
+
+def test_der_status_liefert_genau_die_abgemeldete_struktur():
+    """Attribute und Abmeldung dürfen nicht auseinanderlaufen.
+
+    Ein neuer Block in extra_state_attributes, der hier nicht auftaucht,
+    landete sonst still wieder in der Zustandstabelle.
+    """
+    koordinator, status = _status()
+    attribute = status.extra_state_attributes
+    gross = set(attribute) - {"pv_key", "pv_system_id", "title"}
+    assert gross == set(sensor.STRUKTUR)
+
+
+def test_die_kennzeichen_bleiben_aufgezeichnet():
+    """Woran die Karte den Sensor erkennt, ist klein und konstant.
+
+    Diese drei sind zusammen rund siebzig Byte und ändern sich nie. Der
+    Recorder legt gleiche Attribute nur einmal ab - sie kosten also eine
+    einzige Zeile und gehören nicht abgemeldet.
+    """
+    abgemeldet = set(sensor.StatusSensor._unrecorded_attributes)
+    for kennzeichen in ("pv_key", "pv_system_id", "title"):
+        assert kennzeichen not in abgemeldet
+
+
+# --------------------------------------------------- Der fortlaufende Zähler
+#
+# Die Stunde wird jede Stunde verworfen - der Zählerstand nicht. Er ist die
+# Grundlage für "Hausverbrauch heute" und für die beiden Zählersensoren.
+
+
+def test_der_zaehlerstand_laeuft_ueber_die_stunde_hinaus():
+    """Drei Stunden 1000 W sind drei Kilowattstunden - ohne Rücksetzer."""
+    from datetime import datetime, timedelta, timezone
+
+    rechner = stunde.Stundenwerte(ha_stubs.HomeAssistant(), "test")
+    jetzt = datetime(2026, 4, 2, 10, 0, tzinfo=timezone.utc)
+    werte = {"house": 1000, "base": 600, "import": 0, "export": 0, "yield": 1000}
+    for _ in range(3 * 60 + 1):
+        rechner.rechnen(werte, jetzt)
+        jetzt += timedelta(minutes=1)
+
+    staende = rechner.staende()
+    # Die erste Messung stellt nur die Uhr; integriert wird ab der zweiten.
+    assert staende["house"] == 3.0
+    assert staende["base"] == 1.8
+    # Die laufende Stunde steht dagegen wieder am Anfang.
+    assert rechner.zustand()["lauf"]["house"] < 0.2
+
+
+def test_der_zaehlerstand_ueberlebt_einen_neustart():
+    """Ein Zähler, der bei null anfängt, sähe aus wie ein Gerätetausch.
+
+    Die Kostenrechnung würde dann neu verankern - und der Tagesverbrauch
+    stünde nach jedem Neustart wieder bei null.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    ha_stubs.speicher_leeren()
+    hass = ha_stubs.HomeAssistant()
+    rechner = stunde.Stundenwerte(hass, "test")
+    jetzt = datetime(2026, 4, 2, 10, 0, tzinfo=timezone.utc)
+    for _ in range(61):
+        rechner.rechnen({"house": 1000, "base": 1000}, jetzt)
+        jetzt += timedelta(minutes=1)
+    asyncio.run(rechner.async_speichern())
+    vorher = rechner.staende()["house"]
+    assert vorher == 1.0
+
+    # Neu aufgebaut, wie nach einem Neustart von Home Assistant.
+    wieder = stunde.Stundenwerte(hass, "test")
+    asyncio.run(wieder.async_laden())
+    assert wieder.staende()["house"] == vorher
+
+
+def test_die_beiden_zaehler_stehen_am_haus():
+    """Hausverbrauch und Grundverbrauch als Stand, nicht nur als Leistung."""
+    koordinator, sensoren = _sensoren()
+    daten = koordinator._berechnen()
+    assert daten["house"]["house_energy_total"] is not None
+    assert daten["house"]["base_energy_total"] is not None
+    # Und als Entität, damit die Menge nicht nur in der Karte steht.
+    assert "house_energy_total" in sensoren
+    assert "base_energy_total" in sensoren
+
+
+def test_ein_eingetragener_hauszaehler_gewinnt_gegen_das_integral():
+    """Gemessen schlägt gerechnet - das Integral ist nur der Rückfall."""
+    aufbau = _aufbau()
+    aufbau["house"] = {"calculate": True, "energy_entity": "sensor.hauszaehler"}
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.hauszaehler", 4210.5, "kWh")
+    entry = ha_stubs.ConfigEntry("Zuhause", aufbau)
+    koordinator = PvSystemCoordinator(hass, entry)
+    assert koordinator._berechnen()["house"]["house_energy_total"] == 4210.5
+
+
+def test_mit_hauszaehler_ist_der_zaehlersensor_eine_wiederholung():
+    """Dann steht derselbe Stand schon als eigene Entität im System."""
+    aufbau = _aufbau()
+    aufbau["house"] = {"calculate": True, "energy_entity": "sensor.hauszaehler"}
+    _, sensoren = _sensoren(aufbau)
+    assert not _an(sensoren, "house_energy_total")
+    # Der Grundverbrauch nie: Den zählt kein Gerät im Haus.
+    assert _an(sensoren, "base_energy_total")
+
+
+def test_ohne_hauszaehler_ist_der_zaehlersensor_die_einzige_quelle():
+    _, sensoren = _sensoren()
+    assert _an(sensoren, "house_energy_total")
+    assert _an(sensoren, "base_energy_total")

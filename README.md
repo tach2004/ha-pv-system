@@ -70,6 +70,7 @@ und einbringt.
 
   Ein Hybrid-Wechselrichter, der die Batterie aus dem Netz lädt, wird dabei
   nicht als Verbraucher gezählt – das ist Speicherladung, kein Hausverbrauch.
+  Sein Leerlauf dagegen schon.
 * **Kosten und Ertrag** aus den Zählerständen: Bezugskosten, Einspeiseerlös,
   Ersparnis durch Eigenverbrauch, Ertrag und Bilanz – je für heute, den Monat,
   das Jahr und seit der Inbetriebnahme. Dazu der Momentanwert in Euro je Stunde
@@ -278,6 +279,78 @@ der Erlös ist schlicht null.
 **Nicht zu verwechseln mit der Bilanz:** Die zieht die Bezugskosten wieder ab
 und ist deshalb meist negativ.
 
+**Der Grundpreis gehört nicht in die Ersparnis.** Die Zählergebühr fällt an,
+ob eine Anlage auf dem Dach liegt oder nicht – gespart wird sie also nicht.
+Sie steckt in den **Bezugskosten** und damit in der **Bilanz**, und dort steht
+sie auch getrennt ausgewiesen.
+
+**Der Speicher ist nur eine Zwischenstation.** Eine Kilowattstunde wird genau
+einmal gezählt, nicht zweimal. *Wann* sie gezählt wird, hängt davon ab, welchen
+Zähler du als Ertrag eingetragen hast:
+
+| Ertragszähler | Gezählt wird | Speicherverluste |
+|---|---|---|
+| **Wechselrichter (AC)** | beim Entladen, wenn der Strom ins Haus geht | sind schon abgezogen |
+| **nur Module (DC)** | beim Erzeugen, bevor der Speicher lädt | zählen mit, obwohl ~10 % nie ankommen |
+
+Die obere Zeile ist die genauere. Wer einen Ertragszähler am Wechselrichter
+hat, trägt ihn ein.
+
+### Was steckt in der Ersparnis – und was nicht?
+
+Die Frage, die sich jeder mit einem Überschussverbraucher stellt: *Zählt der
+Heizstab eigentlich mit?* **Ja.** Er hängt hinter dem Zähler und ist damit
+Hausverbrauch wie jede andere Last. Was aus der Sonne in ihn floss, steht im
+Eigenverbrauch und damit in der Ersparnis.
+
+Bewertet wird er nur anders, und die Formel sieht auf den ersten Blick
+merkwürdig aus:
+
+    Ersparnis = Eigenverbrauch × Arbeitspreis
+              + umgeleitete kWh × (Umleitpreis − Arbeitspreis)
+
+Ausmultipliziert steht dort aber genau das, was man erwarten würde:
+
+    Ersparnis = (Eigenverbrauch − umgeleitet) × Arbeitspreis    ← der Haushalt
+              + umgeleitet                    × Umleitpreis     ← der Heizstab
+
+Also: **Grundverbrauch aus PV zum Arbeitspreis, Überschuss zum Preis dessen,
+was er ersetzt.** Genau so, wie man es von Hand rechnen würde – nur in einer
+Zeile statt in zweien.
+
+Ein Rechenbeispiel, 0,35 €/kWh Strom, 0,11 €/kWh Gas, 0,08 €/kWh Vergütung:
+
+| | kWh | Wert |
+|---|---|---|
+| Haushalt aus PV | 8,0 | 8,0 × 0,35 € = **2,80 €** |
+| Heizstab aus PV | 3,0 | 3,0 × 0,11 € = **0,33 €** |
+| eingespeist | 4,0 | 4,0 × 0,08 € = **0,32 €** |
+| | | **Ersparnis 3,13 €, Erlös 0,32 €, Ertrag 3,45 €** |
+
+Die 3 kWh im Heizstab sind hier **weniger** wert als 3 kWh im Haushalt – Gas
+ist billiger als Strom. Sie sind aber mehr wert als die 0,24 €, die sie als
+Einspeisung gebracht hätten. Unterm Strich stimmt die Rechnung also in beide
+Richtungen.
+
+### Worauf sich das alles bezieht
+
+Neben jedem Betrag steht seine Menge – in der Kostentabelle der Karte und als
+eigene Entität:
+
+| | Was es zählt |
+|---|---|
+| **Hausverbrauch Zähler** | alles hinter dem Zähler, inklusive Überschussverbraucher |
+| **Grundverbrauch Zähler** | derselbe Verbrauch ohne den Teil, der aus Überschuss lief |
+
+Beide laufen vorwärts wie ein Stromzähler und setzen sich nie zurück. Tag,
+Monat und Jahr macht Home Assistant daraus von selbst – in der Statistik, im
+Verlauf und im Energie-Dashboard.
+
+Woher sie kommen: **Gemessen schlägt gerechnet.** Ist unter *Haus und
+Verbrauch* ein Energiezähler eingetragen, gilt der. Sonst wird die Leistung
+aufaddiert – dieselben Watt, die auch in der Karte stehen. Den Grundverbrauch
+misst ohnehin kein Gerät; er wird immer gerechnet.
+
 ### Warum ein Zählerstand kein Messwert ist
 
 Alles oben rechnet mit **Zählerständen**, nicht mit Leistungen. Ein Zählerstand
@@ -310,6 +383,32 @@ Minus – bei den meisten Häusern das ganze Jahr über. Positiv wird sie im
 Tageswert an einem sonnigen Tag, im Jahreswert bei einer sehr großen Anlage.
 Die Frage „lohnt sich die Anlage?" beantwortet nicht die Bilanz, sondern die
 **Amortisation**: Ertrag seit Inbetriebnahme gegen Investition.
+
+### Die Amortisation, Feld für Feld
+
+| Sensor | Rechnung |
+|---|---|
+| **Amortisation** (%) | `100 × Ertrag gesamt ÷ Investition` |
+| **Bilanz Amortisation** (€) | `Ertrag gesamt − Investition` – vorher was fehlt, danach der Gewinn |
+| **Ertrag je Jahr** (€) | `Ertrag gesamt ÷ Tage seit Inbetriebnahme × 365` |
+| **Amortisation in Jahren** | `(Investition − Ertrag gesamt) ÷ Ertrag je Jahr` |
+
+Drei Größen gehen hinein, und es lohnt sich zu wissen, welche:
+
+* **Ertrag gesamt** – Ersparnis **+** Einspeiseerlös über den ganzen
+  Zeitraum, jede Differenz mit dem Preis bewertet, der damals galt. Das ist
+  der Bruttonutzen der Anlage. Die Bezugskosten und der Grundpreis stecken
+  **nicht** darin: Was du aus dem Netz holst, hat nichts damit zu tun, ob
+  sich das Dach bezahlt macht.
+* **Investition** – die Summe der Investitionen aller Anlagen. Ein eigenes
+  Feld für den Standort gibt es nicht; es stünde neben einer Summe, die es
+  schon gibt.
+* **Tage seit Inbetriebnahme** – ab der **ältesten** Inbetriebnahme aller
+  Anlagen, nicht ab dem Tag, an dem du die Integration eingerichtet hast.
+  Dafür gibt es „Ertrag davor" und „Bezug davor".
+
+Unter **sieben Tagen** bleiben Jahresrate und Restzeit leer:
+Aus drei Tagen auf ein Jahr hochzurechnen ergibt eine Zahl, die nichts sagt.
 
 **Preisänderungen verändern die Vergangenheit nicht.** Das ist der Kern der
 ganzen Rechnung: Bei jedem Lauf wird nur die *Differenz* seit dem letzten Lauf
@@ -635,7 +734,20 @@ Das ist der Hausanschluss: ein Zähler für alles, was rein- und rausgeht.
 |---|---|---|---|
 | **Hausverbrauch rechnen** | an/aus | Rechnet `Netzleistung + Wechselrichterabgabe`. Bei einer Netzparallelanlage ist das exakt, nicht geschätzt | an |
 | **Leistung** | W | Nur wenn du den Hausverbrauch **misst**. Hat dann Vorrang vor der Rechnung | Wird gerechnet – der Normalfall |
-| **Verbrauchszähler** | kWh | Alles, was im Haus verbraucht wurde: Netzbezug **und** selbst genutzter Solarstrom. **Nicht** der Bezugszähler. Zweiter Weg zum Eigenverbrauch (`verbraucht − bezogen`), wenn keine Anlage einen Ertragszähler hat | In Ordnung, solange ein Ertragszähler da ist |
+| **Verbrauchszähler** | kWh | Alles, was im Haus verbraucht wurde: Netzbezug **und** selbst genutzter Solarstrom. **Nicht** der Bezugszähler. Zweiter Weg zum Eigenverbrauch (`verbraucht − bezogen`), wenn keine Anlage einen Ertragszähler hat. Ist er gesetzt, speist er auch den Sensor *Hausverbrauch Zähler* | Der Hausverbrauch wird aus der Leistung aufaddiert |
+
+Aus beidem entstehen zwei fortlaufende Zähler, die es in Home Assistant sonst
+nicht gibt:
+
+| Entität | Was sie zählt | Woher |
+|---|---|---|
+| `sensor.…_house_energy_total` | Hausverbrauch, inklusive Überschussverbraucher | Verbrauchszähler, sonst die Leistung aufaddiert |
+| `sensor.…_base_energy_total` | derselbe Verbrauch ohne den Teil aus Überschuss | immer gerechnet – das misst kein Gerät |
+
+Beide steigen nur (`total_increasing`). Den Tages-, Monats- und Jahreswert
+macht Home Assistant daraus selbst; im Energie-Dashboard lassen sie sich als
+Verbraucher eintragen. Mit eingetragenem Verbrauchszähler ist der erste eine
+Wiederholung und deshalb abgeschaltet – der zweite nie.
 
 ### Überschuss
 
@@ -717,7 +829,7 @@ Das ist der Hausanschluss: ein Zähler für alles, was rein- und rausgeht.
 | **Phase** | L1/L2/L3 | Auf welcher Schiene er einspeist. Bestimmt, wo er in der Karte abgreift und wie die Phasenflüsse aufgehen | L1 |
 | **Leistung** | W | **Die Abgabe auf der Wechselstromseite.** Geht in Hausverbrauch, Autarkie und die Phasenrechnung ein | Kein Hausverbrauch |
 | **Ertragszähler** | kWh | Grundlage für Ertrag und Amortisation dieser Anlage | Der Modulertrag wird genommen |
-| **Hybrid** | an/aus | Sagt: Er kann die Batterie aus dem Netz laden. Solche Ladung zählt dann **nicht** als Hausverbrauch | aus |
+| **Hybrid** | an/aus | Sagt: Er kann die Batterie aus dem Netz laden. Was davon wirklich gespeichert wird, zählt dann **nicht** als Hausverbrauch – siehe unten | aus |
 | **AC-Spannung/-Strom**, **DC-Spannung**, **Frequenz**, **Temperatur**, **Betriebsart** | | Nur Anzeige. Die DC-Spannung dient ohne Laderegler als Strangspannung | nichts |
 
 **Kosten dieser Anlage**
@@ -876,17 +988,56 @@ Debug-Protokoll:
 Das sind etwa **hunderttausend Zustände am Tag** – mehr als alle übrigen
 Sensoren dieser Integration zusammen.
 
-**Die Attribute selbst landen nicht in der Datenbank.** Die Integration bringt
-dafür `recorder.py` mit, den dokumentierten Haken, mit dem eine Integration dem
-Recorder sagt, welche Attribute er überspringen soll – seit der ersten Fassung.
-Ohne ihn lägen bei jedem Zustandswechsel mehrere Kilobyte JSON in der
-Zustandstabelle.
+Dabei sind zwei Tabellen im Spiel, und sie verhalten sich völlig
+unterschiedlich:
 
-Was bleibt, sind die **Zeilen**. Drei Wege, sie loszuwerden:
+| Tabelle | Inhalt | Kosten |
+|---|---|---|
+| `state_attributes` | das JSON der Attribute | die ganze Struktur, je Wechsel |
+| `states` | eine Zeile je Wechsel: Zeitstempel, Wort, Verweise | rund 100 Byte |
+
+**Die Attribute meldet die Integration ab.** Der Statussensor setzt dafür
+`_unrecorded_attributes` – die Stelle, an der Home Assistant fragt, welche
+Attribute der Recorder überspringen soll. Gemessen an einer Anlage mit drei
+Zweigen:
+
+```
+GESAMT                 10.955 Byte je Zustandswechsel
+  plants   6.046
+  costs    2.026
+  totals   1.082
+  grid       805
+  house      716
+  display     64
+  ------------
+  abgemeldet          10.752 Byte   (98,1 %)
+  bleibt                 204 Byte   (Name, Kennung, Geräteklasse)
+```
+
+Die verbleibenden 204 Byte ändern sich **nie**. Der Recorder legt gleiche
+Attribute nur einmal ab und verweist darauf – es entsteht also nicht eine
+Zeile je Wechsel, sondern **eine einzige für die Lebensdauer des Sensors**.
+Hochgerechnet ist das der Unterschied zwischen gut einem Gigabyte am Tag und
+nichts.
+
+Auf die Karte hat das keinen Einfluss: Sie liest den lebenden Zustand aus
+`hass.states`, und dort stehen alle Attribute unverändert.
+
+Was bleibt, sind die **Zeilen** – rund 11 MB am Tag. Die kann keine
+Integration verhindern; dafür gibt es keinen Haken. Drei Wege, sie
+loszuwerden:
 
 1. **Karte höchstens alle 2–5 Sekunden.** Mit dem Auge kaum zu sehen, aber ein
    Bruchteil der Zeilen. Das Wort des Sensors – „lädt", „speist ein" – wird nie
    aufgehalten, nur die Messwerte dahinter.
+
+   | Takt | Zeilen am Tag | `states` |
+   |---|---|---|
+   | aus (0) | 106.971 | 10,7 MB |
+   | 2 s | 43.200 | 4,3 MB |
+   | 5 s | 17.280 | 1,7 MB |
+   | 30 s | 2.880 | 0,3 MB |
+
 2. **Den Sensor gar nicht aufzeichnen:**
 
    ```yaml
@@ -895,6 +1046,12 @@ Was bleibt, sind die **Zeilen**. Drei Wege, sie loszuwerden:
        entities:
          - sensor.pv_system_status
    ```
+
+   Wirkt erst nach einem **Neustart** von Home Assistant, nicht nach einem
+   Reload. Was schon geschrieben ist, räumt danach einmalig
+   `recorder.purge_entities` (`keep_days: 0`) weg, gefolgt von
+   `recorder.purge` mit `repack: true` – sonst gibt die Datenbankdatei den
+   Platz nicht ans Dateisystem zurück.
 
 3. Beides.
 
@@ -907,6 +1064,52 @@ drei?". Für ein Wort mit fünf möglichen Werten ist das kein Verlust.
 
 Was du **nicht** ausschließen solltest, sind die Geld- und Energiesensoren: An
 denen hängen die Langzeitstatistiken und das Energie-Dashboard.
+
+### Der Haken „Hybrid" – und was eine negative Leistung bedeutet
+
+Fast jeder Wechselrichter meldet irgendwann eine **negative** Leistung. Was
+das heißt, hängt vom Gerät ab – und genau dafür gibt es den Haken.
+
+**Ohne Haken** ist eine negative Zahl immer Leerlauf. Ein Einspeise‑ oder
+Mikrowechselrichter zieht nachts ein paar Watt für seine eigene Elektronik.
+Die stecken im Netzbezug schon drin und dürfen nicht noch einmal abgezogen
+werden – sonst kämen bei −2 W Abgabe und 16 W Bezug 14 W Hausverbrauch
+heraus, obwohl das Haus 16 W zieht.
+
+**Mit Haken** kommt ein zweiter Fall dazu: Das Gerät lädt die Batterie aus
+dem Netz. Diese Leistung ist keine Hausleistung, sondern Speicherladung –
+sie wird abgezogen. Ohne das stünden beim Laden mit 1 kW über 1000 W
+Hausverbrauch da.
+
+Die beiden Fälle sind aber nicht am Vorzeichen zu unterscheiden, und ein
+Hybrid hat auch einen Leerlauf. Meldet er −19 W, weil er nur wartet, wäre es
+falsch, 19 W Speicherladung daraus zu machen. Deshalb entscheidet nicht die
+Wechselrichterzahl, sondern die **Batterie**:
+
+    aus dem Netz geladen = Batterieladung − was gerade vom Dach kommt
+
+gedeckelt auf das, was der Wechselrichter überhaupt zieht. Drei Beispiele mit
+Haken:
+
+| Wechselrichter | Batterie | Dach | Speicherladung | Hausverbrauch |
+|---|---|---|---|---|
+| −19 W | in Ruhe | 0 W | 0 W | die vollen 19 W |
+| −1019 W | +1000 W | 0 W | 1000 W | 19 W |
+| −19 W | +1000 W | 1200 W | 0 W | 19 W |
+
+Die dritte Zeile ist der Sonnentag: Die Batterie lädt, aber vom Dach, nicht
+aus dem Netz.
+
+**In der Karte** sieht man dasselbe: Zieht der Wechselrichter, drehen sich
+Flusslinie und Pfeil zu ihm hin und werden **rot** – die Farbe des
+Netzbezugs. Läuft davon etwas weiter in die Batterie, führt die rote Linie
+über den Wechselrichter hinaus nach oben bis zum Speicher. Im reinen
+Leerlauf bleibt der Gleichstrang still: Dort fließt nichts.
+
+**Ohne eingetragenen Batteriesensor** lässt sich das nicht auseinanderhalten.
+Dann wird mit Haken das Laden angenommen – das ist der Grund, aus dem jemand
+den Haken überhaupt setzt. Wer es genau haben will, trägt die
+Batterieleistung ein.
 
 ### Autarkie und Eigenverbrauch
 

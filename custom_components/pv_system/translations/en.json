@@ -31,6 +31,9 @@
       "balance_year": {
         "name": "Balance this year"
       },
+      "base_energy_total": {
+        "name": "Base consumption meter"
+      },
       "battery_capacity": {
         "name": "Battery capacity"
       },
@@ -90,6 +93,9 @@
       },
       "house_energy": {
         "name": "House consumption energy"
+      },
+      "house_energy_total": {
+        "name": "House consumption meter"
       },
       "house_power": {
         "name": "House consumption"
@@ -467,7 +473,7 @@
           "enabled": "Off when this plant has no inverter of its own.",
           "energy_entity": "kWh meter for what this device has delivered in total. The cost calculation uses it as generation - only what the inverter delivers can go to the grid.",
           "frequency_entity": "Grid frequency as measured by this device - around 50 Hz.",
-          "hybrid": "On when the device can also charge from the grid - a hybrid inverter with grid charging.",
+          "hybrid": "On when the device can also charge the battery from the grid. Negative power is then no longer simply own consumption: whatever the battery sensor shows as actually stored counts as charging rather than household use - the rest stays consumption. Without the option, negative power is always standby.",
           "manufacturer": "Display only - the card shows manufacturer and model together.",
           "mode_entity": "Operating mode as text, e.g. “grid-tied” or “off-grid”.",
           "model": "Display only, e.g. the type designation from the label.",

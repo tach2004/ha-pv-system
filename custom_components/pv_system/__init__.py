@@ -146,11 +146,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvSystemConfigEntry) -> 
 async def async_unload_entry(hass: HomeAssistant, entry: PvSystemConfigEntry) -> bool:
     """Standort abbauen."""
     if geladen := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        # Erst die Marken sichern, dann abbauen: Ein verzögertes Speichern
-        # käme sonst nach dem Ende des Eintrags und ginge verloren.
+        # Nur die Marken sichern: Ein verzögertes Speichern käme sonst nach
+        # dem Ende des Eintrags und ginge verloren.
+        #
+        # Den Koordinator beendet Home Assistant selbst. DataUpdateCoordinator
+        # trägt sich dafür im Konstruktor mit async_on_unload am Eintrag ein -
+        # das läuft unmittelbar nach dieser Funktion. Ihn hier noch einmal
+        # abzubauen wäre ein zweiter Aufruf derselben Methode.
         await entry.runtime_data.kosten.async_speichern()
         await entry.runtime_data.stunden.async_speichern()
-        await entry.runtime_data.async_shutdown()
     return geladen
 
 

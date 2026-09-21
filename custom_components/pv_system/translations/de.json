@@ -31,6 +31,9 @@
       "balance_year": {
         "name": "Bilanz dieses Jahr"
       },
+      "base_energy_total": {
+        "name": "Grundverbrauch Zähler"
+      },
       "battery_capacity": {
         "name": "Batteriekapazität"
       },
@@ -90,6 +93,9 @@
       },
       "house_energy": {
         "name": "Hausverbrauch Energie"
+      },
+      "house_energy_total": {
+        "name": "Hausverbrauch Zähler"
       },
       "house_power": {
         "name": "Hausverbrauch"
@@ -467,7 +473,7 @@
           "enabled": "Aus, wenn diese Anlage keinen eigenen Wechselrichter hat.",
           "energy_entity": "Zählerstand in kWh für das, was dieses Gerät insgesamt abgegeben hat. Die Kostenrechnung nimmt ihn als Erzeugung - nur was der Wechselrichter abgibt, kann ins Netz gehen.",
           "frequency_entity": "Die Netzfrequenz, die dieses Gerät misst - um 50 Hz.",
-          "hybrid": "An, wenn das Gerät auch aus dem Netz laden kann - ein Hybridwechselrichter mit Netzladefunktion.",
+          "hybrid": "An, wenn das Gerät die Batterie auch aus dem Netz laden kann. Dann gilt eine negative Leistung nicht mehr einfach als Eigenverbrauch: Was davon laut Batteriesensor wirklich gespeichert wird, ist Ladung und kein Hausverbrauch - der Rest bleibt Verbrauch. Ohne den Haken ist eine negative Leistung immer Standby.",
           "manufacturer": "Nur zur Anzeige - die Karte schreibt Hersteller und Modell untereinander.",
           "mode_entity": "Die Betriebsart als Text, z. B. „Netzparallel“ oder „Inselbetrieb“.",
           "model": "Nur zur Anzeige, z. B. die Typenbezeichnung vom Aufkleber.",

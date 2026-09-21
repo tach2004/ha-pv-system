@@ -104,6 +104,11 @@ class ConfigEntry:
         self.entry_id = "testeintrag"
         self.runtime_data: Any = None
 
+    def async_create_task(self, hass, ziel, name=None, eager_start=True):
+        """Im Test wird nichts nebenher gestartet - die Coroutine wird zu."""
+        ziel.close()
+        return None
+
     def __class_getitem__(cls, _item):  # ConfigEntry["Coordinator"]
         return cls
 
@@ -128,10 +133,19 @@ class DataUpdateCoordinator:
     """Nur Konstruktor und die beiden Methoden, die der Rechenkern nutzt."""
 
     def __init__(
-        self, hass, logger, *, name=None, update_interval=None, always_update=True
+        self,
+        hass,
+        logger,
+        *,
+        config_entry=None,
+        name=None,
+        update_interval=None,
+        always_update=True,
     ) -> None:
         self.hass = hass
         self.logger = logger
+        # Wie im Original: Der Eintrag hängt am Koordinator, nicht daneben.
+        self.config_entry = config_entry
         self.name = name
         self.update_interval = update_interval
         self.data: Any = None
@@ -152,11 +166,25 @@ class Store:
     Für die Rechnung genügt das: Geprüft wird, ob die Periodenmarken richtig
     gesetzt und fortgeschrieben werden - nicht, ob Home Assistant Dateien
     schreiben kann.
+
+    Der Inhalt hängt am Schlüssel und nicht an der Instanz - wie die Datei
+    unter ``.storage``. Nur so lässt sich ein Neustart nachstellen: ein
+    zweites Objekt mit demselben Schlüssel findet vor, was das erste
+    geschrieben hat. Jeder Test räumt über :func:`speicher_leeren` auf.
     """
+
+    _dateien: dict[str, Any] = {}
 
     def __init__(self, hass, version, schluessel) -> None:
         self.schluessel = schluessel
-        self.inhalt: Any = None
+
+    @property
+    def inhalt(self) -> Any:
+        return Store._dateien.get(self.schluessel)
+
+    @inhalt.setter
+    def inhalt(self, daten: Any) -> None:
+        Store._dateien[self.schluessel] = daten
 
     async def async_load(self) -> Any:
         return self.inhalt
@@ -166,6 +194,11 @@ class Store:
 
     def async_delay_save(self, daten_funktion, verzug) -> None:
         self.inhalt = daten_funktion()
+
+
+def speicher_leeren() -> None:
+    """Alles vergessen, was unter .storage läge."""
+    Store._dateien.clear()
 
 
 class _DatumZeit:
@@ -250,7 +283,7 @@ class DeviceInfo(dict):
     pass
 
 
-AddEntitiesCallback = Any
+AddConfigEntryEntitiesCallback = Any
 
 
 class SensorEntity:
@@ -355,7 +388,7 @@ def installieren() -> None:
     modul("homeassistant.helpers.device_registry", DeviceInfo=DeviceInfo)
     modul(
         "homeassistant.helpers.entity_platform",
-        AddEntitiesCallback=AddEntitiesCallback,
+        AddConfigEntryEntitiesCallback=AddConfigEntryEntitiesCallback,
     )
     sys.modules["homeassistant.helpers.update_coordinator"].CoordinatorEntity = (
         CoordinatorEntity

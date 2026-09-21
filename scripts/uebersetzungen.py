@@ -51,6 +51,11 @@ SENSOREN: dict[str, T] = {
     "grid_frequency": ("Netzfrequenz", "Grid frequency"),
     "house_power": ("Hausverbrauch", "House consumption"),
     "house_energy": ("Hausverbrauch Energie", "House consumption energy"),
+    # Die beiden gerechneten Zähler. "Zähler" steht im Namen, damit niemand
+    # einen Tageswert erwartet: Sie laufen vorwärts wie ein Stromzähler, und
+    # den Tageswert macht Home Assistant selbst daraus.
+    "house_energy_total": ("Hausverbrauch Zähler", "House consumption meter"),
+    "base_energy_total": ("Grundverbrauch Zähler", "Base consumption meter"),
     # Beide als Stundenwert - der Name sagt es, damit niemand den
     # Momentanwert erwartet. Den zeigt die Karte.
     "self_sufficiency": ("Autarkie letzte Stunde", "Self-sufficiency last hour"),
@@ -755,10 +760,18 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "Continuous rating from the label. The load bar is based on it.",
         ),
         "hybrid": (
-            "An, wenn das Gerät auch aus dem Netz laden kann - ein "
-            "Hybridwechselrichter mit Netzladefunktion.",
-            "On when the device can also charge from the grid - a hybrid "
-            "inverter with grid charging.",
+            "An, wenn das Gerät die Batterie auch aus dem Netz laden kann. "
+            "Dann gilt eine negative Leistung nicht mehr einfach als "
+            "Eigenverbrauch: Was davon laut Batteriesensor wirklich "
+            "gespeichert wird, ist Ladung und kein Hausverbrauch - der Rest "
+            "bleibt Verbrauch. Ohne den Haken ist eine negative Leistung "
+            "immer Standby.",
+            "On when the device can also charge the battery from the grid. "
+            "Negative power is then no longer simply own consumption: "
+            "whatever the battery sensor shows as actually stored counts as "
+            "charging rather than household use - the rest stays "
+            "consumption. Without the option, negative power is always "
+            "standby.",
         ),
     },
     "grid": {

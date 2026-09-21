@@ -185,11 +185,19 @@ mit jedem Messwert. Ein Websocket-Aufruf müsste nach jeder Änderung wiederholt
 werden.
 
 Damit die Struktur nicht bei jedem Messwert in die Datenbank wandert, meldet
-`recorder.py` die betroffenen Attribute über `exclude_attributes` ab. Das
-betrifft nur die Aufzeichnung – im laufenden Zustand stehen sie weiterhin.
+der Statussensor sie über `_unrecorded_attributes` beim Recorder ab. Das
+betrifft nur die Aufzeichnung – im laufenden Zustand stehen die Attribute
+weiterhin vollständig, und genau daraus zeichnet die Karte.
 
-Der Websocket-Befehl `pv_system/topology` gibt es trotzdem. Er ist der Weg für
-alles, was die Struktur unabhängig von einem Zustand braucht.
+Die Schlüssel stehen dabei einzeln in `sensor.STRUKTUR` und nicht als
+`MATCH_ALL`: So wirkt die Abmeldung in jeder Fassung von Home Assistant
+gleich, und die kleinen, konstanten Angaben – `friendly_name`, `options`,
+`pv_key` – bleiben erhalten. Sie kosten zusammen rund zweihundert Byte, und
+weil sie sich nie ändern, legt der Recorder sie genau einmal ab.
+
+Der Websocket-Befehl `pv_system/topology` gibt es trotzdem. Er liefert
+dieselbe Struktur auf Anfrage und ist der Weg für alles, was sie unabhängig
+von einem Zustand braucht – die mitgelieferte Karte selbst benutzt ihn nicht.
 
 ### Aufbau und Werte sind getrennt
 

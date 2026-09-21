@@ -84,7 +84,6 @@ jobs:
               "pv_system.sensor",
               "pv_system.stunde",
               "pv_system.websocket",
-              "pv_system.recorder",
           ):
               importlib.import_module(name)
               print(f"  ok  {name}")
@@ -112,6 +111,20 @@ jobs:
           ):
               cf._mit_vorschlag(getattr(cf, name)(), {})
               print(f"  ok  {name}")
+
+          # Und die Abmeldung beim Recorder, am echten Home Assistant.
+          #
+          # Sie ist der Grund für diesen Block: In der Integration lag lange
+          # eine recorder.py mit einem Haken, den Home Assistant nicht mehr
+          # kennt. Importierbar war sie, also fiel sie nirgends auf. Geprüft
+          # wird deshalb die Stelle, die Home Assistant wirklich ausliest -
+          # die verschmolzene Menge, die mit jedem Zustand mitwandert.
+          from pv_system.sensor import STRUKTUR, StatusSensor
+
+          verschmolzen = StatusSensor._Entity__combined_unrecorded_attributes
+          fehlend = set(STRUKTUR) - set(verschmolzen)
+          assert not fehlend, f"nicht beim Recorder abgemeldet: {sorted(fehlend)}"
+          print(f"Recorder: {len(STRUKTUR)} Attribute abgemeldet")
           PY
 
   karte:

@@ -97,6 +97,10 @@ const WRBALKEN = M.spalte - 54;
 const PFEIL = "M -3.4 -4.2 L 2.8 0 L -3.4 4.2";
 const PFEIL_MIN = 17;     // kürzere Strecken bekommen keinen Pfeil
 
+// Die fünf Farben der Flusslinien, in derselben Reihenfolge wie die Legende
+// unter der Karte. Eine Linie trägt immer genau eine davon.
+const FLUSSFARBEN = ["f-solar", "f-akku", "f-netz", "f-bezug", "f-haus"];
+
 /* --------------------------------------------------------------- Helfer */
 
 const LEER = new Set(["unknown", "unavailable", "none", "None", "", null, undefined]);
@@ -2053,9 +2057,17 @@ class PvSystemCard extends HTMLElement {
       }
 
       this._fluss(`${id}:dc2`, m.power, bezug);
-      // Unterhalb der Abzweigung zählt nur, was der Wechselrichter zieht.
-      this._fluss(`${id}:dc2b`, anlage.inverter.power, bezug);
-      this._fluss(`${id}:dc3`, anlage.inverter.power, bezug);
+      // Unterhalb der Abzweigung zählt nur, was der Wechselrichter zieht -
+      // und in welche Richtung. Der Rechenkern gibt das als dc_power mit:
+      // positiv nach unten in den Wechselrichter, negativ nach oben in die
+      // Batterie. Letzteres ist der Hybrid, der aus dem Netz lädt; dann
+      // fließt dort kein Sonnenstrom, und die Linie wird rot.
+      const dc = zahl(anlage.inverter.dc_power);
+      const ausDemNetz = (dc || 0) < 0;
+      for (const strang of [`${id}:dc2b`, `${id}:dc3`]) {
+        this._flussfarbe(strang, ausDemNetz ? "f-bezug" : "f-solar");
+        this._fluss(strang, dc, bezug, ausDemNetz);
+      }
 
       if (anlage.inverter.enabled) {
         const w = anlage.inverter;
@@ -2075,7 +2087,14 @@ class PvSystemCard extends HTMLElement {
             : `${prozent(w.load, l)} von ${watt(w.rated_power, l)}`
         );
         this._setzen(`${id}:inverter:phase`, String(w.phase || "l1").toUpperCase());
-        this._fluss(`${id}:ac`, w.power, bezug);
+        // Das Vorzeichen entscheidet über Richtung und Farbe. Minus heißt,
+        // der Wechselrichter nimmt von der Phase statt abzugeben - im
+        // Leerlauf ein paar Watt, beim Laden aus dem Netz mehr. Vorher lief
+        // die Linie in beiden Fällen abwärts zur Phase, und der Pfeil
+        // behauptete eine Einspeisung, die es nicht gab.
+        const zieht = (zahl(w.power) || 0) < 0;
+        this._flussfarbe(`${id}:ac`, zieht ? "f-bezug" : "f-solar");
+        this._fluss(`${id}:ac`, w.power, bezug, zieht);
       }
     }
 
@@ -2085,9 +2104,14 @@ class PvSystemCard extends HTMLElement {
       // Eine einzige Wechselstromleitung: Über ihr steht, was alle
       // Wechselrichter zusammen abgeben.
       const alle = zahl(t.inverter_power);
+      // Wie bei den einzelnen Phasen sagt das Vorzeichen die Richtung. Ein
+      // Aufwärtspfeil über einer Summe, die ins Minus gerutscht ist, wäre
+      // schlicht falsch.
       this._setzen(
         "phase:0",
-        alle === null || Math.abs(alle) < 10 ? "" : `↑ ${watt(alle, l)}`
+        alle === null || Math.abs(alle) < 10
+          ? ""
+          : `${alle > 0 ? "↑" : "↓"} ${watt(Math.abs(alle), l)}`
       );
       this._setzen("meter:0", wattVz(t.grid_power, l));
     } else {
@@ -2288,6 +2312,21 @@ class PvSystemCard extends HTMLElement {
     // und abwärts bei Einspeisung.
     this._faerben("netz", (netzleistung || 0) > 0);
     this._fluss("netz", netzleistung, 5000, (netzleistung || 0) > 0);
+  }
+
+  /**
+   * Eine Flusslinie auf genau eine der fünf Farben setzen.
+   *
+   * _faerben schaltet nur zwischen den drei Farben der Wechselstromseite um.
+   * Die Leitungen an einer Anlage sind aber gelb (Sonne) oder grün (Speicher)
+   * - und werden rot, wenn dort ausnahmsweise Netzstrom fließt. Dafür braucht
+   * es eine Umschaltung über alle fünf.
+   */
+  _flussfarbe(name, klasse) {
+    for (const knoten of [this._flows.get(name), this._pfeile.get(name)]) {
+      if (!knoten) continue;
+      for (const farbe of FLUSSFARBEN) knoten.classList.toggle(farbe, farbe === klasse);
+    }
   }
 
   /** Eine Flusslinie zwischen Bezugsfarbe und einer zweiten Farbe umschalten. */
@@ -2653,6 +2692,13 @@ class PvSystemCard extends HTMLElement {
     const k = this._daten.costs || {};
     const w = k.currency;
     const zeit = k.periods || {};
+    // Ohne Überschussverbraucher sind Haus- und Grundverbrauch dieselbe
+    // Zahl - dann steht sie einmal da und nicht zweimal.
+    const umleiterAn = !!(
+      this._daten.house &&
+      this._daten.house.diverter &&
+      this._daten.house.diverter.enabled
+    );
     const zeilen = [
       ["Arbeitspreis", k.price === null ? "–" : `${einheit(k.price, "", 3, l)}${w}/kWh`],
       [
@@ -2687,10 +2733,28 @@ class PvSystemCard extends HTMLElement {
           `Einspeisung ${wort}`,
           `${einheit(z.export_kwh, "kWh", 2, l)} · ${geld(z.revenue, w, l)}`,
         ],
-        [`Ersparnis ${wort}`, geld(z.savings, w, l)],
+        // Die Ersparnis mit ihrer Bezugsgröße: So viele Kilowattstunden
+        // wurden selbst genutzt, so viel waren sie wert. Ohne die Menge ist
+        // der Betrag eine Zahl, die niemand nachrechnen kann.
+        [
+          `Ersparnis ${wort}`,
+          `${einheit(z.own_kwh, "kWh", 2, l)} · ${geld(z.savings, w, l)}`,
+        ],
         [`Ertrag ${wort}`, geld(z.yield, w, l)],
         [`Bilanz ${wort}`, geld(z.balance, w, l)]
       );
+      // Und worauf sich das alles bezieht: was das Haus in diesem Zeitraum
+      // überhaupt gezogen hat. Der Grundverbrauch nur dort, wo es einen
+      // Überschussverbraucher gibt - sonst sind beide dieselbe Zahl.
+      if (z.house_kwh !== null && z.house_kwh !== undefined) {
+        zeilen.push([`Verbrauch ${wort}`, einheit(z.house_kwh, "kWh", 2, l)]);
+        if (umleiterAn) {
+          zeilen.push([
+            `davon Grundverbrauch ${wort}`,
+            einheit(z.base_kwh, "kWh", 2, l),
+          ]);
+        }
+      }
     }
 
     const gesamt = zeit.total || {};

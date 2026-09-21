@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from time import monotonic
-from typing import Any
+from typing import Any, Final
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -38,7 +38,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
@@ -52,9 +52,11 @@ from .const import (
     CONF_SENSOR_INTERVAL,
     DOMAIN,
     KEY_BALANCE,
+    KEY_BASE_ENERGY_TOTAL,
     KEY_COST_RATE,
     KEY_FEED_IN_REVENUE,
     KEY_GRID_COST,
+    KEY_HOUSE_ENERGY_TOTAL,
     KEY_PAYBACK_PROGRESS,
     KEY_PAYBACK_SURPLUS,
     KEY_PAYBACK_YEARS,
@@ -95,6 +97,20 @@ CONF_NAME = "name"
 # gibt es zusätzlich den Dienst "Doppelte Sensoren abschalten" - siehe
 # __init__.py.
 SPIEGEL = "wiederholt nur einen eingestellten Sensor"
+
+# Die großen Attribute des Statussensors: die ganze gerechnete Struktur. Sie
+# stehen hier an einer Stelle, weil sie an zwei Stellen gebraucht werden -
+# einmal, um sie zu liefern, und einmal, um sie beim Recorder abzumelden. Wer
+# nur eines von beiden pflegt, schreibt am Ende wieder Kilobytes in die
+# Datenbank, ohne es zu merken.
+STRUKTUR: Final[tuple[str, ...]] = (
+    "plants",
+    "grid",
+    "totals",
+    "house",
+    "costs",
+    "display",
+)
 
 
 def _gesetzt(*entitaeten: Any) -> bool:
@@ -373,6 +389,41 @@ STANDORT: tuple[PvSensorDescription, ...] = (
         # Nur anlegen, wenn eine Energie-Entität hinterlegt ist. Ohne sie gäbe
         # es einen Zähler, der dauerhaft unbekannt bleibt.
         wenn=lambda c: bool(c["house"]["entities"]["energy"]),
+    ),
+    # Die beiden gerechneten Zähler.
+    #
+    # Sie schließen die Lücke zwischen Leistung und Geld: Die Karte zeigt
+    # Watt, die Kostensensoren zeigen Euro - was dazwischen liegt, die
+    # Kilowattstunden, stand bisher nirgends. Und ohne sie ist "Ersparnis
+    # heute: 2,80 €" eine Zahl ohne Bezugsgröße.
+    #
+    # TOTAL_INCREASING und fortlaufend, nicht je Tag: Damit kann die
+    # Langzeitstatistik von Home Assistant arbeiten, und der Tages-, Monats-
+    # und Jahreswert entsteht daraus von selbst - auch im Energie-Dashboard.
+    PvSensorDescription(
+        key=KEY_HOUSE_ENERGY_TOTAL,
+        translation_key=KEY_HOUSE_ENERGY_TOTAL,
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=KWH,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        # Mit eingetragenem Hauszähler ist dieser Sensor dessen Wiederholung:
+        # Dann steht dort derselbe Stand. Ohne ihn ist er die einzige Stelle,
+        # an der der Hausverbrauch als Menge überhaupt auftaucht.
+        spiegel=lambda c: _gesetzt(c["house"]["entities"]["energy"]),
+        wert=lambda d: d["house"]["house_energy_total"],
+        extra=lambda d: {"source": d["house"]["house_source"]},
+    ),
+    PvSensorDescription(
+        key=KEY_BASE_ENERGY_TOTAL,
+        translation_key=KEY_BASE_ENERGY_TOTAL,
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=KWH,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        # Nie eine Wiederholung: Einen Zähler, der den Hausverbrauch ohne den
+        # Überschussverbraucher führt, gibt es in keinem Haushalt.
+        wert=lambda d: d["house"]["base_energy_total"],
     ),
     # Die beiden Quoten als Stundenwert, nicht als Momentaufnahme. Wie viel
     # Prozent in der Sekunde 13:04:07 aus dem Netz kamen, beantwortet keine
@@ -748,7 +799,7 @@ def spiegel_kennungen(coordinator: PvSystemCoordinator) -> set[str]:
     der Dienst "Doppelte Sensoren abschalten" hier seine Liste.
     """
     daten = coordinator.data or {}
-    kennung = coordinator.entry.entry_id
+    kennung = coordinator.config_entry.entry_id
     gefunden: set[str] = set()
 
     for beschreibung in (*STANDORT, *KOSTEN):
@@ -803,7 +854,7 @@ def aufraeumen(hass: HomeAssistant, entry: PvSystemConfigEntry) -> list[str]:
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: PvSystemConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Sensoren zum eingerichteten Standort anlegen."""
     coordinator = entry.runtime_data
@@ -852,8 +903,22 @@ class PvBasis(CoordinatorEntity[PvSystemCoordinator], SensorEntity):
 
     def __init__(self, coordinator: PvSystemCoordinator) -> None:
         super().__init__(coordinator)
-        self._entry_id = coordinator.entry.entry_id
-        self._geschrieben: float = 0.0
+        self._entry_id = coordinator.config_entry.entry_id
+        # None heißt "noch nie geschrieben", nicht 0.0.
+        #
+        # Der Unterschied ist keine Kosmetik: monotonic() zählt ab einem
+        # beliebigen Punkt, unter Linux ab dem Systemstart. Mit einer Null als
+        # Anfangswert wäre die Differenz kurz nach dem Booten kleiner als der
+        # Takt - der allererste Messwert fiele weg, und bei einem Takt von
+        # dreißig Sekunden stünde eine halbe Minute lang nichts da.
+        self._geschrieben: float | None = None
+
+    def _faellig(self, takt: float) -> bool:
+        """Ist das Zeitfenster seit dem letzten Schreiben um?
+
+        Vor dem ersten Schreiben immer - siehe __init__.
+        """
+        return self._geschrieben is None or monotonic() - self._geschrieben >= takt
 
     def _handle_coordinator_update(self) -> None:
         """Den Takt einhalten, statt jede Messung weiterzureichen.
@@ -871,17 +936,16 @@ class PvBasis(CoordinatorEntity[PvSystemCoordinator], SensorEntity):
         """
         takt = self.coordinator.config[CONF_DISPLAY][CONF_SENSOR_INTERVAL]
         if takt and self._taktgebunden:
-            jetzt = monotonic()
-            if jetzt - self._geschrieben < takt:
+            if not self._faellig(takt):
                 return
-            self._geschrieben = jetzt
+            self._geschrieben = monotonic()
         super()._handle_coordinator_update()
 
     @property
     def _standort_geraet(self) -> DeviceInfo:
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
-            name=self.coordinator.entry.title,
+            name=self.coordinator.config_entry.title,
             manufacturer="PV-System",
             model="Photovoltaik-Standort",
             entry_type=None,
@@ -997,14 +1061,39 @@ class StatusSensor(PvBasis):
     """Richtung des Energieflusses - und der Anker für die Karte.
 
     Der Zustand ist die grobe Lage in einem Wort; die vollständige Struktur
-    hängt als Attribut daran. Die Karte holt sich die Struktur normalerweise
-    über den Websocket. Findet sie ihn nicht - etwa in einer Vorschau ohne
-    Verbindung -, kommt sie über dieses Attribut trotzdem zu ihrem Bild.
+    hängt als Attribut daran. Genau daraus zeichnet die Karte ihr Bild: Sie
+    sucht in ``hass.states`` den Zustand mit ``pv_key == "status"`` und liest
+    alles Weitere aus dessen Attributen. Der Websocket-Befehl
+    ``pv_system/topology`` liefert dieselbe Struktur auf Anfrage, wird von der
+    mitgelieferten Karte aber nicht gebraucht.
     """
 
     # Nicht der gewöhnliche Takt: Dieser Sensor hat seinen eigenen, weil an
     # ihm die Karte hängt.
     _taktgebunden = False
+
+    # Die Struktur gehört nicht in die Datenbank.
+    #
+    # Home Assistant fragt jede Entität, welche ihrer Attribute der Recorder
+    # überspringen soll: ``_unrecorded_attributes`` wandert als
+    # ``state_info["unrecorded_attributes"]`` mit dem Zustand mit, und
+    # ``recorder.db_schema`` filtert damit, bevor das JSON geschrieben wird.
+    # Auf den lebenden Zustand hat das keinen Einfluss - die Karte liest
+    # unverändert alles.
+    #
+    # Gemessen an drei Anlagen: 10.955 Byte je Zustandswechsel, davon 10.752
+    # in diesen sechs Schlüsseln. Bei rund hunderttausend Wechseln am Tag ist
+    # das der Unterschied zwischen gut einem Gigabyte und nichts. Was übrig
+    # bleibt - Name, Kennung, Geräteklasse -, ist zweihundert Byte groß und
+    # ändert sich nie: Der Recorder legt gleiche Attribute nur einmal ab, es
+    # wird also eine einzige Zeile daraus.
+    #
+    # Die Schlüssel stehen einzeln da und nicht als MATCH_ALL. So wirkt die
+    # Abmeldung in jeder Fassung von Home Assistant gleich, und die Angaben,
+    # die der Verlauf zum Beschriften braucht - ``options``, ``friendly_name``
+    # -, bleiben erhalten. Home Assistant Core hält es in ``group``,
+    # ``camera``, ``climate`` und ``automation`` genauso.
+    _unrecorded_attributes = frozenset(STRUKTUR)
 
     _attr_translation_key = "status"
     _attr_device_class = SensorDeviceClass.ENUM
@@ -1027,7 +1116,9 @@ class StatusSensor(PvBasis):
         Er ist aber auch der Preis dafür. Bei rund einer Rechnung je Sekunde
         entstehen etwa hunderttausend Zustände am Tag - mehr als alle übrigen
         Sensoren dieser Integration zusammen. Die Attribute selbst landen
-        nicht in der Datenbank (siehe recorder.py), die Zeilen schon.
+        nicht in der Datenbank - siehe _unrecorded_attributes oben -, die
+        Zeilen in der Zustandstabelle schon. Nur sie bleiben als Kosten
+        übrig, und nur sie bremst dieser Takt.
 
         Wer das nicht will, stellt unter *Darstellung* einen Takt ein. Das
         Wort selbst - "lädt", "speist ein" - wird davon nie aufgehalten: Es
@@ -1035,7 +1126,7 @@ class StatusSensor(PvBasis):
         """
         takt = self.coordinator.config[CONF_DISPLAY][CONF_CARD_INTERVAL]
         wort = self.native_value
-        if takt and wort == self._wort and monotonic() - self._geschrieben < takt:
+        if takt and wort == self._wort and not self._faellig(takt):
             return
         self._wort = wort
         self._geschrieben = monotonic()
@@ -1063,17 +1154,23 @@ class StatusSensor(PvBasis):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        """Die drei Kennzeichen - und die Struktur aus STRUKTUR.
+
+        Die Reihenfolge ist Absicht: Erst das Kleine und Beständige, an dem
+        die Karte den Sensor erkennt, dann das Große, das der Recorder
+        überspringt.
+        """
         daten = self.coordinator.data or {}
+        quellen = {**daten, "display": self.coordinator.config.get("display", {})}
         return {
             ATTR_KEY: "status",
             ATTR_SYSTEM_ID: self._entry_id,
-            "title": self.coordinator.entry.title,
-            "plants": daten.get("plants", []),
-            "grid": daten.get("grid", {}),
-            "totals": daten.get("totals", {}),
-            "house": daten.get("house", {}),
-            "costs": daten.get("costs", {}),
-            "display": self.coordinator.config.get("display", {}),
+            "title": self.coordinator.config_entry.title,
+            # "plants" ist eine Liste, alles Übrige ein Objekt. Vor der ersten
+            # Rechnung steht hier die leere Fassung davon - die Karte darf
+            # darüber laufen, ohne auf undefined zu stoßen.
+            **{name: quellen.get(name) or ([] if name == "plants" else {})
+               for name in STRUKTUR},
         }
 
 

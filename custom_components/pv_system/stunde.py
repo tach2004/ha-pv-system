@@ -19,6 +19,19 @@ Zwei Regeln halten das ehrlich:
 * Eine Stunde, für die weniger als :data:`MINDESTZEIT` an Messungen vorliegt,
   wird gar nicht erst veröffentlicht. Eine halb gemessene Stunde sieht aus wie
   eine ganze und ist doch nur die Hälfte.
+
+Dasselbe Integral hat eine zweite Aufgabe: Es führt nebenher einen
+**fortlaufenden Zählerstand** je Größe. Der wird nie zurückgesetzt und
+verhält sich damit wie ein Zähler an der Wand - genau das, was die
+Kostenrechnung braucht. Sie bekommt daraus Tag, Monat, Jahr und
+Gesamtzeitraum mit derselben Mechanik, mit der sie auch den Netzzähler
+auswertet, und die Sensoren bekommen einen ``TOTAL_INCREASING``-Zähler, mit
+dem die Langzeitstatistik etwas anfangen kann.
+
+Ein Hausverbrauch in Kilowattstunden steht sonst nirgends: Er wird bei den
+meisten Anlagen gerechnet und nicht gemessen, und den Grundverbrauch - den
+Hausverbrauch ohne den Anteil, der aus Überschuss lief - misst ohnehin kein
+Gerät.
 """
 
 from __future__ import annotations
@@ -69,6 +82,9 @@ class Stundenwerte:
         self._sekunden: float = 0.0
         self._letzte: datetime | None = None
         self._fertig: dict[str, Any] = _leer()
+        # Der fortlaufende Zählerstand je Größe, in kWh. Er wird nie
+        # zurückgesetzt - siehe Modulkopf.
+        self._stand: dict[str, float] = dict.fromkeys(GROESSEN, 0.0)
 
     # ------------------------------------------------------------- Speicher
 
@@ -80,6 +96,15 @@ class Stundenwerte:
         fertig = gespeichert.get("fertig")
         if isinstance(fertig, dict):
             self._fertig = {**_leer(), **fertig}
+        stand = gespeichert.get("stand")
+        if isinstance(stand, dict):
+            # Der Zählerstand kommt immer zurück, auch wenn die laufende
+            # Stunde verworfen wird: Ein Zähler, der nach einem Neustart bei
+            # null anfängt, sähe für die Kostenrechnung aus wie ein
+            # Gerätetausch - und nichts anderes ist es auch, wenn er es täte.
+            self._stand = {
+                name: max(0.0, float(stand.get(name) or 0.0)) for name in GROESSEN
+            }
         lauf = gespeichert.get("lauf")
         if isinstance(lauf, dict) and isinstance(gespeichert.get("beginn"), str):
             self._beginn = gespeichert["beginn"]
@@ -101,15 +126,30 @@ class Stundenwerte:
             "lauf": self._lauf,
             "sekunden": self._sekunden,
             "fertig": self._fertig,
+            "stand": self._stand,
         }
+
+    def staende(self) -> dict[str, float]:
+        """Die fortlaufenden Zählerstände in kWh.
+
+        Wie ein Zähler an der Wand: Er läuft vorwärts und kennt keinen
+        Tageswechsel. Was daraus ein Tages-, Monats- oder Jahreswert wird,
+        entscheidet die Kostenrechnung - mit derselben Mechanik wie beim
+        Netzzähler.
+        """
+        return {name: round(wert, 3) for name, wert in self._stand.items()}
 
     def _merken(self) -> None:
         """Verzögert wegschreiben - wie bei den Kostenmarken.
 
-        Nur beim Stundenwechsel: Das laufende Integral jede Sekunde auf die
-        Platte zu schreiben wäre genau der Fehler, den diese Datei vermeiden
-        soll. Geht Home Assistant mitten in der Stunde unter, fehlt die Zeit
-        seit dem letzten Schreiben - und über MINDESTZEIT fällt das auf.
+        Aufgerufen wird das bei jeder Messung, geschrieben wird es nicht:
+        ``async_delay_save`` legt den Auftrag beiseite und führt ihn
+        frühestens nach :data:`SPEICHER_VERZUG` aus. Aus einer Messung je
+        Sekunde wird damit ein Schreibvorgang je Minute.
+
+        Diese eine Minute ist der Preis. Geht Home Assistant hart unter,
+        fehlt sie dem Zählerstand - und der laufenden Stunde fehlt ohnehin
+        die Zeit seit dem letzten Schreiben, was über MINDESTZEIT auffällt.
         """
         self._store.async_delay_save(self.zustand, SPEICHER_VERZUG)
 
@@ -149,8 +189,17 @@ class Stundenwerte:
                         # zählt als null: Ein Haus verbraucht keine negative
                         # Leistung, und ein Vorzeichenfehler soll die Stunde
                         # nicht aufblähen.
-                        self._lauf[name] += max(0.0, float(wert)) * stunden / 1000.0
+                        menge = max(0.0, float(wert)) * stunden / 1000.0
+                        self._lauf[name] += menge
+                        self._stand[name] += menge
                 self._sekunden += spanne.total_seconds()
+                # Jetzt liegt eine Menge auf dem Zählerstand, die beim
+                # nächsten Start fehlen würde. async_delay_save fasst das
+                # zusammen: Geschrieben wird höchstens einmal je
+                # SPEICHER_VERZUG, verloren geht also im schlimmsten Fall
+                # eine Minute. Beim Stundenwechsel oben zählt derselbe
+                # Aufruf doppelt und schadet nicht.
+                self._merken()
         self._letzte = jetzt
 
         return dict(self._fertig)
