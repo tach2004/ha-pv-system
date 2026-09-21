@@ -1284,7 +1284,20 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 conf[CONF_DIVERTER_EFFICIENCY],
             ),
             "count": len(conf[CONF_DIVERTER_POWER]) + len(conf[CONF_DIVERTER_ENERGY]),
-            "enabled": bool(conf[CONF_DIVERTER_ENERGY] or conf[CONF_DIVERTER_POWER]),
+            # Angeschaltet, sobald *irgendeiner* der vier Sensoren steht. Auch
+            # die beiden "Davon aus PV/Batterie" allein genügen: Sie sagen
+            # genau das, worauf es ankommt - was aus der eigenen Anlage in den
+            # Verbraucher ging. Der Gesamtzähler davor ist nur Anzeige.
+            #
+            # Vorher zählten nur die ersten beiden. Wer ausschließlich die
+            # Anteilssensoren eintrug, sah gar nichts, ohne dass irgendwo
+            # gestanden hätte, warum.
+            "enabled": bool(
+                conf[CONF_DIVERTER_ENERGY]
+                or conf[CONF_DIVERTER_POWER]
+                or conf[CONF_DIVERTER_SOLAR_ENERGY]
+                or conf[CONF_DIVERTER_SOLAR_POWER]
+            ),
             "split": bool(
                 conf[CONF_DIVERTER_SOLAR_POWER] or conf[CONF_DIVERTER_SOLAR_ENERGY]
             ),

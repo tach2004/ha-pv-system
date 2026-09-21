@@ -24,7 +24,7 @@
  */
 
 // Die Version kommt aus der URL, mit der die Integration die Karte einbindet
-// (…/pv-system-card.js?v=1.2.3). So steht sie nur in der manifest.json und
+// (…/pv-system-card.js?v=1.4.7). So steht sie nur in der manifest.json und
 // muss hier nicht gepflegt werden.
 const PV_VERSION =
   new URL(import.meta.url).searchParams.get("v") || "unbekannt";

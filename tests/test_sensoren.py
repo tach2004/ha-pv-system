@@ -1256,3 +1256,34 @@ def test_der_ueberschusszaehler_steht_still_wenn_der_stab_am_netz_haengt():
     # 1,8 kW: Die erste Messung stellt nur die Uhr, die Minute zwischen den
     # beiden Stunden wird überbrückt.
     assert uhr.staende()["house"] == 3.63
+
+
+def test_die_anteilssensoren_allein_schalten_den_verbraucher_an():
+    """Wer nur "Davon aus PV/Batterie" einträgt, soll etwas sehen.
+
+    Diese beiden Sensoren sagen genau das, worauf es ankommt: was aus der
+    eigenen Anlage in den Verbraucher ging. Der Gesamtzähler davor ist nur
+    Anzeige. Vorher blieb der Verbraucher in diesem Fall stumm abgeschaltet.
+    """
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_solar_power_entity": ["sensor.stab_pv"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.stab_pv", 800, "W")
+    hass.states.setzen("sensor.netz", 200, "W")
+    haus = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]
+    assert haus["diverter"]["enabled"] is True
+    assert haus["diverter"]["solar_power"] == 800.0
+    # 2000 W Haus, 800 W davon liefen aus Überschuss in den Verbraucher.
+    assert haus["base_power"] == 1200.0
+    # Ohne Gesamtzähler bleibt offen, wie viel er *insgesamt* zog - und damit
+    # auch sein Netzanteil. Eine null wäre hier eine Behauptung.
+    assert haus["diverter"]["power"] is None
+    assert haus["diverter"]["grid_power"] is None

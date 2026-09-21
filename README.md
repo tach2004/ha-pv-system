@@ -611,8 +611,28 @@ darüber zu schön.
 | 1500 W | 400 W | Hausverbrauch − 400 W |
 | 1500 W | 0 W | Hausverbrauch (voller Abzug entfällt) |
 
-**Ohne den Sensor wird geschätzt, nicht geraten.** Bis Fassung 1.2.1 galt
-dann „alles kam aus Überschuss". Das stimmt mittags und ist abends grob
+**Überschuss heißt: aus der eigenen Anlage, nicht aus dem Netz.** Ob Sonne
+oder Batterie, ob Mittag oder Mitternacht, spielt keine Rolle – nur die
+Herkunft. Zwei Sensoren beschreiben den Verbraucher vollständig:
+
+| Sensor | Was er misst |
+|---|---|
+| **Leistung Überschussverbraucher** | alles, was er zieht – egal woher |
+| **Davon aus PV/Batterie: Leistung** | der Teil aus der eigenen Anlage |
+
+Daraus folgt alles Weitere:
+
+    Netzbezug des Verbrauchers = Leistung − davon aus PV/Batterie
+    Hausverbrauch              = Verbraucher + der Rest des Hauses
+    Grundverbrauch             = Hausverbrauch − davon aus PV/Batterie
+
+Die letzte Zeile ist der Punkt, an dem man zweimal hinsehen muss: Abgezogen
+wird der **PV-Anteil**, nicht die ganze Leistung. Was der Verbraucher aus dem
+Netz zog, bleibt im Grundverbrauch stehen – in diesem Moment ist er kein
+Überschussverbraucher, sondern eine Last wie der Backofen.
+
+**Ohne den Anteilssensor wird geschätzt, nicht geraten.** Bis Fassung 1.2.1
+galt dann „alles kam aus Überschuss". Das stimmt mittags und ist abends grob
 falsch – der Heizstab, der um zehn am Netz nachheizt, spart nichts.
 
 Geschätzt wird aus dem **Netzbezug**: Was das Haus gerade aus dem Netz zieht,
@@ -629,11 +649,27 @@ Verbrauchers, den der Netzbezug nicht erklärt.
 Die dritte Zeile ist der Fall, der vorher falsch war. Die vierte ist richtig
 so: Was die Batterie abgibt, ist gespeicherte Sonne.
 
-Die Schätzung liegt eher zu niedrig als zu hoch – sie rechnet den Netzbezug
-zuerst dem Verbraucher an, auch wenn er in Wirklichkeit vom Kühlschrank kam.
-Das ist die richtige Richtung: lieber eine Ersparnis zu wenig ausweisen als
-eine zu viel. Wer es genau will, trägt die beiden Sensoren *Davon aus
-PV/Batterie* ein.
+Die Schätzung ist dabei keine Faustregel, sondern die exakte Rechnung – unter
+einer Annahme, die auf solche Verbraucher zutrifft: **Er ist die letzte Last,
+die zugeschaltet wird.** Er läuft ja nur, wenn eingespeist wird. Sein Anteil
+aus Überschuss ist damit genau das, was ohne ihn ins Netz gegangen wäre:
+
+    ohne ihn eingespeist = max(0, Erzeugung − restlicher Hausverbrauch)
+    sein Überschussanteil = min(seine Leistung, das)
+
+Und weil `Netzbezug = restlicher Verbrauch + seine Leistung − Erzeugung` ist,
+fällt beim Ausrechnen genau die Formel oben heraus. Ein Beispiel, das gern für
+einen Denkfehler gehalten wird: 300 W Grundlast, 1500 W Heizstab, 1500 W vom
+Dach. Dann zeigt der Zähler **300 W Bezug**, und der Heizstab lief zu
+1200 W aus Überschuss – nicht zu 1500. Die 300 W Grundlast hätte die Anlage
+sonst mitgedeckt.
+
+Wer es lieber gemessen als gerechnet hat, trägt die beiden Sensoren *Davon aus
+PV/Batterie* ein. Sie haben immer Vorrang.
+
+**Einer allein genügt auch.** Wer nur die Anteilssensoren einträgt, bekommt
+Grundverbrauch und Ersparnis – nur der Netzanteil des Verbrauchers bleibt
+dann unbekannt, weil niemand seinen Gesamtverbrauch misst.
 
 Der **Netzbezug bleibt dabei ungeteilt**: Was der Verbraucher aus dem Netz
 gezogen hat, steckt jetzt im Grundverbrauch – und sein Bezug gehört dorthin,
