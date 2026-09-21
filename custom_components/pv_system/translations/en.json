@@ -422,11 +422,13 @@
       },
       "house": {
         "data": {
+          "base_energy_entity": "Base consumption meter",
           "calculate": "Calculate house consumption",
           "energy_entity": "Consumption meter",
           "power_entity": "Measured house consumption"
         },
         "data_description": {
+          "base_energy_entity": "The same without the surplus load - what the household alone drew, in kWh.\n\nIf such a sensor already exists, for instance as a Riemann sum over the power, enter it here: the card and the cost periods then show exactly its figures instead of a second, slightly different calculation.\n\nEmpty: the integration adds up the power itself. No device measures this - base consumption only exists as a calculation.",
           "calculate": "Consumption = inverter power + grid power. A measured value takes precedence.",
           "energy_entity": "A kWh counter over **everything consumed in the house** - grid import *and* self-used solar together. Not the import meter: that one lives under “Grid and meter” and only counts what came from the grid.\n\nWhat for: it is the second route to self-consumption. Normally the integration computes “generated minus exported”; without a yield meter it falls back to “consumed minus imported” - and that is what this is for.\n\nEmpty: perfectly fine as long as your plants have a yield meter.",
           "power_entity": "Only if you **measure** house consumption - with a second meter behind the house connection, say. In watts, not a meter reading.\n\nNormally leave it empty: the integration then derives it from grid power plus inverter output, which for a grid-parallel system is just as correct."

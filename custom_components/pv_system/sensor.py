@@ -98,6 +98,25 @@ CONF_NAME = "name"
 # __init__.py.
 SPIEGEL = "wiederholt nur einen eingestellten Sensor"
 
+# Die beiden Schwellen des Statussensors, in Watt. Hinein geht es ab der
+# ersten, hinaus erst unter der zweiten - siehe StatusSensor.native_value.
+SCHWELLE_EIN: Final = 50.0
+SCHWELLE_AUS: Final = 20.0
+
+# Und wie lange ein neues Wort halten muss, bevor es geschrieben wird.
+#
+# Die Schwellen allein genügen nicht. Sie helfen, wenn die Leistung um *eine*
+# Grenze herum zittert - nicht aber am Abend, wenn der Netzzähler durch die
+# Null wandert und dabei um mehrere hundert Watt schwingt. Dann sind die
+# Wechsel echt, und der Sensor meldet jede Sekunde abwechselnd "Bezug" und
+# "Einspeisung": eine Zeile in der Datenbank und ein Eintrag im Logbuch, je
+# Sekunde, die ganze Dämmerung lang.
+#
+# Für eine Lage in einem Wort ist das keine Nachricht, sondern Rauschen.
+# Fünfzehn Sekunden Ruhe kosten nichts - die Karte hängt am Attribut und
+# nicht am Wort - und machen aus hunderten Wechseln eine Handvoll.
+WORTWECHSEL_RUHE: Final = 15.0
+
 # Die großen Attribute des Statussensors: die ganze gerechnete Struktur. Sie
 # stehen hier an einer Stelle, weil sie an zwei Stellen gebraucht werden -
 # einmal, um sie zu liefern, und einmal, um sie beim Recorder abzumelden. Wer
@@ -421,8 +440,13 @@ STANDORT: tuple[PvSensorDescription, ...] = (
         native_unit_of_measurement=KWH,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
-        # Nie eine Wiederholung: Einen Zähler, der den Hausverbrauch ohne den
-        # Überschussverbraucher führt, gibt es in keinem Haushalt.
+        # Nur mit Überschussverbraucher. Ohne einen ist der Grundverbrauch
+        # derselbe wie der Hausverbrauch - ein zweiter Sensor mit denselben
+        # Zahlen wäre kein Gewinn, sondern eine Frage mehr.
+        wenn=lambda d: bool(d["house"]["diverter"]["enabled"]),
+        # Eine Wiederholung nur dann, wenn jemand einen eigenen Zähler dafür
+        # eingetragen hat. Der Normalfall ist, dass es ihn nicht gibt.
+        spiegel=lambda c: _gesetzt(c["house"]["entities"]["base_energy"]),
         wert=lambda d: d["house"]["base_energy_total"],
     ),
     # Die beiden Quoten als Stundenwert, nicht als Momentaufnahme. Wie viel
@@ -1104,7 +1128,10 @@ class StatusSensor(PvBasis):
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._entry_id}_status"
         self._attr_device_info = self._standort_geraet
+        # Das zuletzt geschriebene Wort und das, was sich gerade bewirbt.
         self._wort: str | None = None
+        self._kandidat: str | None = None
+        self._seit: float = 0.0
 
     def _handle_coordinator_update(self) -> None:
         """Der Takt der Karte - und der größte Posten in der Zustandstabelle.
@@ -1132,8 +1159,14 @@ class StatusSensor(PvBasis):
         self._geschrieben = monotonic()
         super()._handle_coordinator_update()
 
-    @property
-    def native_value(self) -> str | None:
+    def _rohwort(self) -> str | None:
+        """Die Lage in einem Wort, mit Hysterese an den Schwellen.
+
+        Zwei Schwellen statt einer: Hinein geht es bei :data:`SCHWELLE_EIN`,
+        hinaus erst unter :data:`SCHWELLE_AUS`. Zittert die Leistung um eine
+        Grenze herum - 48, 52, 49, 51 Watt -, bleibt der Sensor stehen, statt
+        bei jedem Messwert umzuspringen.
+        """
         daten = self.coordinator.data
         if not daten:
             return None
@@ -1142,15 +1175,41 @@ class StatusSensor(PvBasis):
         netz = summen["grid_power"] or 0.0
         # Reihenfolge nach Aussagekraft: Was mit der Batterie passiert, ist die
         # interessantere Nachricht als ein paar Watt am Netzzähler.
-        if akku > 50:
-            return "charging"
-        if akku < -50:
-            return "discharging"
-        if netz < -50:
-            return "exporting"
-        if netz > 50:
-            return "importing"
+        for wort, wert, richtung in (
+            ("charging", akku, 1),
+            ("discharging", akku, -1),
+            ("exporting", netz, -1),
+            ("importing", netz, 1),
+        ):
+            schwelle = SCHWELLE_AUS if self._wort == wort else SCHWELLE_EIN
+            if wert * richtung > schwelle:
+                return wort
         return "idle"
+
+    @property
+    def native_value(self) -> str | None:
+        """Dasselbe Wort, aber erst wenn es eine Weile gehalten hat.
+
+        Die Schwellen fangen das Zittern um eine Grenze ab. Sie helfen nicht,
+        wenn der Netzzähler durch die Null wandert und dabei um hunderte Watt
+        schwingt - dann sind die Wechsel echt, und trotzdem will sie niemand
+        im Sekundentakt im Logbuch stehen haben.
+
+        Also muss ein neues Wort :data:`WORTWECHSEL_RUHE` lang halten, bevor
+        es geschrieben wird. Hält es nicht, bleibt das alte stehen, und der
+        Sensor hat nichts gemeldet - was auch stimmt: Zwischen zwei Zuständen
+        hin- und herzuspringen ist kein Zustandswechsel.
+        """
+        wort = self._rohwort()
+        if wort != self._kandidat:
+            self._kandidat = wort
+            self._seit = monotonic()
+        # Vor dem ersten geschriebenen Wort gibt es nichts zu halten.
+        if self._wort is None or wort == self._wort:
+            return wort
+        if monotonic() - self._seit < WORTWECHSEL_RUHE:
+            return self._wort
+        return wort
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

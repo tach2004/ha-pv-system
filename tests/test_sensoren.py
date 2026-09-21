@@ -819,8 +819,13 @@ def test_mit_takt_wird_der_status_gebremst():
     assert len(geschrieben) == 1
 
 
-def test_ein_neues_wort_darf_den_takt_durchbrechen():
-    """„lädt" statt „speist ein" gehört sofort geschrieben."""
+def test_ein_gehaltenes_neues_wort_darf_den_takt_durchbrechen():
+    """„lädt" statt „speist ein" gehört geschrieben - sobald es hält.
+
+    Nicht mehr sofort: Ein Wort muss WORTWECHSEL_RUHE lang stehen bleiben,
+    sonst ist es kein Wechsel, sondern Zappeln. Hier wird die Uhr gestellt,
+    damit der Test nicht fünfzehn Sekunden wartet.
+    """
     koordinator, status = _status(takt=60)
     status.hass = koordinator.hass
     geschrieben = []
@@ -828,9 +833,21 @@ def test_ein_neues_wort_darf_den_takt_durchbrechen():
     status._handle_coordinator_update()
     status._handle_coordinator_update()
     assert len(geschrieben) == 1
+
     # Die Batterie kehrt um - das ist eine Nachricht, kein Messwert.
     koordinator.data["totals"]["battery_power"] = -900.0
-    status._handle_coordinator_update()
+    echte_uhr = sensor.monotonic
+    uhr = [echte_uhr()]
+    sensor.monotonic = lambda: uhr[0]
+    try:
+        # Sofort: Das neue Wort bewirbt sich erst.
+        status._handle_coordinator_update()
+        assert len(geschrieben) == 1
+        # Und nachdem es gehalten hat.
+        uhr[0] += sensor.WORTWECHSEL_RUHE + 1
+        status._handle_coordinator_update()
+    finally:
+        sensor.monotonic = echte_uhr
     assert len(geschrieben) == 2
 
 
@@ -924,15 +941,38 @@ def test_der_zaehlerstand_ueberlebt_einen_neustart():
     assert wieder.staende()["house"] == vorher
 
 
+def _mit_ueberschuss(**abweichend):
+    """Ein Aufbau mit Heizstab - sonst gibt es keinen Grundverbrauch."""
+    aufbau = _aufbau(**abweichend)
+    aufbau.setdefault("house", {})
+    aufbau["house"] = {
+        **aufbau["house"],
+        "diverter_power_entity": ["sensor.heizstab"],
+        "diverter_energy_entity": ["sensor.heizstab_e"],
+    }
+    return aufbau
+
+
 def test_die_beiden_zaehler_stehen_am_haus():
     """Hausverbrauch und Grundverbrauch als Stand, nicht nur als Leistung."""
-    koordinator, sensoren = _sensoren()
+    koordinator, sensoren = _sensoren(_mit_ueberschuss())
     daten = koordinator._berechnen()
     assert daten["house"]["house_energy_total"] is not None
     assert daten["house"]["base_energy_total"] is not None
     # Und als Entität, damit die Menge nicht nur in der Karte steht.
     assert "house_energy_total" in sensoren
     assert "base_energy_total" in sensoren
+
+
+def test_ohne_ueberschuss_gibt_es_keinen_grundverbrauchszaehler():
+    """Er wäre eine zweite Entität mit denselben Zahlen.
+
+    Ohne Überschussverbraucher ist der Grundverbrauch der Hausverbrauch -
+    dann hat das Haus einfach einen Verbrauch, und damit hat es sich.
+    """
+    _, sensoren = _sensoren()
+    assert "house_energy_total" in sensoren
+    assert "base_energy_total" not in sensoren
 
 
 def test_ein_eingetragener_hauszaehler_gewinnt_gegen_das_integral():
@@ -946,17 +986,154 @@ def test_ein_eingetragener_hauszaehler_gewinnt_gegen_das_integral():
     assert koordinator._berechnen()["house"]["house_energy_total"] == 4210.5
 
 
-def test_mit_hauszaehler_ist_der_zaehlersensor_eine_wiederholung():
+def test_mit_eingetragenem_zaehler_ist_der_sensor_eine_wiederholung():
     """Dann steht derselbe Stand schon als eigene Entität im System."""
-    aufbau = _aufbau()
-    aufbau["house"] = {"calculate": True, "energy_entity": "sensor.hauszaehler"}
+    aufbau = _mit_ueberschuss()
+    aufbau["house"] = {
+        **aufbau["house"],
+        "energy_entity": "sensor.hauszaehler",
+        "base_energy_entity": "sensor.grundverbrauch",
+    }
     _, sensoren = _sensoren(aufbau)
     assert not _an(sensoren, "house_energy_total")
-    # Der Grundverbrauch nie: Den zählt kein Gerät im Haus.
-    assert _an(sensoren, "base_energy_total")
+    assert not _an(sensoren, "base_energy_total")
 
 
-def test_ohne_hauszaehler_ist_der_zaehlersensor_die_einzige_quelle():
-    _, sensoren = _sensoren()
+def test_ohne_eingetragene_zaehler_sind_die_sensoren_die_einzige_quelle():
+    _, sensoren = _sensoren(_mit_ueberschuss())
     assert _an(sensoren, "house_energy_total")
     assert _an(sensoren, "base_energy_total")
+
+
+def test_ein_eingetragener_grundverbrauchszaehler_gewinnt():
+    """Wer den Sensor schon hat, soll ihn eintragen können.
+
+    Genau der Fall aus der Praxis: Ein Riemann-Integral über die Leistung
+    läuft längst in Home Assistant. Dann sollen in der Karte dessen Zahlen
+    stehen und nicht eine zweite, leicht abweichende Rechnung.
+    """
+    aufbau = _mit_ueberschuss()
+    aufbau["house"] = {**aufbau["house"], "base_energy_entity": "sensor.grund"}
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.grund", 542.0, "kWh")
+    entry = ha_stubs.ConfigEntry("Zuhause", aufbau)
+    koordinator = PvSystemCoordinator(hass, entry)
+    assert koordinator._berechnen()["house"]["base_energy_total"] == 542.0
+
+
+# ------------------------------------------------------- Ruhe am Statussensor
+#
+# Dieser Sensor war der lauteste im ganzen System. Zwei Dinge halten ihn jetzt
+# ruhig, und sie greifen bei verschiedenen Ursachen:
+#
+# * Die Hysterese, wenn die Leistung um *eine* Schwelle herum zittert.
+# * Die Haltezeit, wenn der Netzzähler abends durch die Null wandert und die
+#   Wechsel echt, aber trotzdem Rauschen sind.
+
+
+class _Uhr:
+    """Stellt monotonic() im Sensormodul und dreht sie auf Zuruf weiter."""
+
+    def __init__(self):
+        self._echt = sensor.monotonic
+        self.jetzt = self._echt()
+        sensor.monotonic = lambda: self.jetzt
+
+    def weiter(self, sekunden=None):
+        self.jetzt += sensor.WORTWECHSEL_RUHE + 1 if sekunden is None else sekunden
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        sensor.monotonic = self._echt
+
+
+def _status_mit(koordinator, netz=0.0, akku=0.0):
+    koordinator.data["totals"]["grid_power"] = netz
+    koordinator.data["totals"]["battery_power"] = akku
+
+
+def _wortwechsel(geschrieben):
+    """Was das Logbuch sieht: aufeinanderfolgende Gleiche zusammengefasst.
+
+    Der Sensor schreibt bei jeder Rechnung - seine Attribute ändern sich ja.
+    Ein Eintrag im Logbuch entsteht aber nur, wenn sich das *Wort* ändert.
+    """
+    return [w for i, w in enumerate(geschrieben) if i == 0 or w != geschrieben[i - 1]]
+
+
+def test_zittern_um_die_schwelle_aendert_nichts():
+    """48, 52, 49, 51 Watt sind ein Zustand und nicht vier.
+
+    Die Hysterese allein reicht dafür: Einmal "importing", bleibt es dabei,
+    bis der Wert unter die kleine Schwelle fällt.
+    """
+    koordinator, s = _sensoren()
+    status = s["status"]
+    with _Uhr() as uhr:
+        _status_mit(koordinator, netz=800)
+        status._handle_coordinator_update()      # setzt das erste Wort
+        assert status._wort == "importing"
+        for netz in (52, 48, 51, 49, 30, 25):
+            _status_mit(koordinator, netz=netz)
+            uhr.weiter()
+            status._handle_coordinator_update()
+        assert status._wort == "importing"
+        # Erst unter der kleinen Schwelle wird es ruhig - und auch dann erst,
+        # nachdem "idle" die Haltezeit überstanden hat. Der erste Durchgang
+        # meldet das neue Wort nur an, der zweite schreibt es.
+        _status_mit(koordinator, netz=5)
+        status._handle_coordinator_update()
+        assert status._wort == "importing"
+        uhr.weiter()
+        status._handle_coordinator_update()
+    assert status._wort == "idle"
+
+
+def test_das_pendeln_durch_die_null_wird_ausgesessen():
+    """Der Fall aus der Praxis: abends, Netz zwischen +300 und −300 W.
+
+    Die Wechsel sind echt - die Schwellen helfen hier nicht. Die Haltezeit
+    schon: Kein Wort hält lange genug, also bleibt das erste stehen, und es
+    entsteht kein einziger Eintrag im Logbuch.
+    """
+    koordinator, s = _sensoren()
+    status = s["status"]
+    status.hass = koordinator.hass
+    geschrieben = []
+    status.async_write_ha_state = lambda: geschrieben.append(status.native_value)
+
+    with _Uhr() as uhr:
+        _status_mit(koordinator, netz=300)
+        status._handle_coordinator_update()
+        assert geschrieben == ["importing"]
+        # Zwei Minuten Pendeln im Sekundentakt.
+        for schritt in range(120):
+            _status_mit(koordinator, netz=300 if schritt % 2 else -300)
+            uhr.weiter(1)
+            status._handle_coordinator_update()
+
+    assert _wortwechsel(geschrieben) == ["importing"], geschrieben
+
+
+def test_ein_wort_das_haelt_kommt_durch():
+    """Die Haltezeit sitzt Zappeln aus, keine Nachricht."""
+    koordinator, s = _sensoren()
+    status = s["status"]
+    status.hass = koordinator.hass
+    geschrieben = []
+    status.async_write_ha_state = lambda: geschrieben.append(status.native_value)
+
+    with _Uhr() as uhr:
+        _status_mit(koordinator, netz=800)
+        status._handle_coordinator_update()
+        # Die Sonne kommt heraus und bleibt.
+        _status_mit(koordinator, netz=-2000)
+        status._handle_coordinator_update()      # meldet sich an
+        uhr.weiter(6)
+        status._handle_coordinator_update()      # noch zu frisch
+        uhr.weiter(20)
+        status._handle_coordinator_update()      # jetzt hat es gehalten
+
+    assert _wortwechsel(geschrieben) == ["importing", "exporting"]

@@ -21,6 +21,7 @@ from .const import (
     CHEMISTRIES,
     CONF_ANIMATE,
     CONF_AZIMUTH,
+    CONF_BASE_ENERGY,
     CONF_BASE_PRICE,
     CONF_BASE_PRICE_ENTITY,
     CONF_BASE_PRICE_UNIT,
@@ -418,6 +419,7 @@ def haus_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
     return {
         CONF_HOUSE_POWER: _entity(roh.get(CONF_HOUSE_POWER)),
         CONF_HOUSE_ENERGY: _entity(roh.get(CONF_HOUSE_ENERGY)),
+        CONF_BASE_ENERGY: _entity(roh.get(CONF_BASE_ENERGY)),
         CONF_HOUSE_CALCULATE: bool(roh.get(CONF_HOUSE_CALCULATE, True)),
         CONF_DIVERTER_NAME: roh.get(CONF_DIVERTER_NAME) or DEFAULT_DIVERTER_NAME,
         # Mehrere erlaubt: Zwei Heizstaebe an derselben Gasheizung sparen
@@ -604,7 +606,7 @@ def quellen(daten: dict[str, Any]) -> set[str]:
             gefunden.add(wert)
 
     haus = daten.get(CONF_HOUSE, {})
-    for feld in (CONF_HOUSE_POWER, CONF_HOUSE_ENERGY):
+    for feld in (CONF_HOUSE_POWER, CONF_HOUSE_ENERGY, CONF_BASE_ENERGY):
         if wert := haus.get(feld):
             gefunden.add(wert)
     # Die Überschussverbraucher sind Listen - es dürfen mehrere sein.

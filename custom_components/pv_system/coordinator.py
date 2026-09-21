@@ -25,6 +25,7 @@ from . import units
 from .const import (
     BASE_PER_YEAR,
     CONF_AZIMUTH,
+    CONF_BASE_ENERGY,
     CONF_BASE_PRICE,
     CONF_BASE_PRICE_ENTITY,
     CONF_BASE_PRICE_UNIT,
@@ -289,7 +290,16 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         conf = self.config[CONF_COSTS]
         erzeugung = _abrechnungsertrag(anlagen)
         umleiter = haus.get("diverter") or {}
-        staende = self.stunden.staende()
+
+        # Nicht eingetragen heißt null, eingetragen und stumm heißt unbekannt.
+        # Der Unterschied entscheidet, ob "Ertrag heute" einen Neustart
+        # übersteht - siehe kosten.eigenverbrauch_kwh.
+        einspeisung = _nur_wenn_eingetragen(
+            netz["export_energy"], netz["entities"]["export_energy"]
+        )
+        netzbezug = _nur_wenn_eingetragen(
+            netz["import_energy"], netz["entities"]["import_energy"]
+        )
         zaehler = {
             "import": netz["import_energy"],
             "export": netz["export_energy"],
@@ -306,20 +316,27 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
             "own": eigenverbrauch_kwh(
                 erzeugung,
-                netz["export_energy"],
+                einspeisung,
                 haus["house_energy"],
-                netz["import_energy"],
+                netzbezug,
             ),
-            # Der Hausverbrauch als Zählerstand. Ein eingetragener Hauszähler
-            # gewinnt - er misst, statt zu rechnen. Ohne ihn kommt der Stand
-            # aus dem Integral über die Leistung, also aus genau den Watt, die
-            # auch in der Karte stehen.
+            # Hausverbrauch und Grundverbrauch als Zählerstand. Ein
+            # eingetragener Zähler gewinnt - er misst, statt zu rechnen. Ohne
+            # ihn kommt der Stand aus dem Integral über die Leistung, also aus
+            # genau den Watt, die auch in der Karte stehen.
             #
-            # Damit bekommt die Kostenrechnung Tag, Monat und Jahr für den
-            # Verbrauch mit derselben Mechanik wie für den Netzzähler - und
+            # Damit bekommt die Kostenrechnung Tag, Monat und Jahr für beide
+            # Verbräuche mit derselben Mechanik wie für den Netzzähler - und
             # damit steht endlich die Menge neben dem Betrag: Worauf sich die
             # "Ersparnis heute" bezieht, ist sonst nicht nachzulesen.
-            "house": units.first(haus["house_energy"], staende.get("house")),
+            #
+            # Welche Quelle gilt, entscheidet die Konfiguration und nicht,
+            # welche gerade antwortet: Ein eingetragener Zähler, der beim
+            # Neustart schweigt, darf nicht auf das Integral zurückfallen.
+            # Die beiden Stände liegen Größenordnungen auseinander, und die
+            # Plausibilitätsprüfung hielte den Wechsel für einen Zählertausch.
+            "house": haus["house_energy_total"],
+            "base": haus["base_energy_total"],
         }
 
         # Momentan selbst genutzt: was erzeugt wird und nicht ins Netz geht.
@@ -1241,17 +1258,28 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # gemessen schlägt gerechnet. Der Grundverbrauch kann nur aus dem
         # Integral kommen: Einen Sensor, der den Hausverbrauch ohne den
         # Überschussverbraucher zählt, hat niemand im Haus stehen.
-        hauszaehler = units.rund(units.kwh(self.hass, conf[CONF_HOUSE_ENERGY]), 2)
         staende = self.stunden.staende()
+        hauszaehler = (
+            units.rund(units.kwh(self.hass, conf[CONF_HOUSE_ENERGY]), 2)
+            if conf[CONF_HOUSE_ENERGY]
+            else staende.get("house")
+        )
+        grundzaehler = (
+            units.rund(units.kwh(self.hass, conf[CONF_BASE_ENERGY]), 2)
+            if conf[CONF_BASE_ENERGY]
+            else staende.get("base")
+        )
 
         return {
             "house_power": units.rund(verbrauch),
             "base_power": units.rund(bezugsgroesse),
             "house_source": "sensor" if gemessen is not None else "calculated",
             "diverter": umleiter,
-            "house_energy": hauszaehler,
-            "house_energy_total": units.first(hauszaehler, staende.get("house")),
-            "base_energy_total": staende.get("base"),
+            "house_energy": units.rund(
+                units.kwh(self.hass, conf[CONF_HOUSE_ENERGY]), 2
+            ),
+            "house_energy_total": hauszaehler,
+            "base_energy_total": grundzaehler,
             "self_sufficiency": autarkie,
             "base_self_sufficiency": grundautarkie,
             "self_consumption": eigenverbrauch,
@@ -1261,6 +1289,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "entities": {
                 "power": conf[CONF_HOUSE_POWER],
                 "energy": conf[CONF_HOUSE_ENERGY],
+                "base_energy": conf[CONF_BASE_ENERGY],
             },
         }
 
@@ -1313,6 +1342,20 @@ def _wert_je_kwh(
     if anteil <= 0:
         return None
     return round(preis / kwh_je_einheit / anteil, 5)
+
+
+def _nur_wenn_eingetragen(wert: float | None, entitaet: str | None) -> float | None:
+    """Null, wenn es den Zähler nicht gibt - unbekannt, wenn er gerade schweigt.
+
+    Beides sieht an der Oberfläche gleich aus: ``units.kwh`` gibt None zurück,
+    ob nun nichts eingetragen ist oder die eingetragene Entität "unavailable"
+    meldet. Für die Rechnung sind es aber zwei verschiedene Dinge - wer keinen
+    Einspeisezähler hat, speist nichts ein; wessen Zähler beim Neustart noch
+    nicht antwortet, über den weiß man gerade nichts.
+    """
+    if not entitaet:
+        return 0.0
+    return wert
 
 
 def _anlagenzaehler(anlage: dict[str, Any]) -> float | None:

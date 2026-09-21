@@ -115,6 +115,7 @@ CONF_PHASE_CURRENT: Final = "{phase}_current_entity"
 # ----------------------------------------------------------------- Haus
 CONF_HOUSE_POWER: Final = "power_entity"
 CONF_HOUSE_ENERGY: Final = "energy_entity"
+CONF_BASE_ENERGY: Final = "base_energy_entity"
 CONF_HOUSE_CALCULATE: Final = "calculate"
 # Ein Verbraucher, der nur laeuft, damit der Ueberschuss nicht ins Netz geht -
 # der Heizstab im Brauchwasserspeicher ist der Regelfall. Seine Kilowattstunden

@@ -927,8 +927,10 @@ def test_ein_fehlender_zaehler_haelt_an_statt_zu_verankern():
 def test_der_hausverbrauch_wird_je_zeitraum_ausgewiesen():
     """Der Zählerstand wird zur Menge - wie beim Netzzähler auch."""
     r = _rechner()
-    r.rechnen({"import": 100.0, "own": 50.0, "house": 1000.0}, PREISE, {})
-    ergebnis = r.rechnen({"import": 102.0, "own": 56.0, "house": 1008.0}, PREISE, {})
+    r.rechnen({"import": 100.0, "own": 50.0, "house": 1000.0, "base": 1000.0}, PREISE, {})
+    ergebnis = r.rechnen(
+        {"import": 102.0, "own": 56.0, "house": 1008.0, "base": 1008.0}, PREISE, {}
+    )
     tag = ergebnis["periods"]["day"]
     assert tag["house_kwh"] == 8.0
     assert tag["own_kwh"] == 6.0
@@ -943,9 +945,13 @@ def test_der_grundverbrauch_zieht_den_ueberschussverbraucher_ab():
     Grundverbrauch = Hausverbrauch minus der Anteil, der aus Überschuss lief.
     """
     r = _rechner()
-    r.rechnen({"own": 50.0, "house": 1000.0, "diverted": 200.0}, PREISE, {})
+    r.rechnen(
+        {"own": 50.0, "house": 1000.0, "base": 700.0, "diverted": 200.0},
+        PREISE, {},
+    )
     ergebnis = r.rechnen(
-        {"own": 56.0, "house": 1008.0, "diverted": 203.0}, PREISE, {}
+        {"own": 56.0, "house": 1008.0, "base": 705.0, "diverted": 203.0},
+        PREISE, {},
     )
     tag = ergebnis["periods"]["day"]
     assert tag["house_kwh"] == 8.0
@@ -971,8 +977,8 @@ def test_ohne_hauszaehler_bleibt_die_menge_unbekannt():
 def test_der_hausverbrauch_laeuft_auch_im_gesamtzeitraum_mit():
     """Alle vier Zeiträume, nicht nur der Tag."""
     r = _rechner()
-    r.rechnen({"own": 50.0, "house": 1000.0}, PREISE, {})
-    ergebnis = r.rechnen({"own": 56.0, "house": 1008.0}, PREISE, {})
+    r.rechnen({"own": 50.0, "house": 1000.0, "base": 1000.0}, PREISE, {})
+    ergebnis = r.rechnen({"own": 56.0, "house": 1008.0, "base": 1008.0}, PREISE, {})
     for periode in ("day", "month", "year", "total"):
         assert ergebnis["periods"][periode]["house_kwh"] == 8.0, periode
 
