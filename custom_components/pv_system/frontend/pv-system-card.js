@@ -2668,16 +2668,43 @@ class PvSystemCard extends HTMLElement {
     }
 
     const box = this._detailZeilen;
-    box.innerHTML = "";
-    for (const [name, wert, entity] of zeilen) {
-      const k = e("div", { class: entity ? "k klickbar" : "k", text: name });
-      if (entity) {
-        k.title = entity;
-        k.addEventListener("click", () => this._mehrInfo(entity));
+    // Nur die Zahlen anfassen, nicht die Knoten.
+    //
+    // Das war der Grund, warum sich die verlinkten Beschriftungen am Rechner
+    // kaum anklicken ließen: Hier stand box.innerHTML = "", und die Karte
+    // rechnet mehrmals je Sekunde neu. Ein Klick braucht mousedown und
+    // mouseup auf *demselben* Element - wird es dazwischen weggeworfen und
+    // neu gebaut, kommt nie ein Klick zustande. Am Handy fiel es weniger auf,
+    // weil eine Berührung den Klick anders auslöst.
+    //
+    // Deshalb: Die Beschriftungen bleiben stehen, solange sich die Liste
+    // nicht ändert. Neu gebaut wird nur, wenn wirklich andere Zeilen
+    // gebraucht werden - beim Öffnen, bei einem Wechsel der Anlage, wenn ein
+    // Überschussverbraucher dazukommt.
+    const kennung = zeilen.map(([name, , entity]) => `${name}\u0000${entity || ""}`).join("\u0001");
+    if (box.dataset.kennung !== kennung) {
+      box.dataset.kennung = kennung;
+      box.innerHTML = "";
+      for (const [name, , entity] of zeilen) {
+        const k = e("div", { class: entity ? "k klickbar" : "k", text: name });
+        if (entity) {
+          k.title = entity;
+          k.addEventListener("click", () => this._mehrInfo(entity));
+        }
+        box.appendChild(k);
+        box.appendChild(e("div", { class: "v" }));
       }
-      box.appendChild(k);
-      box.appendChild(e("div", { class: "v", text: wert }));
     }
+    const werte = box.querySelectorAll(".v");
+    zeilen.forEach(([, wert], i) => {
+      const knoten = werte[i];
+      // textContent nur setzen, wenn es sich wirklich geändert hat: Eine
+      // Zuweisung verwirft die Textauswahl, und wer gerade eine Zahl
+      // markiert, um sie zu kopieren, verlöre sie jede Sekunde wieder.
+      if (knoten && knoten.textContent !== String(wert)) {
+        knoten.textContent = wert;
+      }
+    });
   }
 
   /**
@@ -2694,11 +2721,9 @@ class PvSystemCard extends HTMLElement {
     const zeit = k.periods || {};
     // Ohne Überschussverbraucher sind Haus- und Grundverbrauch dieselbe
     // Zahl - dann steht sie einmal da und nicht zweimal.
-    const umleiterAn = !!(
-      this._daten.house &&
-      this._daten.house.diverter &&
-      this._daten.house.diverter.enabled
-    );
+    const umleiter = (this._daten.house && this._daten.house.diverter) || {};
+    const umleiterAn = !!umleiter.enabled;
+    const umleiterName = umleiter.name || "Überschuss";
     const zeilen = [
       ["Arbeitspreis", k.price === null ? "–" : `${einheit(k.price, "", 3, l)}${w}/kWh`],
       [
@@ -2739,7 +2764,28 @@ class PvSystemCard extends HTMLElement {
         [
           `Ersparnis ${wort}`,
           `${einheit(z.own_kwh, "kWh", 2, l)} · ${geld(z.savings, w, l)}`,
-        ],
+        ]
+      );
+      // Und aufgeteilt, sobald ein Überschussverbraucher läuft. Ohne diese
+      // beiden Zeilen sieht die Ersparnis zu klein aus: Die Kilowattstunde
+      // im Heizstab ersetzt Gas, und Gas ist billiger als Strom - der
+      // Unterschied steckte bisher unsichtbar in einer einzigen Zahl.
+      if (umleiterAn && z.savings_diverted !== null &&
+          z.savings_diverted !== undefined) {
+        const heizstab = zahl(z.diverted_kwh) || 0;
+        const haushalt = Math.max(0, (zahl(z.own_kwh) || 0) - heizstab);
+        zeilen.push(
+          [
+            "  davon Haushalt",
+            `${einheit(haushalt, "kWh", 2, l)} · ${geld(z.savings_base, w, l)}`,
+          ],
+          [
+            `  davon ${umleiterName}`,
+            `${einheit(heizstab, "kWh", 2, l)} · ${geld(z.savings_diverted, w, l)}`,
+          ]
+        );
+      }
+      zeilen.push(
         [`Ertrag ${wort}`, geld(z.yield, w, l)],
         [`Bilanz ${wort}`, geld(z.balance, w, l)]
       );

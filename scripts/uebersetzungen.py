@@ -498,6 +498,7 @@ FELDNAMEN_JE_SCHRITT: dict[str, dict[str, T]] = {
     "house": {
         "power_entity": ("Gemessener Hausverbrauch", "Measured house consumption"),
         "energy_entity": ("Verbrauchszähler", "Consumption meter"),
+        "base_energy_entity": ("Grundverbrauchszähler", "Base consumption meter"),
     },
 }
 
@@ -1105,6 +1106,23 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "minus imported” - and that is what this is for.\n\nEmpty: "
             "perfectly fine as long as your plants have a yield meter.",
         ),
+        "base_energy_entity": (
+            "Dasselbe ohne den Überschussverbraucher - was der Haushalt "
+            "allein gezogen hat, in kWh.\n\nWer so einen Sensor schon hat, "
+            "etwa als Riemann-Integral über die Leistung, trägt ihn hier ein: "
+            "Dann stehen in der Karte und in den Kostenzeiträumen genau "
+            "dessen Zahlen und keine zweite, leicht abweichende Rechnung."
+            "\n\nLeer: Die Integration addiert die Leistung selbst auf. "
+            "Messen kann das kein Gerät - den Grundverbrauch gibt es nur als "
+            "Rechnung.",
+            "The same without the surplus load - what the household alone "
+            "drew, in kWh.\n\nIf such a sensor already exists, for instance "
+            "as a Riemann sum over the power, enter it here: the card and the "
+            "cost periods then show exactly its figures instead of a second, "
+            "slightly different calculation.\n\nEmpty: the integration adds "
+            "up the power itself. No device measures this - base consumption "
+            "only exists as a calculation.",
+        ),
     },
     "display": {
         "animate": (
@@ -1383,7 +1401,7 @@ NETZFELDER = [
     "l2_power_entity", "l2_voltage_entity", "l2_current_entity",
     "l3_power_entity", "l3_voltage_entity", "l3_current_entity",
 ]
-HAUSFELDER = ["calculate", "power_entity", "energy_entity"]
+HAUSFELDER = ["calculate", "power_entity", "energy_entity", "base_energy_entity"]
 UEBERSCHUSSFELDER = [
     "diverter_name", "diverter_power_entity", "diverter_energy_entity",
     "diverter_solar_power_entity", "diverter_solar_energy_entity",

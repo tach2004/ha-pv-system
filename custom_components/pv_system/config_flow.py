@@ -33,6 +33,7 @@ from .const import (
     CHEMISTRIES,
     CONF_ANIMATE,
     CONF_AZIMUTH,
+    CONF_BASE_ENERGY,
     CONF_BASE_PRICE,
     CONF_BASE_PRICE_ENTITY,
     CONF_BASE_PRICE_UNIT,
@@ -362,7 +363,12 @@ def _felder_wechselrichter() -> dict[Any, Any]:
 # der eine Schritt die Felder des anderen nicht leert, muss jeder wissen,
 # welche Felder ihm gehören: Was nicht abgeschickt wurde, wird normalerweise
 # gelöscht, und genau so soll Leeren ja auch funktionieren.
-HAUSFELDER: Final = (CONF_HOUSE_CALCULATE, CONF_HOUSE_POWER, CONF_HOUSE_ENERGY)
+HAUSFELDER: Final = (
+    CONF_HOUSE_CALCULATE,
+    CONF_HOUSE_POWER,
+    CONF_HOUSE_ENERGY,
+    CONF_BASE_ENERGY,
+)
 UEBERSCHUSSFELDER: Final = (
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
@@ -382,6 +388,7 @@ def _felder_haus() -> dict[Any, Any]:
         vol.Optional(CONF_HOUSE_CALCULATE): bool,
         vol.Optional(CONF_HOUSE_POWER): _sensor("power"),
         vol.Optional(CONF_HOUSE_ENERGY): _sensor("energy"),
+        vol.Optional(CONF_BASE_ENERGY): _sensor("energy"),
     }
 
 

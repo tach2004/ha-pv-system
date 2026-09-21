@@ -531,6 +531,19 @@ class Kostenrechner:
             "base_cost": grundkosten or None,
             "revenue": erloes,
             "savings": ersparnis,
+            # Die Aufteilung in Haushalt und Überschuss gibt es hier bewusst
+            # nicht. Der Gesamtzeitraum kommt nicht aus einer Rechnung mit
+            # heutigen Preisen, sondern aus dem Geldspeicher - und der führt
+            # für den Überschuss nur den *Korrekturposten* mit, also die
+            # Differenz zum Arbeitspreis. Aus ihm lässt sich der Bruttowert
+            # nicht zurückrechnen, ohne zu raten.
+            #
+            # Die Beträge aus _geld stünden sonst hier drin: mit den heutigen
+            # Preisen über den ganzen Zeitraum hochgerechnet, und damit in
+            # einer Zeile neben einer Summe, die es besser weiß. Lieber
+            # nichts als eine Zahl, die nicht zur Nachbarzeile passt.
+            "savings_base": None,
+            "savings_diverted": None,
             "yield": ertrag,
             "balance": (
                 round(ertrag - kosten, 2)
@@ -625,6 +638,16 @@ class Kostenrechner:
         einspeisung = mengen.get("export")
         eigen = mengen.get("own")
         verbrauch = mengen.get("house")
+        # Der Grundverbrauch kommt als eigener Zählerstand herein und wird
+        # nicht hier aus Hausverbrauch minus Umleitung gerechnet.
+        #
+        # Das war einmal anders und deshalb falsch: Der Zählersensor
+        # integrierte die Leistung, die Karte zog die umgeleiteten
+        # Kilowattstunden vom Hausverbrauch ab - zwei Wege zu derselben Zahl,
+        # die nie dasselbe Ergebnis lieferten. Jetzt gibt es nur noch einen,
+        # und wer einen eigenen Grundverbrauchszähler im Haus stehen hat,
+        # trägt ihn ein und sieht genau dessen Zahlen.
+        grundverbrauch = mengen.get("base")
 
         kosten = None
         grundkosten = None
@@ -641,26 +664,28 @@ class Kostenrechner:
         # Wert. Begrenzt auf den Eigenverbrauch: Läuft der Heizstab nachts am
         # Netz, ist das gewöhnlicher Bezug und keine Ersparnis der Anlage.
         umgeleitet = min(_zahl(mengen.get("diverted")) or 0.0, eigen or 0.0)
-        ersparnis = (
-            round(eigen * preis + umgeleitet * _abstand(umleitpreis, preis), 2)
-            if preis is not None and eigen is not None
-            else None
-        )
+        # Dieselbe Rechnung in zwei Posten statt in einem. Der Betrag ändert
+        # sich dadurch nicht:
+        #
+        #   Eigenverbrauch × Preis + umgeleitet × (Umleitpreis − Preis)
+        # = (Eigenverbrauch − umgeleitet) × Preis + umgeleitet × Umleitpreis
+        #
+        # Getrennt ausgewiesen wird es, weil sonst niemand nachvollziehen
+        # kann, warum die Ersparnis kleiner ist als Eigenverbrauch × Preis:
+        # Die Kilowattstunde im Heizstab ersetzt Gas, und Gas ist billiger
+        # als Strom. Das sieht nach einem Fehler aus, solange nur eine Zahl
+        # dasteht.
+        ersparnis = grundersparnis = umleitersparnis = None
+        if preis is not None and eigen is not None:
+            grundersparnis = round((eigen - umgeleitet) * preis, 2)
+            umleitersparnis = round(umgeleitet * (umleitpreis if umleitpreis
+                                                  is not None else preis), 2)
+            ersparnis = round(
+                eigen * preis + umgeleitet * _abstand(umleitpreis, preis), 2
+            )
         ertrag = None
         if ersparnis is not None or erloes is not None:
             ertrag = round((ersparnis or 0.0) + (erloes or 0.0), 2)
-
-        # Der Grundverbrauch ist der Hausverbrauch ohne den Anteil, der aus
-        # Überschuss lief - dieselbe Rechnung wie bei der Leistung in der
-        # Karte, nur über den Zeitraum aufaddiert. Gezogen wird der rohe
-        # Umleitungsstand und nicht der oben auf den Eigenverbrauch begrenzte:
-        # Was der Heizstab aus der Sonne bekam, ist kein Grundverbrauch,
-        # gleichgültig wie die Ersparnis dafür bewertet wird.
-        grundverbrauch = None
-        if verbrauch is not None:
-            grundverbrauch = round(
-                max(0.0, verbrauch - (_zahl(mengen.get("diverted")) or 0.0)), 3
-            )
 
         return {
             "start": mengen.get("start"),
@@ -683,6 +708,11 @@ class Kostenrechner:
             "base_cost": grundkosten,
             "revenue": erloes,
             "savings": ersparnis,
+            # Die beiden Hälften der Ersparnis: was im Haushalt an Strom
+            # gespart wurde und was der Überschussverbraucher an seinem
+            # eigenen Brennstoff spart. Zusammen ergeben sie "savings".
+            "savings_base": grundersparnis,
+            "savings_diverted": umleitersparnis,
             "yield": ertrag,
             # Was die Anlage unterm Strich bringt, abzüglich dessen, was der
             # Netzbezug in diesem Zeitraum gekostet hat.
@@ -984,9 +1014,30 @@ def eigenverbrauch_kwh(
     Zweiter Weg: verbraucht minus bezogen. Er greift, wenn nur der Hausverbrauch
     gezählt wird - und er ist bei einer DC-gekoppelten Anlage sogar der
     genauere, weil der Umweg über die Batterie darin schon steckt.
+
+    **Vollständig oder gar nicht.** Fehlt der abzuziehende Stand, kommt None
+    zurück und nicht die halbe Rechnung. Das ist der Unterschied zwischen
+    "unbekannt" und einem Sprung um mehrere tausend Kilowattstunden:
+
+    Nach einem Neustart melden nicht alle Sensoren gleichzeitig. Ist der
+    Ertragszähler schon da und der Einspeisezähler noch nicht, stand hier
+    früher ``erzeugung - 0`` - also der ganze Lebensertrag als Eigenverbrauch.
+    Die Plausibilitätsprüfung hielt das für einen Zählertausch, verankerte neu,
+    und der Tageswert begann bei null. Beim Zurückkommen des Zählers dasselbe
+    noch einmal in die andere Richtung. Ergebnis: "Ertrag heute" sprang nach
+    jedem Neustart auf 0 und blieb dort bis Mitternacht.
+
+    Wer den Zähler gar nicht eingetragen hat, bekommt von der aufrufenden
+    Stelle eine ausdrückliche Null - wer keinen Einspeisezähler hat, speist
+    eben nichts ein. Nur ein *eingetragener*, gerade stummer Zähler führt zu
+    None.
     """
     if erzeugung is not None:
-        return round(max(0.0, erzeugung - (einspeisung or 0.0)), 3)
+        if einspeisung is None:
+            return None
+        return round(max(0.0, erzeugung - einspeisung), 3)
     if hausverbrauch is not None:
-        return round(max(0.0, hausverbrauch - (bezug or 0.0)), 3)
+        if bezug is None:
+            return None
+        return round(max(0.0, hausverbrauch - bezug), 3)
     return None

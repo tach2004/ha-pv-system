@@ -318,6 +318,19 @@ Also: **Grundverbrauch aus PV zum Arbeitspreis, Überschuss zum Preis dessen,
 was er ersetzt.** Genau so, wie man es von Hand rechnen würde – nur in einer
 Zeile statt in zweien.
 
+**In der Karte stehen beide Hälften einzeln.** Unter *Ertrag heute* → „i":
+
+```
+Ersparnis heute        10,15 kWh · 1,87 EUR
+  davon Haushalt        3,27 kWh · 1,11 EUR
+  davon Heizstab        6,88 kWh · 0,76 EUR
+```
+
+Ohne diese Aufteilung sieht die Ersparnis zu klein aus: 10,15 kWh selbst
+genutzt, und trotzdem nur 1,87 € statt 10,15 × 0,338 = 3,43 €. Der Grund
+steht jetzt darunter – zwei Drittel davon gingen in den Heizstab und sind
+Gas wert, nicht Strom.
+
 Ein Rechenbeispiel, 0,35 €/kWh Strom, 0,11 €/kWh Gas, 0,08 €/kWh Vergütung:
 
 | | kWh | Wert |
@@ -346,10 +359,20 @@ Beide laufen vorwärts wie ein Stromzähler und setzen sich nie zurück. Tag,
 Monat und Jahr macht Home Assistant daraus von selbst – in der Statistik, im
 Verlauf und im Energie-Dashboard.
 
-Woher sie kommen: **Gemessen schlägt gerechnet.** Ist unter *Haus und
-Verbrauch* ein Energiezähler eingetragen, gilt der. Sonst wird die Leistung
-aufaddiert – dieselben Watt, die auch in der Karte stehen. Den Grundverbrauch
-misst ohnehin kein Gerät; er wird immer gerechnet.
+Woher sie kommen: **Was eingetragen ist, gewinnt.** Unter *Haus und Verbrauch*
+gibt es für beide ein Feld. Steht dort eine Entität, gelten deren Zahlen –
+überall: in der Karte, in den Kostenzeiträumen und im Sensor. Steht dort
+nichts, addiert die Integration die Leistung auf, also genau die Watt, die
+auch in der Karte stehen.
+
+Welche Quelle gilt, entscheidet allein die **Konfiguration** – nicht, welche
+gerade antwortet. Ein eingetragener Zähler, der beim Neustart noch schweigt,
+fällt nicht heimlich auf die gerechnete Zahl zurück: Die beiden liegen
+Größenordnungen auseinander, und der Wechsel sähe aus wie ein Zählertausch.
+
+Den **Grundverbrauchszähler** gibt es nur mit Überschussverbraucher. Ohne
+einen ist der Grundverbrauch der Hausverbrauch – dann hat das Haus einfach
+einen Verbrauch, und weder Sensor noch Kartenzeile erscheinen.
 
 ### Warum ein Zählerstand kein Messwert ist
 
@@ -397,7 +420,12 @@ Drei Größen gehen hinein, und es lohnt sich zu wissen, welche:
 
 * **Ertrag gesamt** – Ersparnis **+** Einspeiseerlös über den ganzen
   Zeitraum, jede Differenz mit dem Preis bewertet, der damals galt. Das ist
-  der Bruttonutzen der Anlage. Die Bezugskosten und der Grundpreis stecken
+  der Bruttonutzen der Anlage. **Der Überschussverbraucher ist darin
+  enthalten**, und zwar mit dem Wert dessen, was er ersetzt: Der
+  Geldspeicher führt dafür einen eigenen Posten mit, der bei jeder Rechnung
+  um `umgeleitete kWh × (Umleitpreis − Arbeitspreis)` fortgeschrieben wird.
+  Zusammen mit dem Eigenverbrauch zum Arbeitspreis ergibt das genau den
+  Gaspreis für die Kilowattstunde im Heizstab. Die Bezugskosten und der Grundpreis stecken
   **nicht** darin: Was du aus dem Netz holst, hat nichts damit zu tun, ob
   sich das Dach bezahlt macht.
 * **Investition** – die Summe der Investitionen aller Anlagen. Ein eigenes
@@ -735,6 +763,7 @@ Das ist der Hausanschluss: ein Zähler für alles, was rein- und rausgeht.
 | **Hausverbrauch rechnen** | an/aus | Rechnet `Netzleistung + Wechselrichterabgabe`. Bei einer Netzparallelanlage ist das exakt, nicht geschätzt | an |
 | **Leistung** | W | Nur wenn du den Hausverbrauch **misst**. Hat dann Vorrang vor der Rechnung | Wird gerechnet – der Normalfall |
 | **Verbrauchszähler** | kWh | Alles, was im Haus verbraucht wurde: Netzbezug **und** selbst genutzter Solarstrom. **Nicht** der Bezugszähler. Zweiter Weg zum Eigenverbrauch (`verbraucht − bezogen`), wenn keine Anlage einen Ertragszähler hat. Ist er gesetzt, speist er auch den Sensor *Hausverbrauch Zähler* | Der Hausverbrauch wird aus der Leistung aufaddiert |
+| **Grundverbrauchszähler** | kWh | Dasselbe ohne den Überschussverbraucher. Wer so einen Sensor schon hat – etwa als Riemann-Integral über die Leistung –, trägt ihn hier ein und sieht überall dessen Zahlen | Wird aus der Leistung aufaddiert |
 
 Aus beidem entstehen zwei fortlaufende Zähler, die es in Home Assistant sonst
 nicht gibt:
@@ -1028,8 +1057,7 @@ Integration verhindern; dafür gibt es keinen Haken. Drei Wege, sie
 loszuwerden:
 
 1. **Karte höchstens alle 2–5 Sekunden.** Mit dem Auge kaum zu sehen, aber ein
-   Bruchteil der Zeilen. Das Wort des Sensors – „lädt", „speist ein" – wird nie
-   aufgehalten, nur die Messwerte dahinter.
+   Bruchteil der Zeilen.
 
    | Takt | Zeilen am Tag | `states` |
    |---|---|---|
@@ -1054,6 +1082,25 @@ loszuwerden:
    Platz nicht ans Dateisystem zurück.
 
 3. Beides.
+
+### Und das Wort selbst
+
+Der Zustand dieses Sensors ist ein Wort: „lädt", „speist ein", „bezieht". Es
+steht im Logbuch und im Verlauf, und **dort zählt nur, wenn es sich ändert**.
+
+Bis Fassung 1.2.0 änderte es sich zu oft. Zwei Gründe, beide behoben:
+
+* **Eine harte Schwelle.** Bei 50 W hin oder her sprang der Sensor um, sobald
+  die Leistung um diesen Wert zitterte – 48, 52, 49, 51. Jetzt gibt es zwei
+  Schwellen: hinein bei 50 W, hinaus erst unter 20 W.
+* **Echte, aber bedeutungslose Wechsel.** Abends wandert der Netzzähler durch
+  die Null und schwingt dabei um mehrere hundert Watt. „Bezug", „Einspeisung",
+  „Bezug" – jede Sekunde, die ganze Dämmerung lang, jedes Mal ein Eintrag im
+  Logbuch. Dagegen hilft keine Schwelle, nur Zeit: Ein neues Wort muss jetzt
+  **15 Sekunden halten**, bevor es geschrieben wird. Hält es nicht, war es
+  kein Zustandswechsel, sondern Rauschen.
+
+Die Karte merkt davon nichts – sie hängt am Attribut, nicht am Wort.
 
 **Bricht das etwas?** Nein. Die Karte liest den **lebenden Zustand** aus
 `hass.states`, nicht die Datenbank. Kosten, Ertrag und Amortisation rechnet der

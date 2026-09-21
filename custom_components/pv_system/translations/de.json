@@ -422,11 +422,13 @@
       },
       "house": {
         "data": {
+          "base_energy_entity": "Grundverbrauchszähler",
           "calculate": "Hausverbrauch rechnen",
           "energy_entity": "Verbrauchszähler",
           "power_entity": "Gemessener Hausverbrauch"
         },
         "data_description": {
+          "base_energy_entity": "Dasselbe ohne den Überschussverbraucher - was der Haushalt allein gezogen hat, in kWh.\n\nWer so einen Sensor schon hat, etwa als Riemann-Integral über die Leistung, trägt ihn hier ein: Dann stehen in der Karte und in den Kostenzeiträumen genau dessen Zahlen und keine zweite, leicht abweichende Rechnung.\n\nLeer: Die Integration addiert die Leistung selbst auf. Messen kann das kein Gerät - den Grundverbrauch gibt es nur als Rechnung.",
           "calculate": "Verbrauch = Wechselrichterleistung + Netzleistung. Ein gemessener Hausverbrauch hat Vorrang.",
           "energy_entity": "Ein kWh-Zähler über **alles, was im Haus verbraucht wurde** - Netzbezug *und* selbst genutzter Solarstrom zusammen. Nicht der Bezugszähler: Der steht unter „Netz und Zähler“ und zählt nur, was aus dem Netz kam.\n\nWozu: Er ist der zweite Weg zum Eigenverbrauch. Normalerweise rechnet die Integration „erzeugt minus eingespeist“; hast du keinen Ertragszähler, greift stattdessen „verbraucht minus bezogen“ - und dafür wird er gebraucht.\n\nLeer: völlig in Ordnung, solange deine Anlagen einen Ertragszähler haben.",
           "power_entity": "Nur, wenn du den Hausverbrauch **misst** - etwa mit einem zweiten Zähler hinter dem Hausanschluss. In Watt, kein Zählerstand.\n\nNormalerweise leer lassen: Dann rechnet die Integration ihn aus Netzleistung plus Wechselrichterabgabe, und das ist bei einer Netzparallelanlage genauso richtig."
