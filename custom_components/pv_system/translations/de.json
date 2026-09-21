@@ -31,6 +31,9 @@
       "balance_year": {
         "name": "Bilanz dieses Jahr"
       },
+      "base_energy_total": {
+        "name": "Grundverbrauch Zähler"
+      },
       "battery_capacity": {
         "name": "Batteriekapazität"
       },
@@ -90,6 +93,9 @@
       },
       "house_energy": {
         "name": "Hausverbrauch Energie"
+      },
+      "house_energy_total": {
+        "name": "Hausverbrauch Zähler"
       },
       "house_power": {
         "name": "Hausverbrauch"

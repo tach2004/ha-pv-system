@@ -279,6 +279,78 @@ der Erlös ist schlicht null.
 **Nicht zu verwechseln mit der Bilanz:** Die zieht die Bezugskosten wieder ab
 und ist deshalb meist negativ.
 
+**Der Grundpreis gehört nicht in die Ersparnis.** Die Zählergebühr fällt an,
+ob eine Anlage auf dem Dach liegt oder nicht – gespart wird sie also nicht.
+Sie steckt in den **Bezugskosten** und damit in der **Bilanz**, und dort steht
+sie auch getrennt ausgewiesen.
+
+**Der Speicher ist nur eine Zwischenstation.** Eine Kilowattstunde wird genau
+einmal gezählt, nicht zweimal. *Wann* sie gezählt wird, hängt davon ab, welchen
+Zähler du als Ertrag eingetragen hast:
+
+| Ertragszähler | Gezählt wird | Speicherverluste |
+|---|---|---|
+| **Wechselrichter (AC)** | beim Entladen, wenn der Strom ins Haus geht | sind schon abgezogen |
+| **nur Module (DC)** | beim Erzeugen, bevor der Speicher lädt | zählen mit, obwohl ~10 % nie ankommen |
+
+Die obere Zeile ist die genauere. Wer einen Ertragszähler am Wechselrichter
+hat, trägt ihn ein.
+
+### Was steckt in der Ersparnis – und was nicht?
+
+Die Frage, die sich jeder mit einem Überschussverbraucher stellt: *Zählt der
+Heizstab eigentlich mit?* **Ja.** Er hängt hinter dem Zähler und ist damit
+Hausverbrauch wie jede andere Last. Was aus der Sonne in ihn floss, steht im
+Eigenverbrauch und damit in der Ersparnis.
+
+Bewertet wird er nur anders, und die Formel sieht auf den ersten Blick
+merkwürdig aus:
+
+    Ersparnis = Eigenverbrauch × Arbeitspreis
+              + umgeleitete kWh × (Umleitpreis − Arbeitspreis)
+
+Ausmultipliziert steht dort aber genau das, was man erwarten würde:
+
+    Ersparnis = (Eigenverbrauch − umgeleitet) × Arbeitspreis    ← der Haushalt
+              + umgeleitet                    × Umleitpreis     ← der Heizstab
+
+Also: **Grundverbrauch aus PV zum Arbeitspreis, Überschuss zum Preis dessen,
+was er ersetzt.** Genau so, wie man es von Hand rechnen würde – nur in einer
+Zeile statt in zweien.
+
+Ein Rechenbeispiel, 0,35 €/kWh Strom, 0,11 €/kWh Gas, 0,08 €/kWh Vergütung:
+
+| | kWh | Wert |
+|---|---|---|
+| Haushalt aus PV | 8,0 | 8,0 × 0,35 € = **2,80 €** |
+| Heizstab aus PV | 3,0 | 3,0 × 0,11 € = **0,33 €** |
+| eingespeist | 4,0 | 4,0 × 0,08 € = **0,32 €** |
+| | | **Ersparnis 3,13 €, Erlös 0,32 €, Ertrag 3,45 €** |
+
+Die 3 kWh im Heizstab sind hier **weniger** wert als 3 kWh im Haushalt – Gas
+ist billiger als Strom. Sie sind aber mehr wert als die 0,24 €, die sie als
+Einspeisung gebracht hätten. Unterm Strich stimmt die Rechnung also in beide
+Richtungen.
+
+### Worauf sich das alles bezieht
+
+Neben jedem Betrag steht seine Menge – in der Kostentabelle der Karte und als
+eigene Entität:
+
+| | Was es zählt |
+|---|---|
+| **Hausverbrauch Zähler** | alles hinter dem Zähler, inklusive Überschussverbraucher |
+| **Grundverbrauch Zähler** | derselbe Verbrauch ohne den Teil, der aus Überschuss lief |
+
+Beide laufen vorwärts wie ein Stromzähler und setzen sich nie zurück. Tag,
+Monat und Jahr macht Home Assistant daraus von selbst – in der Statistik, im
+Verlauf und im Energie-Dashboard.
+
+Woher sie kommen: **Gemessen schlägt gerechnet.** Ist unter *Haus und
+Verbrauch* ein Energiezähler eingetragen, gilt der. Sonst wird die Leistung
+aufaddiert – dieselben Watt, die auch in der Karte stehen. Den Grundverbrauch
+misst ohnehin kein Gerät; er wird immer gerechnet.
+
 ### Warum ein Zählerstand kein Messwert ist
 
 Alles oben rechnet mit **Zählerständen**, nicht mit Leistungen. Ein Zählerstand
@@ -311,6 +383,32 @@ Minus – bei den meisten Häusern das ganze Jahr über. Positiv wird sie im
 Tageswert an einem sonnigen Tag, im Jahreswert bei einer sehr großen Anlage.
 Die Frage „lohnt sich die Anlage?" beantwortet nicht die Bilanz, sondern die
 **Amortisation**: Ertrag seit Inbetriebnahme gegen Investition.
+
+### Die Amortisation, Feld für Feld
+
+| Sensor | Rechnung |
+|---|---|
+| **Amortisation** (%) | `100 × Ertrag gesamt ÷ Investition` |
+| **Bilanz Amortisation** (€) | `Ertrag gesamt − Investition` – vorher was fehlt, danach der Gewinn |
+| **Ertrag je Jahr** (€) | `Ertrag gesamt ÷ Tage seit Inbetriebnahme × 365` |
+| **Amortisation in Jahren** | `(Investition − Ertrag gesamt) ÷ Ertrag je Jahr` |
+
+Drei Größen gehen hinein, und es lohnt sich zu wissen, welche:
+
+* **Ertrag gesamt** – Ersparnis **+** Einspeiseerlös über den ganzen
+  Zeitraum, jede Differenz mit dem Preis bewertet, der damals galt. Das ist
+  der Bruttonutzen der Anlage. Die Bezugskosten und der Grundpreis stecken
+  **nicht** darin: Was du aus dem Netz holst, hat nichts damit zu tun, ob
+  sich das Dach bezahlt macht.
+* **Investition** – die Summe der Investitionen aller Anlagen. Ein eigenes
+  Feld für den Standort gibt es nicht; es stünde neben einer Summe, die es
+  schon gibt.
+* **Tage seit Inbetriebnahme** – ab der **ältesten** Inbetriebnahme aller
+  Anlagen, nicht ab dem Tag, an dem du die Integration eingerichtet hast.
+  Dafür gibt es „Ertrag davor" und „Bezug davor".
+
+Unter **sieben Tagen** bleiben Jahresrate und Restzeit leer:
+Aus drei Tagen auf ein Jahr hochzurechnen ergibt eine Zahl, die nichts sagt.
 
 **Preisänderungen verändern die Vergangenheit nicht.** Das ist der Kern der
 ganzen Rechnung: Bei jedem Lauf wird nur die *Differenz* seit dem letzten Lauf
@@ -636,7 +734,20 @@ Das ist der Hausanschluss: ein Zähler für alles, was rein- und rausgeht.
 |---|---|---|---|
 | **Hausverbrauch rechnen** | an/aus | Rechnet `Netzleistung + Wechselrichterabgabe`. Bei einer Netzparallelanlage ist das exakt, nicht geschätzt | an |
 | **Leistung** | W | Nur wenn du den Hausverbrauch **misst**. Hat dann Vorrang vor der Rechnung | Wird gerechnet – der Normalfall |
-| **Verbrauchszähler** | kWh | Alles, was im Haus verbraucht wurde: Netzbezug **und** selbst genutzter Solarstrom. **Nicht** der Bezugszähler. Zweiter Weg zum Eigenverbrauch (`verbraucht − bezogen`), wenn keine Anlage einen Ertragszähler hat | In Ordnung, solange ein Ertragszähler da ist |
+| **Verbrauchszähler** | kWh | Alles, was im Haus verbraucht wurde: Netzbezug **und** selbst genutzter Solarstrom. **Nicht** der Bezugszähler. Zweiter Weg zum Eigenverbrauch (`verbraucht − bezogen`), wenn keine Anlage einen Ertragszähler hat. Ist er gesetzt, speist er auch den Sensor *Hausverbrauch Zähler* | Der Hausverbrauch wird aus der Leistung aufaddiert |
+
+Aus beidem entstehen zwei fortlaufende Zähler, die es in Home Assistant sonst
+nicht gibt:
+
+| Entität | Was sie zählt | Woher |
+|---|---|---|
+| `sensor.…_house_energy_total` | Hausverbrauch, inklusive Überschussverbraucher | Verbrauchszähler, sonst die Leistung aufaddiert |
+| `sensor.…_base_energy_total` | derselbe Verbrauch ohne den Teil aus Überschuss | immer gerechnet – das misst kein Gerät |
+
+Beide steigen nur (`total_increasing`). Den Tages-, Monats- und Jahreswert
+macht Home Assistant daraus selbst; im Energie-Dashboard lassen sie sich als
+Verbraucher eintragen. Mit eingetragenem Verbrauchszähler ist der erste eine
+Wiederholung und deshalb abgeschaltet – der zweite nie.
 
 ### Überschuss
 

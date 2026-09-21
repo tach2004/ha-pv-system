@@ -51,6 +51,11 @@ SENSOREN: dict[str, T] = {
     "grid_frequency": ("Netzfrequenz", "Grid frequency"),
     "house_power": ("Hausverbrauch", "House consumption"),
     "house_energy": ("Hausverbrauch Energie", "House consumption energy"),
+    # Die beiden gerechneten Zähler. "Zähler" steht im Namen, damit niemand
+    # einen Tageswert erwartet: Sie laufen vorwärts wie ein Stromzähler, und
+    # den Tageswert macht Home Assistant selbst daraus.
+    "house_energy_total": ("Hausverbrauch Zähler", "House consumption meter"),
+    "base_energy_total": ("Grundverbrauch Zähler", "Base consumption meter"),
     # Beide als Stundenwert - der Name sagt es, damit niemand den
     # Momentanwert erwartet. Den zeigt die Karte.
     "self_sufficiency": ("Autarkie letzte Stunde", "Self-sufficiency last hour"),

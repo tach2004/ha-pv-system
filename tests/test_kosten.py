@@ -914,3 +914,105 @@ def test_ein_fehlender_zaehler_haelt_an_statt_zu_verankern():
     # Danach steht der Tag wieder da, wo er war.
     tag = rechner.rechnen({"own": 102.0}, preise, {})["periods"]["day"]
     assert tag["savings"] == 0.70
+
+
+# ------------------------------------------------- Verbrauch als Bezugsgröße
+#
+# Warum das hier steht: "Ersparnis heute: 2,80 €" ist ohne Menge eine Zahl,
+# die niemand nachrechnen kann. Erst mit dem Hausverbrauch daneben steht da
+# eine Aussage - acht Kilowattstunden verbraucht, davon acht selbst gedeckt,
+# macht bei 35 Cent 2,80 Euro.
+
+
+def test_der_hausverbrauch_wird_je_zeitraum_ausgewiesen():
+    """Der Zählerstand wird zur Menge - wie beim Netzzähler auch."""
+    r = _rechner()
+    r.rechnen({"import": 100.0, "own": 50.0, "house": 1000.0}, PREISE, {})
+    ergebnis = r.rechnen({"import": 102.0, "own": 56.0, "house": 1008.0}, PREISE, {})
+    tag = ergebnis["periods"]["day"]
+    assert tag["house_kwh"] == 8.0
+    assert tag["own_kwh"] == 6.0
+    # Und der Betrag bezieht sich genau darauf: 6 kWh × 0,34 €.
+    assert tag["savings"] == 2.04
+
+
+def test_der_grundverbrauch_zieht_den_ueberschussverbraucher_ab():
+    """Was der Heizstab aus der Sonne bekam, ist kein Grundverbrauch.
+
+    Dieselbe Rechnung wie bei der Leistung in der Karte, nur aufaddiert:
+    Grundverbrauch = Hausverbrauch minus der Anteil, der aus Überschuss lief.
+    """
+    r = _rechner()
+    r.rechnen({"own": 50.0, "house": 1000.0, "diverted": 200.0}, PREISE, {})
+    ergebnis = r.rechnen(
+        {"own": 56.0, "house": 1008.0, "diverted": 203.0}, PREISE, {}
+    )
+    tag = ergebnis["periods"]["day"]
+    assert tag["house_kwh"] == 8.0
+    assert tag["base_kwh"] == 5.0          # 8 gesamt, 3 davon in den Heizstab
+
+
+def test_ohne_hauszaehler_bleibt_die_menge_unbekannt():
+    """Kein Stand, keine Zahl - und schon gar keine null.
+
+    Eine null stünde in der Karte neben einem Betrag und behauptete, das Haus
+    habe heute nichts verbraucht.
+    """
+    r = _rechner()
+    r.rechnen({"import": 100.0, "own": 50.0}, PREISE, {})
+    ergebnis = r.rechnen({"import": 102.0, "own": 56.0}, PREISE, {})
+    tag = ergebnis["periods"]["day"]
+    assert tag["house_kwh"] is None
+    assert tag["base_kwh"] is None
+    # Der Betrag steht trotzdem da - er hängt am Eigenverbrauch, nicht hieran.
+    assert tag["savings"] == 2.04
+
+
+def test_der_hausverbrauch_laeuft_auch_im_gesamtzeitraum_mit():
+    """Alle vier Zeiträume, nicht nur der Tag."""
+    r = _rechner()
+    r.rechnen({"own": 50.0, "house": 1000.0}, PREISE, {})
+    ergebnis = r.rechnen({"own": 56.0, "house": 1008.0}, PREISE, {})
+    for periode in ("day", "month", "year", "total"):
+        assert ergebnis["periods"][periode]["house_kwh"] == 8.0, periode
+
+
+def test_die_ersparnis_ist_haushalt_zum_strompreis_plus_heizstab_zum_gaspreis():
+    """Die Formel in der README, nachgerechnet.
+
+    Im Code steht die kompakte Fassung
+
+        Eigenverbrauch × Arbeitspreis + umgeleitet × (Umleitpreis − Arbeitspreis)
+
+    und in der README die ausmultiplizierte
+
+        (Eigenverbrauch − umgeleitet) × Arbeitspreis + umgeleitet × Umleitpreis
+
+    Dass beide dasselbe ergeben, ist Algebra - und genau deshalb prüft dieser
+    Test die zweite Fassung gegen den Code. Läuft eine von beiden weg, fällt
+    es hier auf und nicht erst jemandem beim Nachrechnen.
+    """
+    preise = {**PREISE, "price": 0.35, "feed_in": 0.08, "diverted": 0.11}
+    r = _rechner()
+    r.rechnen({"own": 100.0, "export": 50.0, "diverted": 20.0}, preise, {})
+    ergebnis = r.rechnen(
+        {"own": 111.0, "export": 54.0, "diverted": 23.0}, preise, {}
+    )
+    tag = ergebnis["periods"]["day"]
+    assert tag["own_kwh"] == 11.0          # 8 Haushalt + 3 Heizstab
+    assert tag["diverted_kwh"] == 3.0
+
+    haushalt = round((11.0 - 3.0) * 0.35, 2)
+    heizstab = round(3.0 * 0.11, 2)
+    assert tag["savings"] == round(haushalt + heizstab, 2) == 3.13
+    assert tag["revenue"] == round(4.0 * 0.08, 2) == 0.32
+    assert tag["yield"] == 3.45
+
+
+def test_ohne_umleitpreis_zaehlt_der_heizstab_wie_jede_andere_last():
+    """Ersetzt er Strom - ein Speicher, ein Auto -, gibt es keinen Abstand."""
+    preise = {**PREISE, "price": 0.35}
+    r = _rechner()
+    r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
+    ergebnis = r.rechnen({"own": 111.0, "diverted": 23.0}, preise, {})
+    assert ergebnis["periods"]["day"]["savings"] == round(11.0 * 0.35, 2)

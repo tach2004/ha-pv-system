@@ -72,6 +72,12 @@
       },
       "phase_pv_power": {
         "default": "mdi:solar-power-variant-outline"
+      },
+      "house_energy_total": {
+        "default": "mdi:home-lightning-bolt-outline"
+      },
+      "base_energy_total": {
+        "default": "mdi:home-percent-outline"
       }
     }
   },

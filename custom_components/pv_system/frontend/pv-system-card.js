@@ -2692,6 +2692,13 @@ class PvSystemCard extends HTMLElement {
     const k = this._daten.costs || {};
     const w = k.currency;
     const zeit = k.periods || {};
+    // Ohne Überschussverbraucher sind Haus- und Grundverbrauch dieselbe
+    // Zahl - dann steht sie einmal da und nicht zweimal.
+    const umleiterAn = !!(
+      this._daten.house &&
+      this._daten.house.diverter &&
+      this._daten.house.diverter.enabled
+    );
     const zeilen = [
       ["Arbeitspreis", k.price === null ? "–" : `${einheit(k.price, "", 3, l)}${w}/kWh`],
       [
@@ -2726,10 +2733,28 @@ class PvSystemCard extends HTMLElement {
           `Einspeisung ${wort}`,
           `${einheit(z.export_kwh, "kWh", 2, l)} · ${geld(z.revenue, w, l)}`,
         ],
-        [`Ersparnis ${wort}`, geld(z.savings, w, l)],
+        // Die Ersparnis mit ihrer Bezugsgröße: So viele Kilowattstunden
+        // wurden selbst genutzt, so viel waren sie wert. Ohne die Menge ist
+        // der Betrag eine Zahl, die niemand nachrechnen kann.
+        [
+          `Ersparnis ${wort}`,
+          `${einheit(z.own_kwh, "kWh", 2, l)} · ${geld(z.savings, w, l)}`,
+        ],
         [`Ertrag ${wort}`, geld(z.yield, w, l)],
         [`Bilanz ${wort}`, geld(z.balance, w, l)]
       );
+      // Und worauf sich das alles bezieht: was das Haus in diesem Zeitraum
+      // überhaupt gezogen hat. Der Grundverbrauch nur dort, wo es einen
+      // Überschussverbraucher gibt - sonst sind beide dieselbe Zahl.
+      if (z.house_kwh !== null && z.house_kwh !== undefined) {
+        zeilen.push([`Verbrauch ${wort}`, einheit(z.house_kwh, "kWh", 2, l)]);
+        if (umleiterAn) {
+          zeilen.push([
+            `davon Grundverbrauch ${wort}`,
+            einheit(z.base_kwh, "kWh", 2, l),
+          ]);
+        }
+      }
     }
 
     const gesamt = zeit.total || {};

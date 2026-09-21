@@ -289,6 +289,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         conf = self.config[CONF_COSTS]
         erzeugung = _abrechnungsertrag(anlagen)
         umleiter = haus.get("diverter") or {}
+        staende = self.stunden.staende()
         zaehler = {
             "import": netz["import_energy"],
             "export": netz["export_energy"],
@@ -309,6 +310,16 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 haus["house_energy"],
                 netz["import_energy"],
             ),
+            # Der Hausverbrauch als Zählerstand. Ein eingetragener Hauszähler
+            # gewinnt - er misst, statt zu rechnen. Ohne ihn kommt der Stand
+            # aus dem Integral über die Leistung, also aus genau den Watt, die
+            # auch in der Karte stehen.
+            #
+            # Damit bekommt die Kostenrechnung Tag, Monat und Jahr für den
+            # Verbrauch mit derselben Mechanik wie für den Netzzähler - und
+            # damit steht endlich die Menge neben dem Betrag: Worauf sich die
+            # "Ersparnis heute" bezieht, ist sonst nicht nachzulesen.
+            "house": units.first(haus["house_energy"], staende.get("house")),
         }
 
         # Momentan selbst genutzt: was erzeugt wird und nicht ins Netz geht.
@@ -1225,12 +1236,22 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             },
         }
 
+        # Die beiden Verbräuche als fortlaufender Zählerstand. Der
+        # Hausverbrauch nimmt einen eingetragenen Zähler, wenn es ihn gibt -
+        # gemessen schlägt gerechnet. Der Grundverbrauch kann nur aus dem
+        # Integral kommen: Einen Sensor, der den Hausverbrauch ohne den
+        # Überschussverbraucher zählt, hat niemand im Haus stehen.
+        hauszaehler = units.rund(units.kwh(self.hass, conf[CONF_HOUSE_ENERGY]), 2)
+        staende = self.stunden.staende()
+
         return {
             "house_power": units.rund(verbrauch),
             "base_power": units.rund(bezugsgroesse),
             "house_source": "sensor" if gemessen is not None else "calculated",
             "diverter": umleiter,
-            "house_energy": units.rund(units.kwh(self.hass, conf[CONF_HOUSE_ENERGY]), 2),
+            "house_energy": hauszaehler,
+            "house_energy_total": units.first(hauszaehler, staende.get("house")),
+            "base_energy_total": staende.get("base"),
             "self_sufficiency": autarkie,
             "base_self_sufficiency": grundautarkie,
             "self_consumption": eigenverbrauch,

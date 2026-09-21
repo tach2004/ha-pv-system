@@ -52,9 +52,11 @@ from .const import (
     CONF_SENSOR_INTERVAL,
     DOMAIN,
     KEY_BALANCE,
+    KEY_BASE_ENERGY_TOTAL,
     KEY_COST_RATE,
     KEY_FEED_IN_REVENUE,
     KEY_GRID_COST,
+    KEY_HOUSE_ENERGY_TOTAL,
     KEY_PAYBACK_PROGRESS,
     KEY_PAYBACK_SURPLUS,
     KEY_PAYBACK_YEARS,
@@ -387,6 +389,41 @@ STANDORT: tuple[PvSensorDescription, ...] = (
         # Nur anlegen, wenn eine Energie-Entität hinterlegt ist. Ohne sie gäbe
         # es einen Zähler, der dauerhaft unbekannt bleibt.
         wenn=lambda c: bool(c["house"]["entities"]["energy"]),
+    ),
+    # Die beiden gerechneten Zähler.
+    #
+    # Sie schließen die Lücke zwischen Leistung und Geld: Die Karte zeigt
+    # Watt, die Kostensensoren zeigen Euro - was dazwischen liegt, die
+    # Kilowattstunden, stand bisher nirgends. Und ohne sie ist "Ersparnis
+    # heute: 2,80 €" eine Zahl ohne Bezugsgröße.
+    #
+    # TOTAL_INCREASING und fortlaufend, nicht je Tag: Damit kann die
+    # Langzeitstatistik von Home Assistant arbeiten, und der Tages-, Monats-
+    # und Jahreswert entsteht daraus von selbst - auch im Energie-Dashboard.
+    PvSensorDescription(
+        key=KEY_HOUSE_ENERGY_TOTAL,
+        translation_key=KEY_HOUSE_ENERGY_TOTAL,
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=KWH,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        # Mit eingetragenem Hauszähler ist dieser Sensor dessen Wiederholung:
+        # Dann steht dort derselbe Stand. Ohne ihn ist er die einzige Stelle,
+        # an der der Hausverbrauch als Menge überhaupt auftaucht.
+        spiegel=lambda c: _gesetzt(c["house"]["entities"]["energy"]),
+        wert=lambda d: d["house"]["house_energy_total"],
+        extra=lambda d: {"source": d["house"]["house_source"]},
+    ),
+    PvSensorDescription(
+        key=KEY_BASE_ENERGY_TOTAL,
+        translation_key=KEY_BASE_ENERGY_TOTAL,
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=KWH,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        # Nie eine Wiederholung: Einen Zähler, der den Hausverbrauch ohne den
+        # Überschussverbraucher führt, gibt es in keinem Haushalt.
+        wert=lambda d: d["house"]["base_energy_total"],
     ),
     # Die beiden Quoten als Stundenwert, nicht als Momentaufnahme. Wie viel
     # Prozent in der Sekunde 13:04:07 aus dem Netz kamen, beantwortet keine
@@ -867,7 +904,21 @@ class PvBasis(CoordinatorEntity[PvSystemCoordinator], SensorEntity):
     def __init__(self, coordinator: PvSystemCoordinator) -> None:
         super().__init__(coordinator)
         self._entry_id = coordinator.config_entry.entry_id
-        self._geschrieben: float = 0.0
+        # None heißt "noch nie geschrieben", nicht 0.0.
+        #
+        # Der Unterschied ist keine Kosmetik: monotonic() zählt ab einem
+        # beliebigen Punkt, unter Linux ab dem Systemstart. Mit einer Null als
+        # Anfangswert wäre die Differenz kurz nach dem Booten kleiner als der
+        # Takt - der allererste Messwert fiele weg, und bei einem Takt von
+        # dreißig Sekunden stünde eine halbe Minute lang nichts da.
+        self._geschrieben: float | None = None
+
+    def _faellig(self, takt: float) -> bool:
+        """Ist das Zeitfenster seit dem letzten Schreiben um?
+
+        Vor dem ersten Schreiben immer - siehe __init__.
+        """
+        return self._geschrieben is None or monotonic() - self._geschrieben >= takt
 
     def _handle_coordinator_update(self) -> None:
         """Den Takt einhalten, statt jede Messung weiterzureichen.
@@ -885,10 +936,9 @@ class PvBasis(CoordinatorEntity[PvSystemCoordinator], SensorEntity):
         """
         takt = self.coordinator.config[CONF_DISPLAY][CONF_SENSOR_INTERVAL]
         if takt and self._taktgebunden:
-            jetzt = monotonic()
-            if jetzt - self._geschrieben < takt:
+            if not self._faellig(takt):
                 return
-            self._geschrieben = jetzt
+            self._geschrieben = monotonic()
         super()._handle_coordinator_update()
 
     @property
@@ -1076,7 +1126,7 @@ class StatusSensor(PvBasis):
         """
         takt = self.coordinator.config[CONF_DISPLAY][CONF_CARD_INTERVAL]
         wort = self.native_value
-        if takt and wort == self._wort and monotonic() - self._geschrieben < takt:
+        if takt and wort == self._wort and not self._faellig(takt):
             return
         self._wort = wort
         self._geschrieben = monotonic()

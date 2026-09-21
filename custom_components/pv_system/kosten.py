@@ -615,10 +615,16 @@ class Kostenrechner:
         Der Grundpreis ist eine monatliche Pauschale. Er wird nach der bisher
         verstrichenen Zeit verteilt, sonst stünde am Ersten des Monats ein
         voller Monatsbeitrag in der Tagesansicht.
+
+        Dazu die beiden Verbrauchsmengen. Sie gehen in keinen Betrag ein und
+        stehen trotzdem hier: Ohne sie ist "Ersparnis heute: 2,80 €" eine
+        Zahl ohne Bezugsgröße. Mit ihnen steht daneben, auf welchen Verbrauch
+        sie sich bezieht - und dass 8 kWh davon selbst genutzt wurden.
         """
         bezug = mengen.get("import")
         einspeisung = mengen.get("export")
         eigen = mengen.get("own")
+        verbrauch = mengen.get("house")
 
         kosten = None
         grundkosten = None
@@ -644,6 +650,18 @@ class Kostenrechner:
         if ersparnis is not None or erloes is not None:
             ertrag = round((ersparnis or 0.0) + (erloes or 0.0), 2)
 
+        # Der Grundverbrauch ist der Hausverbrauch ohne den Anteil, der aus
+        # Überschuss lief - dieselbe Rechnung wie bei der Leistung in der
+        # Karte, nur über den Zeitraum aufaddiert. Gezogen wird der rohe
+        # Umleitungsstand und nicht der oben auf den Eigenverbrauch begrenzte:
+        # Was der Heizstab aus der Sonne bekam, ist kein Grundverbrauch,
+        # gleichgültig wie die Ersparnis dafür bewertet wird.
+        grundverbrauch = None
+        if verbrauch is not None:
+            grundverbrauch = round(
+                max(0.0, verbrauch - (_zahl(mengen.get("diverted")) or 0.0)), 3
+            )
+
         return {
             "start": mengen.get("start"),
             # Nur der Gesamtzeitraum trägt das; Tag, Monat und Jahr sind
@@ -652,6 +670,11 @@ class Kostenrechner:
             "import_kwh": bezug,
             "export_kwh": einspeisung,
             "own_kwh": eigen,
+            # Worauf sich Ersparnis und Ertrag beziehen: was das Haus in
+            # diesem Zeitraum überhaupt gezogen hat, und davon der Teil ohne
+            # Überschussverbraucher.
+            "house_kwh": verbrauch,
+            "base_kwh": grundverbrauch,
             "diverted_kwh": round(umgeleitet, 3) if eigen is not None else None,
             "cost": kosten,
             # Der Grundpreis steckt in "cost" mit drin. Getrennt ausgewiesen,

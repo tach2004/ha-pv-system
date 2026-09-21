@@ -166,11 +166,25 @@ class Store:
     Für die Rechnung genügt das: Geprüft wird, ob die Periodenmarken richtig
     gesetzt und fortgeschrieben werden - nicht, ob Home Assistant Dateien
     schreiben kann.
+
+    Der Inhalt hängt am Schlüssel und nicht an der Instanz - wie die Datei
+    unter ``.storage``. Nur so lässt sich ein Neustart nachstellen: ein
+    zweites Objekt mit demselben Schlüssel findet vor, was das erste
+    geschrieben hat. Jeder Test räumt über :func:`speicher_leeren` auf.
     """
+
+    _dateien: dict[str, Any] = {}
 
     def __init__(self, hass, version, schluessel) -> None:
         self.schluessel = schluessel
-        self.inhalt: Any = None
+
+    @property
+    def inhalt(self) -> Any:
+        return Store._dateien.get(self.schluessel)
+
+    @inhalt.setter
+    def inhalt(self, daten: Any) -> None:
+        Store._dateien[self.schluessel] = daten
 
     async def async_load(self) -> Any:
         return self.inhalt
@@ -180,6 +194,11 @@ class Store:
 
     def async_delay_save(self, daten_funktion, verzug) -> None:
         self.inhalt = daten_funktion()
+
+
+def speicher_leeren() -> None:
+    """Alles vergessen, was unter .storage läge."""
+    Store._dateien.clear()
 
 
 class _DatumZeit:
