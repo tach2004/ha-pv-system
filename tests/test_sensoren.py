@@ -274,18 +274,25 @@ def test_grundverbrauch_zieht_die_ueberschussverbraucher_ab():
     assert haus["house_power"] == 2000.0
     # Zwei Heizstäbe werden addiert.
     assert haus["diverter"]["power"] == 1500.0
-    assert haus["base_power"] == 500.0
+    # 1500 W Stab, 100 W davon erklärt der Netzbezug - die bleiben im
+    # Grundverbrauch stehen.
+    assert haus["base_power"] == 600.0
     # Die Autarkie rechnet auf dem ganzen Hausverbrauch: 2000 W gezogen,
     # davon 100 W vom Netz. Wer nichts aus dem Netz holt, ist autark - egal,
     # wofür der Strom im Haus gebraucht wurde.
     assert haus["self_sufficiency"] == 95.0
-    # Daneben dieselbe Rechnung ohne den Heizstab: 500 W Grundbedarf, 100 W
+    # Daneben dieselbe Rechnung ohne den Heizstab: 600 W Grundbedarf, 100 W
     # vom Netz. Nur die ist von Monat zu Monat vergleichbar.
-    assert haus["base_self_sufficiency"] == 80.0
+    assert haus["base_self_sufficiency"] == round(100 * 500 / 600, 1)
 
 
-def test_ohne_trennsensor_gilt_der_ueberschuss_als_selbst_erzeugt():
-    """Ein Überschussverbraucher zieht nichts aus dem Netz - so heißt er."""
+def test_ohne_trennsensor_wird_der_netzanteil_geschaetzt():
+    """Was das Haus aus dem Netz zieht, kam nicht aus Überschuss.
+
+    Früher galt hier "alles kam aus Überschuss". Das stimmt am Mittag und
+    ist abends grob falsch - der Heizstab, der um zehn am Netz nachheizt,
+    spart nichts. Geschätzt wird deshalb aus dem Netzbezug.
+    """
     aufbau = _aufbau(
         house={
             "calculate": True,
@@ -301,9 +308,59 @@ def test_ohne_trennsensor_gilt_der_ueberschuss_als_selbst_erzeugt():
         hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
     )._berechnen()["house"]
     assert haus["diverter"]["split"] is False
-    assert haus["diverter"]["grid_power"] is None
-    # Die 100 W vom Netz gehören ganz dem Grundverbrauch.
-    assert haus["base_self_sufficiency"] == 80.0
+    # 1500 W Stab, 100 W davon kann das Netz erklären.
+    assert haus["diverter"]["solar_power"] == 1400.0
+    assert haus["diverter"]["grid_power"] == 100.0
+    # Also 600 W Grundverbrauch, 100 W davon aus dem Netz.
+    assert haus["base_power"] == 600.0
+    assert haus["base_self_sufficiency"] == round(100 * 500 / 600, 1)
+
+
+def test_abends_am_netz_ist_der_heizstab_kein_ueberschussverbraucher():
+    """Der Fall aus der Praxis, der die ganze Ersparnis verschoben hat.
+
+    Kein Überschuss mehr, der Stab heizt am Netz nach. Dann ist er ein
+    gewöhnliches Gerät: nichts geht vom Grundverbrauch ab, und in die
+    Ersparnis fließt kein einziges Watt.
+    """
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 1800, "W")
+    hass.states.setzen("sensor.stab", 1500, "W")
+    hass.states.setzen("sensor.netz", 1800, "W")
+    haus = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]
+    assert haus["diverter"]["solar_power"] == 0.0
+    assert haus["diverter"]["grid_power"] == 1500.0
+    assert haus["base_power"] == 1800.0
+
+
+def test_nachts_aus_der_batterie_bleibt_es_ueberschuss():
+    """Was die Batterie abgibt, ist gespeicherte Sonne - kein Netzbezug."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 1800, "W")
+    hass.states.setzen("sensor.stab", 1500, "W")
+    hass.states.setzen("sensor.netz", 0, "W")
+    haus = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]
+    assert haus["diverter"]["solar_power"] == 1500.0
+    assert haus["diverter"]["grid_power"] == 0.0
+    assert haus["base_power"] == 300.0
 
 
 def test_mit_trennsensor_wird_der_netzanteil_dem_stab_zugerechnet():
@@ -1137,3 +1194,65 @@ def test_ein_wort_das_haelt_kommt_durch():
         status._handle_coordinator_update()      # jetzt hat es gehalten
 
     assert _wortwechsel(geschrieben) == ["importing", "exporting"]
+
+
+# --------------------------------------- Vom Watt bis zum Betrag, ein Weg
+#
+# Der Fehler von oben ließ sich nur dort sehen, wo Leistung, Zählerstand und
+# Betrag zusammenkommen. Deshalb hier der ganze Weg an einem Stück.
+
+
+def test_der_ueberschusszaehler_steht_still_wenn_der_stab_am_netz_haengt():
+    """Abends heizt er am Netz - dann läuft sein Anteilszähler nicht weiter.
+
+    Der ganze Weg an einem Stück: Aus den Leistungen entsteht der geschätzte
+    Überschussanteil, daraus der Zählerstand, und aus dem die Bewertung. Der
+    Fehler war nur an dieser Kette zu sehen.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    ha_stubs.speicher_leeren()
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    koordinator = PvSystemCoordinator(hass, ha_stubs.ConfigEntry("Zuhause", aufbau))
+    # Ein eigenes Integral: _berechnen füttert sein eigenes mit der echten
+    # Uhr, und zwei Uhren in einem Test vertragen sich nicht.
+    uhr = stunde.Stundenwerte(hass, "probe")
+
+    def eine_stunde(haus_w, stab_w, netz_w, ab):
+        hass.states.setzen("sensor.haus", haus_w, "W")
+        hass.states.setzen("sensor.stab", stab_w, "W")
+        hass.states.setzen("sensor.netz", netz_w, "W")
+        haus = koordinator._berechnen()["house"]
+        jetzt = ab
+        for _ in range(61):
+            uhr.rechnen(
+                {
+                    "house": haus["house_power"],
+                    "divert": haus["diverter"]["solar_power"],
+                },
+                jetzt,
+            )
+            jetzt += timedelta(minutes=1)
+        return jetzt, haus
+
+    start = datetime(2026, 9, 21, 12, 0, tzinfo=timezone.utc)
+    # Mittag: 1500 W Heizstab, nichts aus dem Netz - voller Überschuss.
+    jetzt, haus = eine_stunde(1800, 1500, 0, start)
+    assert haus["diverter"]["solar_power"] == 1500.0
+    assert uhr.staende()["divert"] == 1.5
+
+    # Abend: derselbe Stab, aber alles aus dem Netz. Der Anteil steht still.
+    _, haus = eine_stunde(1800, 1500, 1800, jetzt)
+    assert haus["diverter"]["solar_power"] == 0.0
+    assert uhr.staende()["divert"] == 1.5
+    # Der Hausverbrauch läuft dagegen weiter - er ist ja da. 121 Minuten mal
+    # 1,8 kW: Die erste Messung stellt nur die Uhr, die Minute zwischen den
+    # beiden Stunden wird überbrückt.
+    assert uhr.staende()["house"] == 3.63

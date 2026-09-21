@@ -67,7 +67,10 @@ MINDESTMENGE = 0.01
 # vergleichbare, weil sie nicht mit der Sonne schwankt. Der Netzbezug ist für
 # beide derselbe - was aus dem Netz kam, kam nicht aus Überschuss und steht
 # deshalb in beiden Verbrauchszahlen.
-GROESSEN = ("house", "base", "import", "export", "yield")
+# "divert" ist der Anteil des Überschussverbrauchers, der aus PV oder Batterie
+# kam - gemessen, wenn es einen Trennsensor gibt, sonst geschätzt. Aus ihm
+# entsteht der Zählerstand, mit dem die Kostenrechnung den Heizstab bewertet.
+GROESSEN = ("house", "base", "import", "export", "yield", "divert")
 
 
 class Stundenwerte:

@@ -1022,3 +1022,45 @@ def test_ohne_umleitpreis_zaehlt_der_heizstab_wie_jede_andere_last():
     r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
     ergebnis = r.rechnen({"own": 111.0, "diverted": 23.0}, preise, {})
     assert ergebnis["periods"]["day"]["savings"] == round(11.0 * 0.35, 2)
+
+
+# ------------------------------------------------- Der Heizstab am Abend
+#
+# Der Fehler, der die ganze Ersparnis verschoben hat: Ohne Trennzähler ging
+# der *volle* Zählerstand des Überschussverbrauchers in die Bewertung. Der
+# wächst aber auch dann, wenn das Gerät am Netz heizt. Weil der Betrag unten
+# auf den Eigenverbrauch gedeckelt wird, landete am Ende der gesamte
+# Eigenverbrauch beim Heizstab und nichts beim Haushalt - genau das, was in
+# der Karte stand: "Ersparnis heute 0,10 kWh, davon Haushalt 0,00".
+
+
+def test_ein_heizstab_am_netz_verschiebt_die_ersparnis_nicht():
+    """Der gemeldete Fall, nachgestellt.
+
+    Der Verbraucher hat tagsüber gelaufen und läuft abends am Netz weiter.
+    Sein Überschussanteil steht still, sein eigener Zähler nicht. Bewertet
+    werden darf nur der Anteil.
+    """
+    preise = {**PREISE, "price": 0.338, "diverted": 0.11}
+    r = _rechner()
+    r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
+    # Zehn kWh selbst genutzt, davon nichts aus Überschuss: Der Heizstab hing
+    # am Netz, sein Anteilszähler ist stehen geblieben.
+    ergebnis = r.rechnen({"own": 110.0, "diverted": 20.0}, preise, {})
+    tag = ergebnis["periods"]["day"]
+    assert tag["diverted_kwh"] == 0.0
+    assert tag["savings_diverted"] == 0.0
+    assert tag["savings_base"] == round(10.0 * 0.338, 2)
+    assert tag["savings"] == round(10.0 * 0.338, 2)
+
+
+def test_der_anteil_wird_weiter_getrennt_bewertet():
+    """Die Gegenprobe: Läuft er auf Überschuss, zählt er wie vorher."""
+    preise = {**PREISE, "price": 0.338, "diverted": 0.11}
+    r = _rechner()
+    r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
+    ergebnis = r.rechnen({"own": 110.0, "diverted": 26.0}, preise, {})
+    tag = ergebnis["periods"]["day"]
+    assert tag["diverted_kwh"] == 6.0
+    assert tag["savings_diverted"] == round(6.0 * 0.11, 2)
+    assert tag["savings_base"] == round(4.0 * 0.338, 2)

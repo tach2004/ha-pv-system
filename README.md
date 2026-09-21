@@ -610,7 +610,30 @@ darüber zu schön.
 | 1500 W | 1500 W | Hausverbrauch − 1500 W |
 | 1500 W | 400 W | Hausverbrauch − 400 W |
 | 1500 W | 0 W | Hausverbrauch (voller Abzug entfällt) |
-| 1500 W | *kein Sensor* | Hausverbrauch − 1500 W |
+
+**Ohne den Sensor wird geschätzt, nicht geraten.** Bis Fassung 1.2.1 galt
+dann „alles kam aus Überschuss". Das stimmt mittags und ist abends grob
+falsch – der Heizstab, der um zehn am Netz nachheizt, spart nichts.
+
+Geschätzt wird aus dem **Netzbezug**: Was das Haus gerade aus dem Netz zieht,
+kann nicht aus Überschuss gekommen sein. Übrig bleibt der Teil des
+Verbrauchers, den der Netzbezug nicht erklärt.
+
+| Lage | Verbraucher | Netzbezug | gilt als Überschuss |
+|---|---|---|---|
+| Mittag, Sonne | 1500 W | 0 W | **1500 W** |
+| Mittag, Wolke | 1500 W | 600 W | **900 W** |
+| Abend, am Netz | 1500 W | 1800 W | **0 W** |
+| Nachts, aus der Batterie | 1500 W | 0 W | **1500 W** |
+
+Die dritte Zeile ist der Fall, der vorher falsch war. Die vierte ist richtig
+so: Was die Batterie abgibt, ist gespeicherte Sonne.
+
+Die Schätzung liegt eher zu niedrig als zu hoch – sie rechnet den Netzbezug
+zuerst dem Verbraucher an, auch wenn er in Wirklichkeit vom Kühlschrank kam.
+Das ist die richtige Richtung: lieber eine Ersparnis zu wenig ausweisen als
+eine zu viel. Wer es genau will, trägt die beiden Sensoren *Davon aus
+PV/Batterie* ein.
 
 Der **Netzbezug bleibt dabei ungeteilt**: Was der Verbraucher aus dem Netz
 gezogen hat, steckt jetzt im Grundverbrauch – und sein Bezug gehört dorthin,
@@ -783,10 +806,10 @@ Wiederholung und deshalb abgeschaltet – der zweite nie.
 | Feld | Einheit | Was passiert damit | Leer? |
 |---|---|---|---|
 | **Überschussverbraucher** | Text | Name in der Karte, z. B. „Heizstab“ | „Überschuss“ |
-| **Leistung Überschussverbraucher** | W, mehrere | Was sie gerade ziehen. Der Anteil aus Überschuss wird vom Hausverbrauch abgezogen → **Grundverbrauch** | Kein Grundverbrauch |
-| **Zähler Überschussverbraucher** | kWh, mehrere | Diese kWh werden in der Ersparnis mit dem Preis des Ersetzten bewertet statt mit dem Arbeitspreis | Überschuss zählt wie normaler Eigenverbrauch |
-| **Davon aus PV/Batterie: Leistung** | W, mehrere | Der Anteil, der gerade aus der eigenen Anlage kommt. **Nur er geht vom Grundverbrauch ab** | Alles gilt als Überschuss |
-| **Davon aus PV/Batterie: Zähler** | kWh, mehrere | Dasselbe als Zählerstand. Ist er gesetzt, geht nur er in die Ersparnis ein – der Rest ist Netzbezug zum Arbeitspreis | Alles gilt als Überschuss |
+| **Leistung Überschussverbraucher** | W, mehrere | Was sie gerade ziehen. Der Anteil aus Überschuss wird vom Hausverbrauch abgezogen → **Grundverbrauch** | Kein Grundverbrauch, kein Grundverbrauchssensor, keine Kartenzeile |
+| **Zähler Überschussverbraucher** | kWh, mehrere | Nur Anzeige. Bewertet wird der **Anteil aus Überschuss**, gemessen oder geschätzt – nicht dieser Zähler | Keine eigene Zeile in der Detailtabelle |
+| **Davon aus PV/Batterie: Leistung** | W, mehrere | Der Anteil, der gerade aus der eigenen Anlage kommt. **Nur er geht vom Grundverbrauch ab** | Wird aus dem Netzbezug geschätzt – siehe oben |
+| **Davon aus PV/Batterie: Zähler** | kWh, mehrere | Dasselbe als Zählerstand. Ist er gesetzt, geht nur er in die Ersparnis ein – der Rest ist Netzbezug zum Arbeitspreis | Die geschätzte Leistung wird aufaddiert |
 | **Ersetzt** | Auswahl | Erdgas, Flüssiggas, Heizöl, Pellets, Fernwärme, Wärmepumpe oder „Nichts – es bleibt Strom“. Bei „Strom“ werden die Preisfelder ignoriert | Erdgas |
 | **Preis des Ersetzten: feste Zahl** | Geld | Der Preis von der Rechnung, **nicht umgerechnet** | Es gilt der Arbeitspreis |
 | **… : je** | Auswahl | kWh, Liter, m³, kg oder Tonne – die Einheit, in der abgerechnet wird | kWh |

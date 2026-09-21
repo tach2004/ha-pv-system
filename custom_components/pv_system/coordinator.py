@@ -290,6 +290,8 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         conf = self.config[CONF_COSTS]
         erzeugung = _abrechnungsertrag(anlagen)
         umleiter = haus.get("diverter") or {}
+        conf_haus = self.config[CONF_HOUSE]
+        staende = self.stunden.staende()
 
         # Nicht eingetragen heißt null, eingetragen und stumm heißt unbekannt.
         # Der Unterschied entscheidet, ob "Ertrag heute" einen Neustart
@@ -303,16 +305,22 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         zaehler = {
             "import": netz["import_energy"],
             "export": netz["export_energy"],
-            # Was in den Überschussverbraucher ging - ein Teil des
-            # Eigenverbrauchs, aber mit eigenem Wert. Ist der Anteil aus
-            # PV/Batterie getrennt gemessen, zählt nur er: Die Kilowattstunde,
-            # die der Heizstab im Januar aus dem Netz gezogen hat, ersetzt zwar
+            # Was aus Überschuss in den Verbraucher ging - ein Teil des
+            # Eigenverbrauchs, aber mit eigenem Wert. Die Kilowattstunde, die
+            # der Heizstab im Januar aus dem Netz gezogen hat, ersetzt zwar
             # auch Gas, kostet aber vorher den vollen Arbeitspreis - sie ist
             # kein Sondertarif, sondern ganz normaler Bezug.
+            #
+            # Gemessen, wenn ein Trennzähler eingetragen ist. Sonst der Stand
+            # aus dem Integral über die geschätzte Leistung - und nicht mehr
+            # der ganze Zähler des Verbrauchers. Der wuchs auch nachts weiter,
+            # und weil die Bewertung unten auf den Eigenverbrauch gedeckelt
+            # wird, landete am Ende der *gesamte* Eigenverbrauch beim Heizstab
+            # und nichts beim Haushalt.
             "diverted": (
                 umleiter.get("solar_energy")
-                if umleiter.get("split")
-                else umleiter.get("energy")
+                if conf_haus[CONF_DIVERTER_SOLAR_ENERGY]
+                else staende.get("divert")
             ),
             "own": eigenverbrauch_kwh(
                 erzeugung,
@@ -1119,13 +1127,44 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         verbrauch = units.first(gemessen, gerechnet)
 
         # Der Überschussverbraucher und der Teil davon, der aus PV oder
-        # Batterie kam. Ohne den zweiten Sensor gilt, was der Name sagt: alles.
+        # Batterie kam.
         umleiterleistung = units.add(
             *(units.watt(self.hass, e) for e in conf[CONF_DIVERTER_POWER])
         )
         umleitersonne = units.add(
             *(units.watt(self.hass, e) for e in conf[CONF_DIVERTER_SOLAR_POWER])
         )
+        if not conf[CONF_DIVERTER_SOLAR_POWER]:
+            # Kein Trennsensor. Bisher galt dann "alles kam aus Überschuss" -
+            # und das ist abends nachweislich falsch: Ein Heizstab, der um
+            # zehn Uhr nachts am Netz nachheizt, spart nichts, sondern kostet.
+            # Trotzdem wanderte seine ganze Energie in die Ersparnis, und weil
+            # sie dort auf den Eigenverbrauch gedeckelt wird, landete am Ende
+            # der *gesamte* Eigenverbrauch beim Heizstab und nichts beim
+            # Haushalt.
+            #
+            # Schätzen lässt es sich aber, und zwar gut: Was das Haus gerade
+            # aus dem Netz zieht, kann nicht aus Überschuss gekommen sein.
+            # Übrig bleibt der Teil des Verbrauchers, den der Netzbezug nicht
+            # erklärt.
+            #
+            #   Mittag, Sonne      1500 W Heizstab,    0 W Netz -> 1500 W
+            #   Mittag, Wolke      1500 W Heizstab,  600 W Netz ->  900 W
+            #   Abend, am Netz     1500 W Heizstab, 1800 W Netz ->    0 W
+            #   Nachts, Batterie   1500 W Heizstab,    0 W Netz -> 1500 W
+            #
+            # Die dritte Zeile ist der Fall, der vorher falsch war. Die vierte
+            # ist richtig so: Was die Batterie abgibt, ist gespeicherte Sonne.
+            #
+            # Die Schätzung liegt eher zu niedrig als zu hoch - sie rechnet
+            # den Netzbezug zuerst dem Verbraucher an, auch wenn er in
+            # Wirklichkeit vom Kühlschrank kam. Das ist die richtige Richtung:
+            # lieber eine Ersparnis zu wenig ausweisen als eine zu viel.
+            umleitersonne = (
+                None
+                if umleiterleistung is None
+                else max(0.0, umleiterleistung - (netz["import_power"] or 0.0))
+            )
 
         # Die Autarkie rechnet auf dem ganzen Hausverbrauch. Sie beantwortet
         # genau eine Frage - wie viel von dem, was das Haus zieht, kam nicht
@@ -1151,7 +1190,9 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         #
         # Ohne den Trennsensor gilt, was der Name sagt: alles kam aus
         # Überschuss, also wird alles abgezogen.
-        ueberschussanteil = umleitersonne if conf[CONF_DIVERTER_SOLAR_POWER] else umleiterleistung
+        # Abgezogen wird der geschätzte oder der gemessene Anteil - nie mehr
+        # die ganze Leistung des Verbrauchers.
+        ueberschussanteil = umleitersonne
         bezugsgroesse = verbrauch
         if verbrauch is not None and ueberschussanteil:
             bezugsgroesse = max(0.0, verbrauch - ueberschussanteil)
@@ -1161,10 +1202,11 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # dorthin, wo sein Verbrauch steht.
         grundautarkie = _quote(bezugsgroesse, netz["import_power"])
 
-        # Was der Überschussverbraucher gerade aus dem Netz zieht. Nur bekannt,
-        # wenn jemand es getrennt misst; sonst ist es die Annahme "nichts".
+        # Was der Überschussverbraucher gerade aus dem Netz zieht: gemessen,
+        # wenn es einen Trennsensor gibt - sonst geschätzt, und zwar aus
+        # derselben Rechnung wie oben.
         netzumleitung = None
-        if conf[CONF_DIVERTER_SOLAR_POWER] and umleiterleistung is not None:
+        if umleiterleistung is not None:
             netzumleitung = max(0.0, umleiterleistung - (umleitersonne or 0.0))
 
         # Bezugsgröße für den Eigenverbrauch ist die erzeugte Leistung am Modul,
@@ -1192,6 +1234,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "import": netz["import_power"],
                 "export": netz["export_power"],
                 "yield": erzeugung,
+                "divert": umleitersonne,
             }
         )
 
