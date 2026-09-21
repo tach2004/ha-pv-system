@@ -163,11 +163,17 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().__init__(
             hass,
             _LOGGER,
+            # Den Eintrag ausdrücklich mitgeben. Ohne ihn holt Home Assistant
+            # ihn aus einer ContextVar, die nur während der Einrichtung
+            # gesetzt ist - das geht heute gut und ist trotzdem nur geliehen.
+            # Mit der Angabe hängt der Koordinator sauber am Eintrag: Er wird
+            # beim Abbau von selbst beendet, und seine Hintergrundaufgabe
+            # trägt dessen Namen im Log.
+            config_entry=entry,
             name=entry.title,
             update_interval=SICHERHEITSNETZ,
             always_update=False,
         )
-        self.entry = entry
         self.config = normalisieren(dict(entry.options))
         self.kosten = Kostenrechner(hass, entry.entry_id)
         self.stunden = Stundenwerte(hass, entry.entry_id)
@@ -212,7 +218,12 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         alt = event.data["old_state"]
         if neu is not None and alt is not None and neu.state == alt.state:
             return
-        self.hass.async_create_task(self._sammler.async_call())
+        # Am Eintrag angelegt statt frei an hass: Home Assistant wartet beim
+        # Abbau auf diese Aufgaben. Sonst könnte eine Rechnung noch laufen,
+        # während die Sensoren schon weg sind.
+        self.config_entry.async_create_task(
+            self.hass, self._sammler.async_call(), eager_start=True
+        )
 
     async def _async_neu_rechnen(self) -> None:
         self.async_set_updated_data(self._berechnen())
@@ -418,7 +429,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if spitze and module["power"] is not None and spitze > 0:
             module["utilisation"] = round(100.0 * module["power"] / spitze, 1)
 
-        return {
+        fertig = {
             CONF_ID: anlage[CONF_ID],
             CONF_NAME: anlage[CONF_NAME],
             "modules": module,
@@ -426,6 +437,12 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "battery": batterie,
             "inverter": wechselrichter,
         }
+        # Erst jetzt, wo alle vier Teile stehen: Der Gleichstrang unterhalb
+        # der Batterieabzweigung ergibt sich aus allen vieren. Er wandert
+        # mit, damit die Karte die Richtung nicht selbst herleiten muss -
+        # zwei Rechnungen für dieselbe Frage laufen mit der Zeit auseinander.
+        wechselrichter["dc_power"] = self._dc_strang(fertig)
+        return fertig
 
     def _modulseite(
         self, module: dict[str, Any], quelle: str, werte: dict[str, float | None]
@@ -945,29 +962,97 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return max(leistung, 0.0)
 
     @staticmethod
-    def _hausbeitrag(wechselrichter: dict[str, Any]) -> float | None:
+    def _dc_strang(anlage: dict[str, Any]) -> float | None:
+        """Was unterhalb der Batterieabzweigung auf dem Gleichstrang fließt.
+
+        Positiv heißt vom Dach zum Wechselrichter, negativ vom Wechselrichter
+        zur Batterie - der Fall "aus dem Netz laden".
+
+        Der Normalfall ist einfach: Was der Wechselrichter auf der
+        Wechselstromseite abgibt, zieht er auf der Gleichstromseite.
+
+        Rückwärts ist es keine einzelne Zahl mehr. Ein Hybrid, der -1019 W
+        meldet, lädt nicht mit 1019 W: Ein Teil davon ist sein eigener
+        Verbrauch und kommt auf dem Strang nie an. Wie viel ankommt, sagt die
+        Batterie selbst - abzüglich dessen, was in diesem Augenblick ohnehin
+        vom Dach kommt. Bleibt nichts übrig, steht das Gerät nur im Standby;
+        dann fließt auf dem Strang nichts, und die Karte lässt ihn in Ruhe.
+
+        Ohne den Haken "Hybrid" gibt es keinen Weg vom Netz zur Batterie. Eine
+        negative Zahl ist dann immer Eigenverbrauch des Geräts.
+        """
+        wechselrichter = anlage["inverter"]
+        leistung = wechselrichter["power"]
+        if leistung is None or not wechselrichter["enabled"]:
+            return None
+        if leistung >= 0:
+            return leistung
+        if not wechselrichter["hybrid"]:
+            return 0.0
+
+        batterie = anlage["battery"]
+        if not batterie["enabled"]:
+            return 0.0
+
+        ladung = batterie["power"]
+        if ladung is None:
+            # Keine Batterieleistung eingetragen: Dann lässt sich Standby von
+            # Laden nicht unterscheiden. Angenommen wird das Laden - das ist
+            # der Fall, für den jemand den Haken überhaupt setzt, und es ist
+            # das Verhalten, das die Integration schon immer hatte. Wer es
+            # genau haben will, trägt den Batteriesensor ein.
+            return leistung
+        if ladung <= 0:
+            return 0.0
+
+        # Was oberhalb der Abzweigung ankommt: hinter dem Laderegler dessen
+        # Ausgang, ohne Laderegler der Modulstrang selbst.
+        laderegler = anlage["charger"]
+        oben = (
+            laderegler["power"] if laderegler["enabled"] else anlage["modules"]["power"]
+        )
+        vom_dach = max(oben or 0.0, 0.0)
+        aus_dem_netz = max(0.0, ladung - vom_dach)
+        # Mehr als der Wechselrichter zieht, kann nicht aus dem Netz kommen.
+        return -round(min(aus_dem_netz, abs(leistung)), 1)
+
+    @staticmethod
+    def _hausbeitrag(anlage: dict[str, Any]) -> float | None:
         """Was dieser Wechselrichter zum gerechneten Hausverbrauch beiträgt.
 
         Positive Abgabe zählt unverändert: Sie deckt Verbrauch, der sonst aus
         dem Netz käme.
 
-        Negative Abgabe bedeutet zweierlei, je nach Gerät:
+        Negative Abgabe ist die interessante Seite. Sie bedeutet dreierlei:
 
         * Ein gewöhnlicher Einspeisewechselrichter im Standby verbraucht ein
           paar Watt. Die stecken im Netzbezug schon drin und dürfen nicht noch
           einmal abgezogen werden - sonst kämen bei -2 W Abgabe und 16 W Bezug
           14 W heraus, obwohl das Haus 16 W zieht. Also null.
-        * Ein Hybridwechselrichter zieht dagegen richtig
-          Leistung aus dem Netz, um die Batterie zu laden. Das ist kein
-          Hausverbrauch, sondern Speicherladung - diese Leistung wird abgezogen.
-          Ohne das stünden beim Laden mit 1 kW über 1000 W Hausverbrauch da.
+        * Ein Hybrid im Standby ist derselbe Fall. Er zieht seine 19 W, und
+          die verbraucht er wirklich - sie werden nicht gespeichert. Auch null.
+        * Ein Hybrid, der die Batterie aus dem Netz lädt, ist der Ausnahmefall:
+          Diese Leistung ist kein Hausverbrauch, sondern Speicherladung, und
+          wird abgezogen. Ohne das stünden beim Laden mit 1 kW über 1000 W
+          Hausverbrauch da.
+
+        Wie viel davon wirklich in die Batterie geht, hat _dc_strang schon
+        beim Zusammensetzen der Anlage entschieden und als ``dc_power``
+        abgelegt. Von dort wird es hier gelesen und nicht zum zweiten Mal
+        gerechnet: Dieselbe Frage zweimal zu beantworten heißt, dass die
+        Karte und der Hausverbrauch irgendwann Verschiedenes zeigen.
         """
+        wechselrichter = anlage["inverter"]
         leistung = wechselrichter["power"]
         if leistung is None:
             return None
         if leistung >= 0:
             return leistung
-        return leistung if wechselrichter["hybrid"] else 0.0
+        # Abgezogen wird allein, was auf dem Gleichstrang zur Batterie läuft.
+        # Der Rest der Bezugsleistung ist Eigenverbrauch des Geräts - und der
+        # gehört zum Haus.
+        strang = wechselrichter.get("dc_power")
+        return min(0.0, strang) if strang is not None else 0.0
 
     def _haus(
         self,
@@ -995,7 +1080,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             netzleistung = netz["power"]
             wr = units.add(
                 *(
-                    self._hausbeitrag(a["inverter"])
+                    self._hausbeitrag(a)
                     for a in anlagen
                     if a["inverter"]["enabled"]
                 )

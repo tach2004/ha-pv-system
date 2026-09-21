@@ -755,10 +755,18 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "Continuous rating from the label. The load bar is based on it.",
         ),
         "hybrid": (
-            "An, wenn das Gerät auch aus dem Netz laden kann - ein "
-            "Hybridwechselrichter mit Netzladefunktion.",
-            "On when the device can also charge from the grid - a hybrid "
-            "inverter with grid charging.",
+            "An, wenn das Gerät die Batterie auch aus dem Netz laden kann. "
+            "Dann gilt eine negative Leistung nicht mehr einfach als "
+            "Eigenverbrauch: Was davon laut Batteriesensor wirklich "
+            "gespeichert wird, ist Ladung und kein Hausverbrauch - der Rest "
+            "bleibt Verbrauch. Ohne den Haken ist eine negative Leistung "
+            "immer Standby.",
+            "On when the device can also charge the battery from the grid. "
+            "Negative power is then no longer simply own consumption: "
+            "whatever the battery sensor shows as actually stored counts as "
+            "charging rather than household use - the rest stays "
+            "consumption. Without the option, negative power is always "
+            "standby.",
         ),
     },
     "grid": {

@@ -4,10 +4,15 @@ Die Karte braucht mehr als Zustände: Sie zeichnet eine Verschaltung. Wie viele
 Module in Reihe liegen, an welchem Laderegler sie hängen, auf welcher Phase der
 Wechselrichter sitzt - das steht in der Konfiguration, nicht in einem Sensor.
 
-Es würde auch über die Attribute des Statussensors gehen, und die Karte kann das
-als Rückfallweg. Über den Websocket ist es aber der bessere Weg: Die Struktur
-landet nicht in der Datenbank, sie ist nicht auf die Attributgröße begrenzt, und
-die Karte bekommt sie beim Öffnen sofort statt erst mit dem nächsten Messwert.
+Die mitgelieferte Karte nimmt sie aus den Attributen des Statussensors: Die
+stehen ohne Anfrage bereit und aktualisieren sich von selbst mit jedem
+Messwert. In die Datenbank wandern sie dabei nicht - der Sensor meldet sie
+über ``_unrecorded_attributes`` ab.
+
+Dieser Befehl ist der zweite Weg zu denselben Daten, für alles, was die
+Struktur unabhängig von einem Zustand braucht: eine eigene Karte, eine
+Schablone, ein Skript. Er kennt die Grenze für Attributgröße nicht und
+antwortet sofort statt erst mit dem nächsten Messwert.
 """
 
 from __future__ import annotations

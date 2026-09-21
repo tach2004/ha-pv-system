@@ -70,6 +70,7 @@ und einbringt.
 
   Ein Hybrid-Wechselrichter, der die Batterie aus dem Netz lädt, wird dabei
   nicht als Verbraucher gezählt – das ist Speicherladung, kein Hausverbrauch.
+  Sein Leerlauf dagegen schon.
 * **Kosten und Ertrag** aus den Zählerständen: Bezugskosten, Einspeiseerlös,
   Ersparnis durch Eigenverbrauch, Ertrag und Bilanz – je für heute, den Monat,
   das Jahr und seit der Inbetriebnahme. Dazu der Momentanwert in Euro je Stunde
@@ -717,7 +718,7 @@ Das ist der Hausanschluss: ein Zähler für alles, was rein- und rausgeht.
 | **Phase** | L1/L2/L3 | Auf welcher Schiene er einspeist. Bestimmt, wo er in der Karte abgreift und wie die Phasenflüsse aufgehen | L1 |
 | **Leistung** | W | **Die Abgabe auf der Wechselstromseite.** Geht in Hausverbrauch, Autarkie und die Phasenrechnung ein | Kein Hausverbrauch |
 | **Ertragszähler** | kWh | Grundlage für Ertrag und Amortisation dieser Anlage | Der Modulertrag wird genommen |
-| **Hybrid** | an/aus | Sagt: Er kann die Batterie aus dem Netz laden. Solche Ladung zählt dann **nicht** als Hausverbrauch | aus |
+| **Hybrid** | an/aus | Sagt: Er kann die Batterie aus dem Netz laden. Was davon wirklich gespeichert wird, zählt dann **nicht** als Hausverbrauch – siehe unten | aus |
 | **AC-Spannung/-Strom**, **DC-Spannung**, **Frequenz**, **Temperatur**, **Betriebsart** | | Nur Anzeige. Die DC-Spannung dient ohne Laderegler als Strangspannung | nichts |
 
 **Kosten dieser Anlage**
@@ -876,17 +877,56 @@ Debug-Protokoll:
 Das sind etwa **hunderttausend Zustände am Tag** – mehr als alle übrigen
 Sensoren dieser Integration zusammen.
 
-**Die Attribute selbst landen nicht in der Datenbank.** Die Integration bringt
-dafür `recorder.py` mit, den dokumentierten Haken, mit dem eine Integration dem
-Recorder sagt, welche Attribute er überspringen soll – seit der ersten Fassung.
-Ohne ihn lägen bei jedem Zustandswechsel mehrere Kilobyte JSON in der
-Zustandstabelle.
+Dabei sind zwei Tabellen im Spiel, und sie verhalten sich völlig
+unterschiedlich:
 
-Was bleibt, sind die **Zeilen**. Drei Wege, sie loszuwerden:
+| Tabelle | Inhalt | Kosten |
+|---|---|---|
+| `state_attributes` | das JSON der Attribute | die ganze Struktur, je Wechsel |
+| `states` | eine Zeile je Wechsel: Zeitstempel, Wort, Verweise | rund 100 Byte |
+
+**Die Attribute meldet die Integration ab.** Der Statussensor setzt dafür
+`_unrecorded_attributes` – die Stelle, an der Home Assistant fragt, welche
+Attribute der Recorder überspringen soll. Gemessen an einer Anlage mit drei
+Zweigen:
+
+```
+GESAMT                 10.955 Byte je Zustandswechsel
+  plants   6.046
+  costs    2.026
+  totals   1.082
+  grid       805
+  house      716
+  display     64
+  ------------
+  abgemeldet          10.752 Byte   (98,1 %)
+  bleibt                 204 Byte   (Name, Kennung, Geräteklasse)
+```
+
+Die verbleibenden 204 Byte ändern sich **nie**. Der Recorder legt gleiche
+Attribute nur einmal ab und verweist darauf – es entsteht also nicht eine
+Zeile je Wechsel, sondern **eine einzige für die Lebensdauer des Sensors**.
+Hochgerechnet ist das der Unterschied zwischen gut einem Gigabyte am Tag und
+nichts.
+
+Auf die Karte hat das keinen Einfluss: Sie liest den lebenden Zustand aus
+`hass.states`, und dort stehen alle Attribute unverändert.
+
+Was bleibt, sind die **Zeilen** – rund 11 MB am Tag. Die kann keine
+Integration verhindern; dafür gibt es keinen Haken. Drei Wege, sie
+loszuwerden:
 
 1. **Karte höchstens alle 2–5 Sekunden.** Mit dem Auge kaum zu sehen, aber ein
    Bruchteil der Zeilen. Das Wort des Sensors – „lädt", „speist ein" – wird nie
    aufgehalten, nur die Messwerte dahinter.
+
+   | Takt | Zeilen am Tag | `states` |
+   |---|---|---|
+   | aus (0) | 106.971 | 10,7 MB |
+   | 2 s | 43.200 | 4,3 MB |
+   | 5 s | 17.280 | 1,7 MB |
+   | 30 s | 2.880 | 0,3 MB |
+
 2. **Den Sensor gar nicht aufzeichnen:**
 
    ```yaml
@@ -895,6 +935,12 @@ Was bleibt, sind die **Zeilen**. Drei Wege, sie loszuwerden:
        entities:
          - sensor.pv_system_status
    ```
+
+   Wirkt erst nach einem **Neustart** von Home Assistant, nicht nach einem
+   Reload. Was schon geschrieben ist, räumt danach einmalig
+   `recorder.purge_entities` (`keep_days: 0`) weg, gefolgt von
+   `recorder.purge` mit `repack: true` – sonst gibt die Datenbankdatei den
+   Platz nicht ans Dateisystem zurück.
 
 3. Beides.
 
@@ -907,6 +953,52 @@ drei?". Für ein Wort mit fünf möglichen Werten ist das kein Verlust.
 
 Was du **nicht** ausschließen solltest, sind die Geld- und Energiesensoren: An
 denen hängen die Langzeitstatistiken und das Energie-Dashboard.
+
+### Der Haken „Hybrid" – und was eine negative Leistung bedeutet
+
+Fast jeder Wechselrichter meldet irgendwann eine **negative** Leistung. Was
+das heißt, hängt vom Gerät ab – und genau dafür gibt es den Haken.
+
+**Ohne Haken** ist eine negative Zahl immer Leerlauf. Ein Einspeise‑ oder
+Mikrowechselrichter zieht nachts ein paar Watt für seine eigene Elektronik.
+Die stecken im Netzbezug schon drin und dürfen nicht noch einmal abgezogen
+werden – sonst kämen bei −2 W Abgabe und 16 W Bezug 14 W Hausverbrauch
+heraus, obwohl das Haus 16 W zieht.
+
+**Mit Haken** kommt ein zweiter Fall dazu: Das Gerät lädt die Batterie aus
+dem Netz. Diese Leistung ist keine Hausleistung, sondern Speicherladung –
+sie wird abgezogen. Ohne das stünden beim Laden mit 1 kW über 1000 W
+Hausverbrauch da.
+
+Die beiden Fälle sind aber nicht am Vorzeichen zu unterscheiden, und ein
+Hybrid hat auch einen Leerlauf. Meldet er −19 W, weil er nur wartet, wäre es
+falsch, 19 W Speicherladung daraus zu machen. Deshalb entscheidet nicht die
+Wechselrichterzahl, sondern die **Batterie**:
+
+    aus dem Netz geladen = Batterieladung − was gerade vom Dach kommt
+
+gedeckelt auf das, was der Wechselrichter überhaupt zieht. Drei Beispiele mit
+Haken:
+
+| Wechselrichter | Batterie | Dach | Speicherladung | Hausverbrauch |
+|---|---|---|---|---|
+| −19 W | in Ruhe | 0 W | 0 W | die vollen 19 W |
+| −1019 W | +1000 W | 0 W | 1000 W | 19 W |
+| −19 W | +1000 W | 1200 W | 0 W | 19 W |
+
+Die dritte Zeile ist der Sonnentag: Die Batterie lädt, aber vom Dach, nicht
+aus dem Netz.
+
+**In der Karte** sieht man dasselbe: Zieht der Wechselrichter, drehen sich
+Flusslinie und Pfeil zu ihm hin und werden **rot** – die Farbe des
+Netzbezugs. Läuft davon etwas weiter in die Batterie, führt die rote Linie
+über den Wechselrichter hinaus nach oben bis zum Speicher. Im reinen
+Leerlauf bleibt der Gleichstrang still: Dort fließt nichts.
+
+**Ohne eingetragenen Batteriesensor** lässt sich das nicht auseinanderhalten.
+Dann wird mit Haken das Laden angenommen – das ist der Grund, aus dem jemand
+den Haken überhaupt setzt. Wer es genau haben will, trägt die
+Batterieleistung ein.
 
 ### Autarkie und Eigenverbrauch
 

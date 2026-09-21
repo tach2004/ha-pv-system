@@ -307,8 +307,18 @@ def test_dienste_sind_beschrieben_und_angemeldet():
         benannt = _schluessel(strings, "services", name, "fields")
         assert felder == benannt, f"{name}: {sorted(felder ^ benannt)}"
 
-    # Dienstsymbole stehen bewusst nicht in der icons.json - siehe dort.
-    assert "services" not in _json(INTEGRATION / "icons.json")
+    # Jeder Dienst bekommt sein Symbol. Ohne icons.json steht im Dialog nur
+    # ein Zahnrad - bei acht Diensten sehen dann alle acht gleich aus.
+    symbole = _json(INTEGRATION / "icons.json").get("services", {})
+    assert beschrieben == set(symbole), (
+        f"ohne Symbol: {sorted(beschrieben - set(symbole))}, "
+        f"Symbol ohne Dienst: {sorted(set(symbole) - beschrieben)}"
+    )
+    for name, eintrag in symbole.items():
+        # Die lange Schreibweise: Sie gilt in beiden Schemata, die hassfest
+        # kennt. Die Kurzform "name": "mdi:..." steht nur Eigenbauten offen.
+        assert set(eintrag) == {"service"}, name
+        assert str(eintrag["service"]).startswith("mdi:"), name
 
 
 def test_dienste_zielen_auf_die_eigene_integration():

@@ -74,5 +74,31 @@
         "default": "mdi:solar-power-variant-outline"
       }
     }
+  },
+  "services": {
+    "add_plant": {
+      "service": "mdi:solar-panel-large"
+    },
+    "remove_plant": {
+      "service": "mdi:delete-outline"
+    },
+    "reset_costs": {
+      "service": "mdi:cash-refund"
+    },
+    "set_battery": {
+      "service": "mdi:battery-high"
+    },
+    "set_charger": {
+      "service": "mdi:current-dc"
+    },
+    "set_inverter": {
+      "service": "mdi:current-ac"
+    },
+    "set_modules": {
+      "service": "mdi:solar-panel"
+    },
+    "tidy_entities": {
+      "service": "mdi:broom"
+    }
   }
 }

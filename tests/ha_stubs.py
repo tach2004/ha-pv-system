@@ -104,6 +104,11 @@ class ConfigEntry:
         self.entry_id = "testeintrag"
         self.runtime_data: Any = None
 
+    def async_create_task(self, hass, ziel, name=None, eager_start=True):
+        """Im Test wird nichts nebenher gestartet - die Coroutine wird zu."""
+        ziel.close()
+        return None
+
     def __class_getitem__(cls, _item):  # ConfigEntry["Coordinator"]
         return cls
 
@@ -128,10 +133,19 @@ class DataUpdateCoordinator:
     """Nur Konstruktor und die beiden Methoden, die der Rechenkern nutzt."""
 
     def __init__(
-        self, hass, logger, *, name=None, update_interval=None, always_update=True
+        self,
+        hass,
+        logger,
+        *,
+        config_entry=None,
+        name=None,
+        update_interval=None,
+        always_update=True,
     ) -> None:
         self.hass = hass
         self.logger = logger
+        # Wie im Original: Der Eintrag hängt am Koordinator, nicht daneben.
+        self.config_entry = config_entry
         self.name = name
         self.update_interval = update_interval
         self.data: Any = None
@@ -250,7 +264,7 @@ class DeviceInfo(dict):
     pass
 
 
-AddEntitiesCallback = Any
+AddConfigEntryEntitiesCallback = Any
 
 
 class SensorEntity:
@@ -355,7 +369,7 @@ def installieren() -> None:
     modul("homeassistant.helpers.device_registry", DeviceInfo=DeviceInfo)
     modul(
         "homeassistant.helpers.entity_platform",
-        AddEntitiesCallback=AddEntitiesCallback,
+        AddConfigEntryEntitiesCallback=AddConfigEntryEntitiesCallback,
     )
     sys.modules["homeassistant.helpers.update_coordinator"].CoordinatorEntity = (
         CoordinatorEntity

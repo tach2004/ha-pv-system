@@ -172,7 +172,7 @@ def test_der_dienst_findet_genau_die_abgeschalteten():
     """Was der Dienst abschalten würde, ist genau das, was schon aus ist."""
     koordinator, sensoren = _sensoren()
     kennungen = sensor.spiegel_kennungen(koordinator)
-    vorsatz = f"{koordinator.entry.entry_id}_"
+    vorsatz = f"{koordinator.config_entry.entry_id}_"
     gelistet = {k.replace(vorsatz, "") for k in kennungen}
     aus = {name for name in sensoren if not _an(sensoren, name)}
     # Der Dienst darf mehr kennen als angelegt wurde - eine Phase ohne
@@ -803,3 +803,43 @@ def test_ein_neues_wort_darf_den_takt_durchbrechen():
     koordinator.data["totals"]["battery_power"] = -900.0
     status._handle_coordinator_update()
     assert len(geschrieben) == 2
+
+
+# ------------------------------------------------------- Recorder-Abmeldung
+#
+# Der Grund für diese drei Tests: In der Integration lag ab 0.0.1 eine
+# recorder.py mit einer Funktion, die Home Assistant längst nicht mehr
+# aufruft. Sie war importierbar, also fiel sie in keiner Prüfung auf - und
+# währenddessen wanderten je Zustandswechsel rund elf Kilobyte JSON in die
+# Datenbank. Was hier geprüft wird, ist deshalb nicht die Konstante, sondern
+# die Verbindung: Liefert der Sensor genau das, was er auch abmeldet?
+
+
+def test_die_struktur_wird_beim_recorder_abgemeldet():
+    """Jeder große Schlüssel steht in _unrecorded_attributes."""
+    fehlend = set(sensor.STRUKTUR) - set(sensor.StatusSensor._unrecorded_attributes)
+    assert not fehlend, f"nicht abgemeldet: {sorted(fehlend)}"
+
+
+def test_der_status_liefert_genau_die_abgemeldete_struktur():
+    """Attribute und Abmeldung dürfen nicht auseinanderlaufen.
+
+    Ein neuer Block in extra_state_attributes, der hier nicht auftaucht,
+    landete sonst still wieder in der Zustandstabelle.
+    """
+    koordinator, status = _status()
+    attribute = status.extra_state_attributes
+    gross = set(attribute) - {"pv_key", "pv_system_id", "title"}
+    assert gross == set(sensor.STRUKTUR)
+
+
+def test_die_kennzeichen_bleiben_aufgezeichnet():
+    """Woran die Karte den Sensor erkennt, ist klein und konstant.
+
+    Diese drei sind zusammen rund siebzig Byte und ändern sich nie. Der
+    Recorder legt gleiche Attribute nur einmal ab - sie kosten also eine
+    einzige Zeile und gehören nicht abgemeldet.
+    """
+    abgemeldet = set(sensor.StatusSensor._unrecorded_attributes)
+    for kennzeichen in ("pv_key", "pv_system_id", "title"):
+        assert kennzeichen not in abgemeldet
