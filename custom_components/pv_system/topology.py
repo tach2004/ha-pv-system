@@ -65,6 +65,8 @@ from .const import (
     CONF_DIVERTER_ENERGY,
     CONF_DIVERTER_FUEL,
     CONF_DIVERTER_ICON,
+    CONF_DIVERTER_LOAD_ICONS,
+    CONF_DIVERTER_LOAD_NAMES,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
@@ -448,6 +450,20 @@ def haus_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         CONF_DIVERTER_ICON: _auswahl(
             roh.get(CONF_DIVERTER_ICON), DIVERTER_ICONS, DIVERTER_ICON_BOILER
         ),
+        # Name und Symbol je Verbraucher. Leer heißt: Es gilt, was für alle
+        # gilt - beim Namen der aus Home Assistant, beim Symbol das gemeinsame.
+        **{
+            feld: str(roh.get(feld) or "").strip()
+            for feld in CONF_DIVERTER_LOAD_NAMES
+        },
+        **{
+            feld: (
+                _auswahl(roh.get(feld), DIVERTER_ICONS, "")
+                if roh.get(feld) in DIVERTER_ICONS
+                else ""
+            )
+            for feld in CONF_DIVERTER_LOAD_ICONS
+        },
     }
 
 

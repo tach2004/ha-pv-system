@@ -300,6 +300,23 @@ FELDER: dict[str, T] = {
     "calculate": ("Hausverbrauch rechnen", "Calculate house consumption"),
     "diverter_name": ("Überschussverbraucher", "Surplus load"),
     "diverter_icon": ("Symbol in der Karte", "Symbol on the card"),
+    # Name und Symbol je Verbraucher. Sechs Plätze, erzeugt statt getippt -
+    # zwölf fast gleiche Zeilen von Hand wären zwölf Gelegenheiten für einen
+    # Zahlendreher.
+    **{
+        f"diverter_name_{nummer}": (
+            f"{nummer}. Verbraucher: Beschriftung",
+            f"Load {nummer}: label",
+        )
+        for nummer in range(1, 7)
+    },
+    **{
+        f"diverter_icon_{nummer}": (
+            f"{nummer}. Verbraucher: Symbol",
+            f"Load {nummer}: symbol",
+        )
+        for nummer in range(1, 7)
+    },
     "diverter_power_entity": ("Leistung Überschussverbraucher", "Surplus load power"),
     "diverter_energy_entity": ("Zähler Überschussverbraucher", "Surplus load meter"),
     "diverter_solar_power_entity": (
@@ -901,14 +918,29 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
     },
     "house": {
+        "diverter_name_1": (
+            "Was unter dem Symbol stehen soll - frei gewählt, nicht der Name "
+            "der Entität.\n\nLeer: Unter dem Symbol steht nur die Leistung."
+            "\n\nDie Plätze gehören zu den Leistungssensoren oben, in "
+            "derselben Reihenfolge. Wer die Liste dort umsortiert, sortiert "
+            "die Beschriftungen hier mit um.",
+            "What to print below the symbol - your own wording, not the "
+            "entity name.\n\nEmpty: only the power appears below the symbol."
+            "\n\nThe slots follow the power sensors above, in the same "
+            "order. Reordering that list reorders these labels with it.",
+        ),
+        "diverter_icon_1": (
+            "Das Symbol dieses einen Verbrauchers.\n\nLeer: Es gilt das "
+            "gemeinsame Symbol von oben.",
+            "The symbol for this one load.\n\nEmpty: the shared symbol "
+            "above applies.",
+        ),
         "diverter_icon": (
             "Womit die Karte die Verbraucher unter dem Haus zeichnet.\n\n"
-            "Es gilt für alle zusammen - gibt es zwei, stehen sie mit "
-            "demselben Symbol nebeneinander. Welcher welcher ist, verrät der "
-            "Name beim Darüberfahren.",
-            "How the card draws the loads below the house.\n\nIt applies to "
-            "all of them - with two loads the same symbol appears twice. "
-            "Hovering reveals which is which.",
+            "Die Vorgabe für alle - wer einem einzelnen Verbraucher ein "
+            "eigenes Symbol geben will, findet das weiter unten.",
+            "How the card draws the loads below the house.\n\nThe default "
+            "for all of them - to give one load its own symbol, see below.",
         ),
         "diverter_name": (
             "Wie der Verbraucher in der Karte heißen soll, z. B. „Heizstab“.",
@@ -1424,6 +1456,8 @@ UEBERSCHUSSFELDER = [
     "diverter_solar_power_entity", "diverter_solar_energy_entity",
     "diverter_fuel", "diverter_price", "diverter_price_unit",
     "diverter_price_entity", "diverter_efficiency", "diverter_icon",
+    *[f"diverter_name_{n}" for n in range(1, 7)],
+    *[f"diverter_icon_{n}" for n in range(1, 7)],
 ]
 ANZEIGEFELDER = [
     "animate", "show_strings", "show_phases", "sensor_interval", "card_interval",

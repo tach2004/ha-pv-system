@@ -1414,6 +1414,69 @@ def test_ein_stummer_verbraucher_bekommt_keine_zahl():
     assert [v["power"] for v in umleiter["loads"]] == [900.0, None]
 
 
+def test_jeder_verbraucher_bekommt_seinen_eigenen_namen_und_sein_symbol():
+    """Heizstab und Wallbox sind zwei Geräte, nicht zweimal dasselbe."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "diverter_name": "Überschuss",
+            "diverter_power_entity": ["sensor.stab", "sensor.wallbox"],
+            "diverter_icon": "boiler",
+            "diverter_name_1": "Heizstab",
+            "diverter_name_2": "Wallbox",
+            "diverter_icon_2": "car",
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.stab", 900, "W")
+    hass.states.setzen("sensor.wallbox", 600, "W")
+    lasten = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]["loads"]
+
+    assert [v["name"] for v in lasten] == ["Heizstab", "Wallbox"]
+    # Ohne eigenes Symbol gilt das gemeinsame.
+    assert [v["icon"] for v in lasten] == ["boiler", "car"]
+
+
+def test_ohne_eigene_angaben_bleibt_der_name_leer():
+    """Kein Rückfall auf die Entität - die heißt "sensor.shelly_kanal_0"."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "diverter_power_entity": ["sensor.stab"],
+            "diverter_icon": "heater",
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.stab", 900, "W")
+    last = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]["loads"][0]
+    assert last["name"] == ""
+    assert last["icon"] == "heater"
+
+
+def test_mehr_verbraucher_als_plaetze_stuerzen_nicht_ab():
+    """Beim siebten Heizstab gilt einfach die Vorgabe."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "diverter_power_entity": [f"sensor.stab{n}" for n in range(8)],
+            "diverter_icon": "plug",
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    for n in range(8):
+        hass.states.setzen(f"sensor.stab{n}", 100, "W")
+    lasten = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]["loads"]
+    assert len(lasten) == 8
+    assert lasten[7]["name"] == ""
+    assert lasten[7]["icon"] == "plug"
+
+
 def test_das_symbol_steht_in_den_daten():
     """Die Karte kann es nicht raten - es kommt aus der Konfiguration."""
     aufbau = _aufbau(

@@ -112,6 +112,14 @@ jobs:
               cf._mit_vorschlag(getattr(cf, name)(), {})
               print(f"  ok  {name}")
 
+          # Der Überschussschritt wächst mit der Zahl der Leistungssensoren.
+          # Einmal ohne, einmal voll besetzt und einmal darüber hinaus: Ein
+          # Selektor, der erst beim sechsten Verbraucher entsteht, fiele sonst
+          # niemandem auf.
+          for anzahl in (0, 1, 6, 9):
+              cf._mit_vorschlag(cf._felder_ueberschuss(anzahl), {})
+              print(f"  ok  _felder_ueberschuss({anzahl})")
+
           # Und die Abmeldung beim Recorder, am echten Home Assistant.
           #
           # Sie ist der Grund für diesen Block: In der Integration lag lange

@@ -875,17 +875,39 @@ Wiederholung und deshalb abgeschaltet – der zweite nie.
 | **… : je** | Auswahl | kWh, Liter, m³, kg oder Tonne – die Einheit, in der abgerechnet wird | kWh |
 | **… : Entität statt fester Zahl** | Entität | Für Preise, die am Markt schwanken. **Hat Vorrang**, wird genauso umgerechnet | Nur die feste Zahl |
 | **Wirkungsgrad der ersetzten Heizung** | % | Gasbrennwert rund 92, alter Kessel 80–88, Fernwärme 100, **Wärmepumpe = JAZ × 100** | 100 (nicht umrechnen) |
-| **Symbol in der Karte** | Auswahl | Warmwasserspeicher, Heizkörper, Wallbox, Wärmepumpe oder „Anderes Gerät" – womit die Karte sie unter dem Haus zeichnet | Warmwasserspeicher |
+| **Symbol in der Karte** | Auswahl | Warmwasserspeicher, Heizkörper, Wallbox, Wärmepumpe oder „Anderes Gerät" – die **Vorgabe** für alle | Warmwasserspeicher |
+| **n. Verbraucher: Beschriftung** | Freitext | Was unter dem Symbol steht. **Nicht** der Entitätsname – den will unter einem Symbol niemand lesen | Nur die Leistung steht darunter |
+| **n. Verbraucher: Symbol** | Auswahl | Das Symbol dieses einen Geräts | Das gemeinsame Symbol |
 
 **Die Verbraucher hängen unter dem Haus** – wie das Netz unter dem Zähler, und
 aus demselben Grund: Ihr Strom fließt hinter dem Zähler, sie sind Teil des
-Hauses. An jeder Leitung steht, was das Gerät gerade zieht.
+Hauses.
 
-Gezeichnet wird nur, was eine Leistung meldet. Sind zwei Sensoren unter
-*Leistung Überschussverbraucher* eingetragen, stehen zwei Geräte nebeneinander;
-ab dem dritten rückt die Reihe nach links aus dem Kasten heraus, damit die
-Wattzahlen nicht aneinanderstoßen. Das Symbol gilt für alle zusammen – wer
-zwei verschiedene Geräte hat, erkennt sie am Namen beim Darüberfahren.
+```
+| … Heizstab 2,40 kW   Grund 861 W |   ← im Hauskasten: Name und Summe
++----------------------------------+
+   ╷
+   └────────┬─────────┬─────────┐       ← Sammelschiene
+            │         │         │
+           🔥        🚗        🌀
+        Heizstab   Wallbox  Wärmepumpe
+         255 W     1,50 kW    640 W
+```
+
+Die **Sammelschiene** stellt den Bezug her: Links oben steht der Name des
+Überschusses und was alle Geräte zusammen ziehen, unten hängt jedes einzeln
+daran. Ohne sie stünden da drei Striche ohne erkennbare Verbindung zu der
+Zeile darüber.
+
+Gezeichnet wird nur, was eine Leistung meldet. Die Reihe wird mit jedem
+weiteren Gerät breiter, damit die Beschriftungen nicht aneinanderstoßen; zu
+lange werden gekürzt.
+
+**Beschriftung und Symbol gibt es je Gerät** – bis zu sechs. Die Felder
+erscheinen im Dialog erst, wenn oben Leistungssensoren eingetragen sind, und
+zwar so viele Paare, wie es Sensoren gibt. Sie hängen an der **Reihenfolge**
+dieser Liste: Wer sie umsortiert, sortiert die Beschriftungen mit um. Ein
+Optionsdialog kennt keine wiederholbaren Blöcke – das ist der Preis dafür.
 
 ### Kosten und Ertrag (Standort)
 
