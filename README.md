@@ -260,6 +260,18 @@ Die selbst genutzten Kilowattstunden entstehen aus *erzeugt minus
 eingespeist*, sobald ein Ertragszähler eingetragen ist – sonst aus
 *verbraucht minus bezogen*.
 
+**Welcher Weg gilt, entscheidet die Konfiguration** – nicht, welcher Zähler
+gerade antwortet. Die beiden Wege führen zur selben Größe, rechnen aber mit
+ganz verschiedenen Zahlen: der eine mit Lebenserträgen von ein paar tausend
+Kilowattstunden, der andere mit einem Hausverbrauch, der ein Vielfaches davon
+sein kann. Zwischen ihnen zu springen, weil ein Sensor nach dem Neustart zehn
+Sekunden braucht, sieht für die Plausibilitätsprüfung aus wie ein
+Zählertausch – und „Ertrag heute" begänne wieder bei null.
+
+Haben also alle Anlagen einen Ertragszähler, gilt dieser Weg. Schweigt einer,
+ist der Eigenverbrauch für diesen Augenblick **unbekannt** statt anders
+gerechnet.
+
 ### Ersparnis, Erlös, Ertrag – wo ist der Unterschied?
 
 Drei Begriffe, die leicht durcheinandergehen:
@@ -437,6 +449,18 @@ Drei Größen gehen hinein, und es lohnt sich zu wissen, welche:
 
 Unter **sieben Tagen** bleiben Jahresrate und Restzeit leer:
 Aus drei Tagen auf ein Jahr hochzurechnen ergibt eine Zahl, die nichts sagt.
+
+**Zwei Amortisationen, zwei Wege.** Das ist leicht zu übersehen und bei der
+Fehlersuche entscheidend:
+
+| | Woher der Ertrag kommt | Wenn etwas schiefging |
+|---|---|---|
+| **Standort** | dem Geldspeicher, der bei jedem Lauf fortschreibt | bleibt drin – der Speicher vergisst nichts, auch keinen Fehler |
+| **je Anlage** | wird bei jedem Lauf aus den Mengen neu gerechnet | heilt sich von selbst, sobald die Mengen stimmen |
+
+Wenn der Gesamtzeitraum einmal falsche Beträge trägt, ist `pv_system.reset_costs`
+der Ausweg: Er leert den Geldspeicher und die Periodenmarken. Was in der
+Konfiguration steht – Investition, Inbetriebnahme, Ertrag davor – bleibt.
 
 **Preisänderungen verändern die Vergangenheit nicht.** Das ist der Kern der
 ganzen Rechnung: Bei jedem Lauf wird nur die *Differenz* seit dem letzten Lauf
@@ -851,6 +875,17 @@ Wiederholung und deshalb abgeschaltet – der zweite nie.
 | **… : je** | Auswahl | kWh, Liter, m³, kg oder Tonne – die Einheit, in der abgerechnet wird | kWh |
 | **… : Entität statt fester Zahl** | Entität | Für Preise, die am Markt schwanken. **Hat Vorrang**, wird genauso umgerechnet | Nur die feste Zahl |
 | **Wirkungsgrad der ersetzten Heizung** | % | Gasbrennwert rund 92, alter Kessel 80–88, Fernwärme 100, **Wärmepumpe = JAZ × 100** | 100 (nicht umrechnen) |
+| **Symbol in der Karte** | Auswahl | Warmwasserspeicher, Heizkörper, Wallbox, Wärmepumpe oder „Anderes Gerät" – womit die Karte sie unter dem Haus zeichnet | Warmwasserspeicher |
+
+**Die Verbraucher hängen unter dem Haus** – wie das Netz unter dem Zähler, und
+aus demselben Grund: Ihr Strom fließt hinter dem Zähler, sie sind Teil des
+Hauses. An jeder Leitung steht, was das Gerät gerade zieht.
+
+Gezeichnet wird nur, was eine Leistung meldet. Sind zwei Sensoren unter
+*Leistung Überschussverbraucher* eingetragen, stehen zwei Geräte nebeneinander;
+ab dem dritten rückt die Reihe nach links aus dem Kasten heraus, damit die
+Wattzahlen nicht aneinanderstoßen. Das Symbol gilt für alle zusammen – wer
+zwei verschiedene Geräte hat, erkennt sie am Namen beim Darüberfahren.
 
 ### Kosten und Ertrag (Standort)
 

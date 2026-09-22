@@ -160,9 +160,6 @@ class Kostenrechner:
         # Gesamtzeitraum darf erst entstehen, wenn _mengen sie anlegt - sonst
         # fehlt ihr der Periodenanfang.
         self._staende: dict[str, dict[str, Any]] = {}
-        # Ein eigener Zählerstand: die Umleitung, gedeckelt auf den
-        # Eigenverbrauch - siehe _umleitung_deckeln.
-        self._umleitung: float | None = None
 
     async def async_laden(self) -> None:
         """Marken aus dem Speicher holen. Fehlt die Datei, wird neu begonnen."""
@@ -176,7 +173,6 @@ class Kostenrechner:
                 for periode, werte in marken.items()
                 if periode in PERIODS and isinstance(werte, dict)
             }
-        self._umleitung = _zahl(gespeichert.get("umleitung"))
         staende = gespeichert.get("staende")
         if isinstance(staende, dict):
             self._staende = {
@@ -212,15 +208,10 @@ class Kostenrechner:
         """
         self._marken = {}
         self._staende = {}
-        self._umleitung = None
         self._merken()
 
     def _zustand(self) -> dict[str, Any]:
-        return {
-            "marken": self._marken,
-            "staende": self._staende,
-            "umleitung": self._umleitung,
-        }
+        return {"marken": self._marken, "staende": self._staende}
 
     def _merken(self) -> None:
         self._store.async_delay_save(self._zustand, SPEICHER_VERZUG)
@@ -259,64 +250,6 @@ class Kostenrechner:
                 frisch.add(name)
         return frisch
 
-    def _umleitung_deckeln(
-        self,
-        zaehler: dict[str, float | None],
-        letzte: dict[str, float | None],
-        frisch: set[str],
-    ) -> bool:
-        """Den Überschussanteil zu einem eigenen Zählerstand fortschreiben.
-
-        Warum überhaupt gedeckelt wird: Bewertet werden kann nur, was auch
-        selbst genutzt wurde. Läuft der Verbraucher am Netz, ist das
-        gewöhnlicher Bezug und keine Ersparnis der Anlage.
-
-        Warum es hier steht und nicht bei der Bewertung: Dort wurde bisher die
-        *Summe* des Zeitraums gedeckelt, und das geht schief, sobald die
-        Umleitung über einem Tag mehr ergibt als der Eigenverbrauch. Dann zog
-        ``min`` den gesamten Eigenverbrauch in den Umleitungstopf - und weil
-        der Eigenverbrauch abends weiterläuft (die Batterie speist das Haus),
-        lief der Umleitungsbetrag mit ihm mit:
-
-            Eigenverbrauch  0,10 kWh  ->  Haushalt 0,00 EUR, Heizstab 0,01 EUR
-            Eigenverbrauch  0,20 kWh  ->  Haushalt 0,00 EUR, Heizstab 0,02 EUR
-            Eigenverbrauch  0,30 kWh  ->  Haushalt 0,00 EUR, Heizstab 0,03 EUR
-
-        Der Heizstab war längst aus. Gedeckelt wird deshalb **je Messschritt**:
-        Was in diesem Augenblick nicht selbst genutzt wurde, kann auch nicht
-        in diesem Augenblick umgeleitet worden sein - und was heute Mittag aus
-        der Sonne kam, zieht heute Abend nichts mehr an sich.
-
-        Zurück kommt, ob sich der Stand geändert hat.
-        """
-        stand = _zahl(zaehler.get("diverted"))
-        if stand is None:
-            return False
-        if self._umleitung is None:
-            # Beim ersten Lauf auf den heutigen Stand setzen statt bei null
-            # anzufangen: Sonst sähe der Sprung für die Periodenmarken wie ein
-            # Zählertausch aus, und Monat und Jahr begännen von vorn.
-            self._umleitung = stand
-            return True
-
-        eigen, eigen_vorher = _zahl(zaehler.get("own")), letzte.get("own")
-        zuwachs = 0.0
-        if (
-            "diverted" not in frisch
-            and "own" not in frisch
-            and letzte.get("diverted") is not None
-            and eigen is not None
-            and eigen_vorher is not None
-        ):
-            zuwachs = min(
-                max(0.0, stand - letzte["diverted"]),
-                max(0.0, eigen - eigen_vorher),
-            )
-        if not zuwachs:
-            return False
-        self._umleitung = round(self._umleitung + zuwachs, 4)
-        return True
-
     # ----------------------------------------------------------------- Rechnen
 
     def rechnen(
@@ -341,22 +274,12 @@ class Kostenrechner:
         umleitpreis = _zahl(preise.get("diverted"))
 
         vorher = self._vorher(preise, anlagen)
-        # Die letzten Stände merken, bevor die Prüfung sie überschreibt: Der
-        # gedeckelte Umleitungszähler braucht die Differenz seit dem letzten
-        # Lauf, und zwar von beiden Zählern.
-        letzte_staende = {
-            name: _zahl(eintrag.get("wert")) for name, eintrag in self._staende.items()
-        }
         # Zuerst die Prüfung: Ein Zähler, der nicht mehr derselbe ist, darf
         # weder in eine Menge noch in einen Betrag eingehen.
         frisch = self._pruefen(zaehler, jetzt)
-        # Und dann die Umleitung deckeln - je Messschritt, nicht je Zeitraum.
-        # Ab hier rechnet alles mit dem gedeckelten Stand.
-        veraendert_umleitung = self._umleitung_deckeln(zaehler, letzte_staende, frisch)
-        zaehler = {**zaehler, "diverted": self._umleitung}
 
         zeitraeume: dict[str, Any] = {}
-        veraendert = bool(frisch) or veraendert_umleitung
+        veraendert = bool(frisch)
         for periode in PERIODS:
             mengen, neu = self._mengen(periode, zaehler, jetzt, frisch)
             veraendert = veraendert or neu
@@ -527,10 +450,21 @@ class Kostenrechner:
                 veraendert = True
                 mengen[name] = menge
 
-        # Gedeckelt wird nicht mehr hier: Der Zählerstand, der hereinkommt, ist
-        # bereits je Messschritt auf den Eigenverbrauch begrenzt - siehe
-        # _umleitung_deckeln. Eine zweite Deckelung auf die Summe des
-        # Zeitraums wäre genau der Fehler, den die erste behebt.
+        # Umgeleitet werden kann nur, was auch selbst genutzt wurde. Läuft der
+        # Verbraucher am Netz, ist das gewöhnlicher Bezug - und keine
+        # Ersparnis, die sich umbewerten ließe.
+        #
+        # Gedeckelt wird auf die Menge dieses Laufs und nicht auf die eines
+        # ganzen Zeitraums. Beides war schon falsch herum: Je Messschritt
+        # gehen Kilowattstunden verloren, sobald die beiden Zähler
+        # unterschiedlich schnell melden - der Zwischenzähler am Verbraucher
+        # jede Sekunde, der Ertragszähler des Wechselrichters alle halbe
+        # Minute. Dann steht in vier von fünf Läufen ein Zuwachs beim einen
+        # und eine Null beim anderen, und das Minimum wirft ihn weg. Hier
+        # gleicht sich das über den Lauf aus, weil beide Mengen aus denselben
+        # Marken kommen.
+        if "diverted" in mengen:
+            mengen["diverted"] = min(mengen["diverted"], mengen.get("own", 0.0))
 
         for name, satz, feld in (
             ("import", preis, "cost"),

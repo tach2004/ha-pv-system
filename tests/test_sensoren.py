@@ -1287,3 +1287,161 @@ def test_die_anteilssensoren_allein_schalten_den_verbraucher_an():
     # auch sein Netzanteil. Eine null wäre hier eine Behauptung.
     assert haus["diverter"]["power"] is None
     assert haus["diverter"]["grid_power"] is None
+
+
+# ------------------------------------------------ Der Weg zum Eigenverbrauch
+#
+# Es gibt zwei: "erzeugt minus eingespeist" und "verbraucht minus bezogen".
+# Beide führen zur selben Größe, aber aus ganz verschiedenen Zahlen. Welcher
+# gilt, muss die Konfiguration entscheiden - nicht, welcher Zähler gerade
+# antwortet. Sonst springt der Eigenverbrauch nach jedem Neustart um tausende
+# Kilowattstunden, die Prüfung hält das für einen Zählertausch, und "Ertrag
+# heute" steht wieder bei null.
+
+
+def _mit_beiden_zaehlern():
+    """Ertragszähler an jeder Anlage *und* ein Hausverbrauchszähler.
+
+    Nur mit beiden gibt es überhaupt zwei Wege - und damit die Möglichkeit,
+    zwischen ihnen zu springen.
+    """
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "energy_entity": "sensor.haus_kwh",
+        }
+    )
+    aufbau["grid"] = {
+        **aufbau["grid"],
+        "import_energy_entity": "sensor.netz_bezug",
+        "export_energy_entity": "sensor.netz_einspeisung",
+    }
+    for anlage in aufbau["plants"]:
+        anlage["inverter"]["energy_entity"] = f"sensor.{anlage['id']}_wr_kwh"
+    return aufbau
+
+
+def _staende(hass, ertrag, *, stumm=False):
+    hass.states.setzen("sensor.haus_kwh", 12000.0 + ertrag, "kWh")
+    hass.states.setzen("sensor.netz_bezug", 4000.0, "kWh")
+    hass.states.setzen("sensor.netz_einspeisung", 2000.0, "kWh")
+    for kennung in ("a1", "a2", "a3"):
+        hass.states.setzen(
+            f"sensor.{kennung}_wr_kwh",
+            "unavailable" if stumm else 1000.0 + ertrag / 3.0,
+            "kWh",
+        )
+
+
+def test_ein_stummer_ertragszaehler_wechselt_den_weg_nicht():
+    """Der gemeldete Fall: nach dem Neustart stand der Ertrag wieder bei null.
+
+    Zwei Wege führen zum Eigenverbrauch, "erzeugt minus eingespeist" und
+    "verbraucht minus bezogen". Der eine ergibt hier rund tausend
+    Kilowattstunden, der andere achttausend. Ein Ertragszähler, der beim
+    Hochfahren zehn Sekunden braucht, ließ die Rechnung auf den zweiten
+    springen - und der Sprung sah aus wie ein Zählertausch.
+    """
+    hass = ha_stubs.HomeAssistant()
+    koordinator = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", _mit_beiden_zaehlern())
+    )
+
+    def tageswert():
+        return koordinator._berechnen()["costs"]["periods"]["day"]["own_kwh"]
+
+    _staende(hass, 0.0)
+    assert tageswert() == 0.0            # verankert
+    _staende(hass, 0.6)
+    assert tageswert() == 0.6            # 0,6 kWh erzeugt, nichts zusätzlich eingespeist
+
+    # Neustart: Die Wechselrichter melden noch nicht.
+    _staende(hass, 0.6, stumm=True)
+    assert tageswert() is None, "unbekannt - nicht der andere Weg"
+
+    # Und wieder da. Der Tageswert läuft weiter, statt von vorn zu beginnen.
+    _staende(hass, 0.9)
+    assert tageswert() == 0.9
+
+
+# ------------------------------------- Die Verbraucher unter dem Haus (Karte)
+
+
+def test_jeder_verbraucher_kommt_einzeln_bei_der_karte_an():
+    """Die Summe genügt nicht - die Karte reiht sie nebeneinander auf."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab", "sensor.wallbox"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.stab", 900, "W")
+    hass.states.setzen("sensor.wallbox", 600, "W")
+    hass.states.setzen("sensor.netz", 100, "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+
+    assert [v["entity"] for v in umleiter["loads"]] == [
+        "sensor.stab",
+        "sensor.wallbox",
+    ]
+    assert [v["power"] for v in umleiter["loads"]] == [900.0, 600.0]
+    # Und die Summe entsteht daraus, nicht daneben.
+    assert umleiter["power"] == 1500.0
+
+
+def test_ein_stummer_verbraucher_bekommt_keine_zahl():
+    """Ein Strich ins Nichts behauptet ein Gerät, über das man nichts weiß."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab", "sensor.wallbox"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.stab", 900, "W")
+    hass.states.setzen("sensor.wallbox", "unavailable", "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+    assert [v["power"] for v in umleiter["loads"]] == [900.0, None]
+
+
+def test_das_symbol_steht_in_den_daten():
+    """Die Karte kann es nicht raten - es kommt aus der Konfiguration."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "diverter_power_entity": ["sensor.stab"],
+            "diverter_icon": "car",
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.stab", 900, "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+    assert umleiter["icon"] == "car"
+
+
+def test_ein_unbekanntes_symbol_faellt_auf_den_speicher_zurueck():
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "diverter_power_entity": ["sensor.stab"],
+            "diverter_icon": "raumschiff",
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.stab", 900, "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+    assert umleiter["icon"] == "boiler"

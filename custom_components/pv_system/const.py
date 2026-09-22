@@ -201,6 +201,20 @@ HEIZWERT: Final[dict[str, dict[str, float]]] = {
 # Waerme; eine Waermepumpe macht aus 100 kWh Strom 350 kWh Waerme, ihre
 # Jahresarbeitszahl mal hundert. Dieselbe Zahl, dasselbe Rechnen.
 CONF_DIVERTER_EFFICIENCY: Final = "diverter_efficiency"
+
+# Das Symbol, mit dem die Karte den Überschussverbraucher unter das Haus
+# zeichnet. Nicht aus Material Design geholt, sondern selbst gezeichnet: Die
+# Karte baut ihr SVG aus eigenen Pfaden und hat keinen Zugriff auf die
+# Symbolschrift des Frontends.
+CONF_DIVERTER_ICON: Final = "diverter_icon"
+DIVERTER_ICON_BOILER: Final = "boiler"
+DIVERTER_ICONS: Final = [
+    DIVERTER_ICON_BOILER,   # Warmwasserspeicher mit Heizstab
+    "heater",               # Heizkörper, Pufferspeicher
+    "car",                  # Wallbox, Überschussladen
+    "heatpump",             # Wärmepumpe
+    "plug",                 # alles Übrige
+]
 DEFAULT_DIVERTER_EFFICIENCY: Final = 100.0
 
 # ----------------------------------------------------------------- Darstellung

@@ -203,6 +203,13 @@ AUSWAHL: dict[str, dict[str, T]] = {
             "Nothing - it stays electricity (storage, car)",
         ),
     },
+    "diverter_icon": {
+        "boiler": ("Warmwasserspeicher", "Hot water tank"),
+        "heater": ("Heizkörper, Pufferspeicher", "Radiator, buffer tank"),
+        "car": ("Wallbox, Auto", "Wallbox, car"),
+        "heatpump": ("Wärmepumpe", "Heat pump"),
+        "plug": ("Anderes Gerät", "Other device"),
+    },
     "base_price_unit": {
         "month": ("je Monat", "per month"),
         "year": ("je Jahr", "per year"),
@@ -292,6 +299,7 @@ FELDER: dict[str, T] = {
     "l3_current_entity": ("Strom L3", "Current L3"),
     "calculate": ("Hausverbrauch rechnen", "Calculate house consumption"),
     "diverter_name": ("Überschussverbraucher", "Surplus load"),
+    "diverter_icon": ("Symbol in der Karte", "Symbol on the card"),
     "diverter_power_entity": ("Leistung Überschussverbraucher", "Surplus load power"),
     "diverter_energy_entity": ("Zähler Überschussverbraucher", "Surplus load meter"),
     "diverter_solar_power_entity": (
@@ -893,6 +901,15 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         ),
     },
     "house": {
+        "diverter_icon": (
+            "Womit die Karte die Verbraucher unter dem Haus zeichnet.\n\n"
+            "Es gilt für alle zusammen - gibt es zwei, stehen sie mit "
+            "demselben Symbol nebeneinander. Welcher welcher ist, verrät der "
+            "Name beim Darüberfahren.",
+            "How the card draws the loads below the house.\n\nIt applies to "
+            "all of them - with two loads the same symbol appears twice. "
+            "Hovering reveals which is which.",
+        ),
         "diverter_name": (
             "Wie der Verbraucher in der Karte heißen soll, z. B. „Heizstab“.",
             "What the load is called on the card, e.g. “immersion heater”.",
@@ -1406,7 +1423,7 @@ UEBERSCHUSSFELDER = [
     "diverter_name", "diverter_power_entity", "diverter_energy_entity",
     "diverter_solar_power_entity", "diverter_solar_energy_entity",
     "diverter_fuel", "diverter_price", "diverter_price_unit",
-    "diverter_price_entity", "diverter_efficiency",
+    "diverter_price_entity", "diverter_efficiency", "diverter_icon",
 ]
 ANZEIGEFELDER = [
     "animate", "show_strings", "show_phases", "sensor_interval", "card_interval",

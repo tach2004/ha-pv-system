@@ -103,6 +103,21 @@ const FLUSSFARBEN = ["f-solar", "f-akku", "f-netz", "f-bezug", "f-haus"];
 
 /* --------------------------------------------------------------- Helfer */
 
+/**
+ * Die Überschussverbraucher, die sich zeichnen lassen.
+ *
+ * Gezeichnet wird nur, was eine Leistung meldet. Ein Strich ins Nichts unter
+ * dem Haus sagt weniger als gar keiner: Er behauptet ein Gerät, über das man
+ * gerade nichts weiß.
+ */
+function _umleiterMitLeistung(d) {
+  const umleiter = (d && d.house && d.house.diverter) || {};
+  if (!umleiter.enabled) return [];
+  return (umleiter.loads || []).filter(
+    (v) => v && v.power !== null && v.power !== undefined
+  );
+}
+
 const LEER = new Set(["unknown", "unavailable", "none", "None", "", null, undefined]);
 
 function zahl(wert) {
@@ -378,6 +393,10 @@ class PvSystemCard extends HTMLElement {
       // Zeile bliebe die Karte nach dem Eintragen unverändert, bis jemand das
       // Dashboard neu lädt.
       d.costs ? d.costs.configured : false,
+      // Die Verbraucher unter dem Haus: Kommt einer dazu oder wechselt das
+      // Symbol, muss das SVG neu gebaut werden.
+      _umleiterMitLeistung(d).length,
+      d.house && d.house.diverter ? d.house.diverter.icon : null,
       d.plants.map((p) => [
         p.id,
         p.name,
@@ -1589,12 +1608,10 @@ class PvSystemCard extends HTMLElement {
         36
       )
     );
-    // Unter den Phasen, nur wenn es Überschussverbraucher gibt: links, was
-    // sie gerade ziehen, rechts der Grundverbrauch - das Haus ohne sie.
-    this._ref(
-      haus, "house:umleiter",
-      e("text", { class: "mini", x: g.hausX + 10, y: g.bandY + g.bandH - 6 })
-    );
+    // Unter den Phasen, nur wenn es Überschussverbraucher gibt: der
+    // Grundverbrauch, also das Haus ohne sie. Was sie selbst ziehen, stand
+    // früher links daneben - es steht jetzt unten an ihrem eigenen Symbol
+    // und wäre hier eine zweite Stelle für dieselbe Zahl.
     this._ref(
       haus, "house:grund",
       e("text", {
@@ -1629,6 +1646,58 @@ class PvSystemCard extends HTMLElement {
     this._leitung(
       leitungen, g.netzSteig, g.bandY + g.bandH, g.netzSteig, g.yNetz, "netz", "f-netz"
     );
+
+    /* --- Überschussverbraucher ------------------------------------------ */
+    //
+    // Sie hängen unter dem Haus wie das Netz unter dem Zähler - und das ist
+    // keine Spielerei, sondern die richtige Stelle: Ihr Strom fließt hinter
+    // dem Zähler, sie sind Teil des Hauses. Deshalb gehen ihre Leitungen aus
+    // dem Hauskasten heraus und nicht aus der Phase.
+    //
+    // Gezeichnet wird nur, was eine Leistung meldet. Kein Überschuss
+    // eingerichtet, kein Strich.
+    const verbraucher = _umleiterMitLeistung(this._daten);
+    if (verbraucher.length) {
+      const art = (this._daten.house.diverter || {}).icon || "boiler";
+      // Gleichmäßig unter dem Hauskasten verteilt: einer in der Mitte, zwei
+      // auf den Dritteln, und so weiter. Ab dem dritten wird die Reihe nach
+      // links breiter als der Kasten - dort ist Platz, und sonst stießen die
+      // Wattzahlen aneinander, sobald eine davon "10,50 kW" heißt.
+      const spanne = HAUS_B + Math.max(0, verbraucher.length - 2) * 34;
+      const abstand = spanne / (verbraucher.length + 1);
+      const links = g.hausX + HAUS_B / 2 - spanne / 2;
+      verbraucher.forEach((last, i) => {
+        const x = links + abstand * (i + 1);
+        // Die Leitung endet über dem Symbol, nicht daneben.
+        this._leitung(
+          leitungen, x, g.bandY + g.bandH, x, g.yNetz - 2, `umleiter:${i}`, "f-haus"
+        );
+        const block = e("g", {
+          class: "block",
+          "data-ziel": "house:",
+          tabindex: "0",
+          role: "button",
+        });
+        // Die Leistung sitzt mitten auf der Leitung und stellt sie frei -
+        // dieselbe Lösung wie bei den Phasen. Daneben wäre bei zwei
+        // Verbrauchern kein Platz.
+        this._ref(
+          block, `umleiter:${i}`,
+          e("text", {
+            class: "mini mittig freistellen",
+            x,
+            y: g.bandY + g.bandH + (g.yNetz - 2 - g.bandY - g.bandH) / 2 + 3.5,
+          })
+        );
+        block.appendChild(this._umleiterSymbol(art, x - 15, g.yNetz - 2));
+        // Der Name steht nicht daneben - dafür ist kein Platz. Er steht im
+        // Tooltip, und ein Klick führt wie überall in die Detailtafel.
+        const titel = e("title");
+        titel.textContent = this._lastName(last);
+        block.appendChild(titel);
+        bloecke.appendChild(block);
+      });
+    }
 
     /* --- Netz ----------------------------------------------------------- */
     // Kein Kasten, nur der Mast: Das Netz ist nicht Teil der Anlage. Ein
@@ -1671,6 +1740,14 @@ class PvSystemCard extends HTMLElement {
    *
    * ``groesse`` skaliert es; die Grundform ist dreißig Einheiten breit.
    */
+  /** Wie der Verbraucher heißt - aus Home Assistant, sonst aus der Entität. */
+  _lastName(last) {
+    const zustand =
+      this._hass && this._hass.states && this._hass.states[last.entity];
+    const name = zustand && zustand.attributes && zustand.attributes.friendly_name;
+    return name || last.entity || "Überschussverbraucher";
+  }
+
   _hausSymbol(x, y, groesse = 30) {
     const s = groesse / 30;
     const gruppe = e("g", {
@@ -1679,6 +1756,75 @@ class PvSystemCard extends HTMLElement {
     });
     gruppe.appendChild(e("path", { d: "M 1 15 L 15 3 L 29 15" }));
     gruppe.appendChild(e("path", { d: "M 5 14 V 30 H 25 V 14" }));
+    return gruppe;
+  }
+
+  /**
+   * Das Symbol eines Überschussverbrauchers.
+   *
+   * Selbst gezeichnet wie der Strommast und aus demselben Grund: Die Karte
+   * baut ihr SVG aus eigenen Pfaden und kommt an die Symbolschrift des
+   * Frontends nicht heran. Fünf Formen decken ab, was Leute an einen
+   * Überschussregler hängen; welche gilt, steht in der Konfiguration.
+   *
+   * Alle sind in einem Feld von 30 x 34 gezeichnet und werden von dort
+   * skaliert - so sitzen sie nebeneinander auf derselben Grundlinie.
+   */
+  _umleiterSymbol(art, x, y, groesse = 30) {
+    const formen = {
+      // Warmwasserspeicher: stehender Kessel mit Anschluss oben, zwei
+      // Wasserlinien und zwei Füßen.
+      boiler: [
+        "M 15 1 v 3",
+        "M 10 4 h 10 a 4 4 0 0 1 4 4 v 16 a 4 4 0 0 1 -4 4 h -10 a 4 4 0 0 1 -4 -4 v -16 a 4 4 0 0 1 4 -4 Z",
+        "M 10 13 q 2.5 -2.5 5 0 t 5 0",
+        "M 10 20 q 2.5 -2.5 5 0 t 5 0",
+        "M 11 28 v 4 M 19 28 v 4",
+      ],
+      // Heizkörper oder Pufferspeicher: Rippen in einem Gehäuse, zwei Füße.
+      heater: [
+        "M 6 7 h 18 a 3 3 0 0 1 3 3 v 14 a 3 3 0 0 1 -3 3 h -18 a 3 3 0 0 1 -3 -3 v -14 a 3 3 0 0 1 3 -3 Z",
+        "M 11 7 v 20 M 15 7 v 20 M 19 7 v 20",
+        "M 8 27 v 4 M 22 27 v 4",
+      ],
+      // Wallbox: das Auto, weil es jeder auf Anhieb erkennt.
+      car: [
+        "M 3 22 v -4 h 2 l 3 -5 h 14 l 3 5 h 2 v 4 Z",
+        "M 8 17 h 14",
+        "M 6.5 22 a 3 3 0 1 0 6 0 a 3 3 0 1 0 -6 0",
+        "M 17.5 22 a 3 3 0 1 0 6 0 a 3 3 0 1 0 -6 0",
+      ],
+      // Wärmepumpe: Gehäuse mit Lüfterrad. Drei kurze Flügel und eine Nabe -
+      // drei lange Speichen sähen aus wie ein Friedenszeichen.
+      heatpump: [
+        "M 4 6 h 22 a 2 2 0 0 1 2 2 v 18 a 2 2 0 0 1 -2 2 h -22 a 2 2 0 0 1 -2 -2 v -18 a 2 2 0 0 1 2 -2 Z",
+        "M 9 17 a 6 6 0 1 0 12 0 a 6 6 0 1 0 -12 0",
+        // Drei gebogene Flügel statt drei geraden Speichen: Die ergäben ein
+        // Friedenszeichen und keinen Lüfter.
+        ["M 15 16.2 C 13 14 13.5 11.4 15 11.4 C 16.5 11.4 17 14 15 16.2 Z", ""],
+        ["M 15 16.2 C 13 14 13.5 11.4 15 11.4 C 16.5 11.4 17 14 15 16.2 Z",
+         "rotate(120 15 17)"],
+        ["M 15 16.2 C 13 14 13.5 11.4 15 11.4 C 16.5 11.4 17 14 15 16.2 Z",
+         "rotate(240 15 17)"],
+        "M 14.2 17 a 0.8 0.8 0 1 0 1.6 0 a 0.8 0.8 0 1 0 -1.6 0",
+      ],
+      // Alles Übrige: ein Blitz im Kasten.
+      plug: [
+        "M 7 5 h 16 a 3 3 0 0 1 3 3 v 18 a 3 3 0 0 1 -3 3 h -16 a 3 3 0 0 1 -3 -3 v -18 a 3 3 0 0 1 3 -3 Z",
+        "M 17 9 l -5 8 h 6 l -4 8",
+      ],
+    };
+    const s = groesse / 30;
+    const gruppe = e("g", {
+      class: "symbol",
+      transform: `translate(${x} ${y}) scale(${s.toFixed(3)})`,
+    });
+    // Ein Eintrag ist entweder ein Pfad oder ein Paar aus Pfad und Drehung -
+    // so lassen sich drei gleiche Lüfterflügel aus einer Form bauen.
+    for (const form of formen[art] || formen.plug) {
+      const [d, dreh] = Array.isArray(form) ? form : [form, ""];
+      gruppe.appendChild(e("path", dreh ? { d, transform: dreh } : { d }));
+    }
     return gruppe;
   }
 
@@ -2190,13 +2336,14 @@ class PvSystemCard extends HTMLElement {
 
     const umleiter = d.house.diverter || {};
     this._setzen(
-      "house:umleiter",
-      umleiter.enabled ? `${umleiter.name} ${watt(umleiter.power, l)}` : ""
-    );
-    this._setzen(
       "house:grund",
-      umleiter.enabled ? `Grund ${watt(d.house.base_power, l)}` : ""
+      umleiter.enabled ? `Grundverbrauch ${watt(d.house.base_power, l)}` : ""
     );
+    // Und an jedem Verbraucher unter dem Haus seine eigene Leistung.
+    _umleiterMitLeistung(d).forEach((verbraucher, i) => {
+      this._setzen(`umleiter:${i}`, watt(verbraucher.power, l));
+      this._fluss(`umleiter:${i}`, verbraucher.power, 3000);
+    });
 
     // Kennzahlenleiste
     this._setzen("kpi:pv", watt(t.pv_power, l));

@@ -64,6 +64,7 @@ from .const import (
     CONF_DIVERTER_EFFICIENCY,
     CONF_DIVERTER_ENERGY,
     CONF_DIVERTER_FUEL,
+    CONF_DIVERTER_ICON,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
@@ -149,6 +150,8 @@ from .const import (
     DEFAULT_SENSOR_INTERVAL,
     DEFAULT_SYSTEM_VOLTAGE,
     DIVERTER_FUELS,
+    DIVERTER_ICON_BOILER,
+    DIVERTER_ICONS,
     DIVERTER_PRICE_UNITS,
     GRID_SIGNS,
     PHASE_L1,
@@ -441,6 +444,9 @@ def haus_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         ),
         CONF_DIVERTER_EFFICIENCY: _zahl(
             roh.get(CONF_DIVERTER_EFFICIENCY), DEFAULT_DIVERTER_EFFICIENCY
+        ),
+        CONF_DIVERTER_ICON: _auswahl(
+            roh.get(CONF_DIVERTER_ICON), DIVERTER_ICONS, DIVERTER_ICON_BOILER
         ),
     }
 

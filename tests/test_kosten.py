@@ -1066,70 +1066,122 @@ def test_der_anteil_wird_weiter_getrennt_bewertet():
     assert tag["savings_base"] == round(4.0 * 0.338, 2)
 
 
-# ----------------------------------------------- Die Umleitung, je Schritt
+# ------------------------------------------- Die Umleitung und ihre Grenze
 #
-# Gedeckelt wird der Überschussanteil auf den Eigenverbrauch: Bewertet werden
-# kann nur, was auch selbst genutzt wurde. Das geschah früher auf der *Summe*
-# des Zeitraums - und das ging schief, sobald die Umleitung über einem Tag
-# mehr ergab als der Eigenverbrauch. Dann zog das Minimum den gesamten
-# Eigenverbrauch in den Umleitungstopf, und weil der abends weiterläuft (die
-# Batterie speist das Haus), lief der Umleitungsbetrag mit ihm mit.
+# Bewertet werden kann nur, was auch selbst genutzt wurde - deshalb wird der
+# Überschussanteil auf den Eigenverbrauch gedeckelt. Wo das geschieht, war
+# zweimal falsch, und beide Male fiel es erst im Betrieb auf.
 
 
-def _abend(r, preise, schritte, umleitung):
-    """Der Eigenverbrauch wächst, die Umleitung steht."""
-    verlauf = []
-    for own in schritte:
-        t = r.rechnen({"own": own, "diverted": umleitung}, preise, {})["periods"]["day"]
-        verlauf.append((t["savings_base"], t["savings_diverted"]))
-    return verlauf
+def test_die_umleitung_geht_nicht_verloren_wenn_die_zaehler_verschieden_takten():
+    """Der Zwischenzähler meldet jede Sekunde, der Ertragszähler selten.
+
+    Das ist der Normalfall: Ein Shelly vor dem Boiler liefert im Sekundentakt,
+    der Ertragszähler eines Wechselrichters über MQTT alle halbe Minute. Wird
+    je Messschritt gedeckelt, steht in vier von fünf Läufen ein Zuwachs beim
+    einen und eine Null beim anderen - und das Minimum wirft ihn weg. Aus drei
+    Kilowattstunden wurde so eine Zehntel.
+    """
+    preise = {**PREISE, "price": 0.338, "diverted": 0.11}
+    # Eine halbe Minute je Lauf - so oft rechnet die Anlage im Betrieb.
+    r = _rechner(schritt=timedelta(seconds=30))
+    own, div = 100.0, 20.0
+    r.rechnen({"own": own, "diverted": div}, preise, {})
+    for schritt in range(1, 61):
+        div += 0.05                      # jeder Lauf
+        if schritt % 5 == 0:
+            own += 0.50                  # nur jeder fünfte, dafür gesammelt
+        tag = r.rechnen(
+            {"own": round(own, 3), "diverted": round(div, 3)}, preise, {}
+        )["periods"]["day"]
+
+    assert tag["own_kwh"] == 6.0
+    # Alle drei Kilowattstunden des Verbrauchers, nicht ein Zwanzigstel davon.
+    assert tag["diverted_kwh"] == 3.0
+    assert tag["savings_diverted"] == round(3.0 * 0.11, 2)
+    assert tag["savings_base"] == round(3.0 * 0.338, 2)
 
 
-def test_der_heizstab_zieht_den_abend_nicht_mehr_an_sich():
-    """Der gemeldete Fall: Haushalt blieb bei 0,00, Heizstab lief mit."""
+def test_mehr_umleitung_als_eigenverbrauch_wird_gedeckelt():
+    """Der Notnagel bleibt: Was nicht selbst genutzt wurde, zählt nicht.
+
+    Zwei Zähler, die zu verschiedenen Zeitpunkten neu verankern, können für
+    ein paar Minuten auseinanderlaufen. Ein negativer Haushaltsanteil wäre
+    dann die schlechtere Antwort.
+    """
     preise = {**PREISE, "price": 0.338, "diverted": 0.11}
     r = _rechner()
     r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
-    # Erster Schritt: Die Umleitung springt weiter vor als der Eigenverbrauch.
-    # Mehr als der Eigenverbrauch kann nicht umgeleitet worden sein.
-    verlauf = _abend(r, preise, [100.10, 100.20, 100.30, 100.40], 21.0)
-
-    heizstab = [h for _, h in verlauf]
-    haushalt = [g for g, _ in verlauf]
-    # Der Heizstab steht ab dem zweiten Schritt still ...
-    assert heizstab[1:] == [heizstab[0]] * 3, heizstab
-    # ... und der Haushalt wächst. Vorher blieb er bei 0,00.
-    assert haushalt == sorted(haushalt) and haushalt[-1] > haushalt[0], haushalt
+    tag = r.rechnen({"own": 100.5, "diverted": 22.0}, preise, {})["periods"]["day"]
+    assert tag["own_kwh"] == 0.5
+    assert tag["diverted_kwh"] == 0.5
+    assert tag["savings_base"] == 0.0
 
 
-def test_was_mittags_umgeleitet_wurde_bleibt_bewertet():
-    """Die Gegenprobe: Der Anteil geht nicht verloren, er wächst nur nicht."""
+# ------------------------------------- Was die Amortisation wirklich trägt
+#
+# Zwei verschiedene Wege, und das ist leicht zu übersehen:
+#
+# * Der **Standort** amortisiert über den Geldspeicher. Der schreibt bei jedem
+#   Lauf fort und vergisst nichts - auch keinen Fehler.
+# * Jede **Anlage** rechnet bei jedem Lauf neu, aus den Mengen des
+#   Gesamtzeitraums. Ein Fehler heilt dort von selbst, sobald die Mengen
+#   wieder stimmen.
+
+
+def test_der_ueberschuss_landet_ueber_den_geldspeicher_in_der_amortisation():
+    """Der Korrekturposten ist der Weg dorthin - und war deshalb anfällig.
+
+    Eine umgeleitete Kilowattstunde ist den Preis des ersetzten Brennstoffs
+    wert, nicht den Arbeitspreis. Die Differenz führt der Geldspeicher als
+    eigenen Posten mit, und der geht in "Ertrag gesamt" ein - die Grundlage
+    der Amortisation.
+    """
     preise = {**PREISE, "price": 0.338, "diverted": 0.11}
+    # Eine kleine Investition, damit die Prozentzahl überhaupt sichtbar wird.
+    anlage = _eine_anlage(investment=10.0)
+    ohne = _rechner()
+    ohne.rechnen({"own": 100.0}, preise, {}, anlage)
+    a = ohne.rechnen({"own": 105.0}, preise, {}, anlage)
+
+    mit = _rechner()
+    mit.rechnen({"own": 100.0, "diverted": 20.0}, preise, {}, anlage)
+    b = mit.rechnen({"own": 105.0, "diverted": 23.0}, preise, {}, anlage)
+
+    # 3 der 5 kWh gingen in den Heizstab und sind Gas wert statt Strom.
+    unterschied = round(3.0 * (0.338 - 0.11), 2)
+    gespart = round(
+        a["periods"]["total"]["yield"] - b["periods"]["total"]["yield"], 2
+    )
+    assert gespart == unterschied
+    # Und damit steht die Amortisation entsprechend niedriger.
+    assert b["payback_progress"] < a["payback_progress"]
+
+
+def test_die_anlagen_amortisation_haengt_nicht_am_eigenverbrauch():
+    """Sie rechnet aus dem Ertragszähler der Anlage, nicht aus "own".
+
+    Deshalb hat der Wegwechsel beim Neustart sie nie berührt - und deshalb
+    heilt sie sich auch, wenn woanders etwas schiefging.
+    """
+    anlagen = _eine_anlage()
     r = _rechner()
-    r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
-    # Mittag: 1 kWh in den Heizstab, 1,2 kWh insgesamt selbst genutzt.
-    mittag = r.rechnen({"own": 101.2, "diverted": 21.0}, preise, {})["periods"]["day"]
-    assert mittag["diverted_kwh"] == 1.0
-    assert mittag["savings_diverted"] == round(1.0 * 0.11, 2)
-    assert mittag["savings_base"] == round(0.2 * 0.338, 2)
+    r.rechnen(
+        {"own": 100.0, "anlage:a1": 500.0, "export": 200.0}, PREISE, {}, anlagen
+    )
+    # Derselbe Anlagenertrag, aber ein wild springender Eigenverbrauch.
+    ruhig = r.rechnen(
+        {"own": 104.0, "anlage:a1": 504.0, "export": 201.0}, PREISE, {}, anlagen
+    )["plants"]["a1"]
 
-    # Abend: Der Heizstab ist aus, die Batterie speist das Haus.
-    abend = r.rechnen({"own": 101.5, "diverted": 21.0}, preise, {})["periods"]["day"]
-    assert abend["diverted_kwh"] == 1.0
-    assert abend["savings_diverted"] == mittag["savings_diverted"]
-    assert abend["savings_base"] == round(0.5 * 0.338, 2)
+    r2 = _rechner()
+    r2.rechnen(
+        {"own": 100.0, "anlage:a1": 500.0, "export": 200.0}, PREISE, {}, anlagen
+    )
+    wild = r2.rechnen(
+        {"own": 9000.0, "anlage:a1": 504.0, "export": 201.0}, PREISE, {}, anlagen
+    )["plants"]["a1"]
 
-
-def test_der_gedeckelte_stand_ueberlebt_einen_neustart():
-    """Er liegt im Speicher - sonst begänne die Deckelung täglich neu."""
-    hass = ha_stubs.HomeAssistant()
-    preise = {**PREISE, "price": 0.338, "diverted": 0.11}
-    r = _MitUhr(hass=hass, kennung="deckel")
-    r.rechnen({"own": 100.0, "diverted": 20.0}, preise, {})
-    r.rechnen({"own": 101.2, "diverted": 21.0}, preise, {})
-    asyncio.run(r.async_speichern())
-    stand = r._umleitung
-
-    wieder = kosten.Kostenrechner(hass, "deckel")
-    asyncio.run(wieder.async_laden())
-    assert wieder._umleitung == stand
+    assert ruhig["yield_kwh"] == wild["yield_kwh"]
+    assert ruhig["yield"] == wild["yield"]
+    assert ruhig["payback_progress"] == wild["payback_progress"]
