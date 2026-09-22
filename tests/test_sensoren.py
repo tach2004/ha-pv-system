@@ -1363,3 +1363,85 @@ def test_ein_stummer_ertragszaehler_wechselt_den_weg_nicht():
     # Und wieder da. Der Tageswert läuft weiter, statt von vorn zu beginnen.
     _staende(hass, 0.9)
     assert tageswert() == 0.9
+
+
+# ------------------------------------- Die Verbraucher unter dem Haus (Karte)
+
+
+def test_jeder_verbraucher_kommt_einzeln_bei_der_karte_an():
+    """Die Summe genügt nicht - die Karte reiht sie nebeneinander auf."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab", "sensor.wallbox"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.stab", 900, "W")
+    hass.states.setzen("sensor.wallbox", 600, "W")
+    hass.states.setzen("sensor.netz", 100, "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+
+    assert [v["entity"] for v in umleiter["loads"]] == [
+        "sensor.stab",
+        "sensor.wallbox",
+    ]
+    assert [v["power"] for v in umleiter["loads"]] == [900.0, 600.0]
+    # Und die Summe entsteht daraus, nicht daneben.
+    assert umleiter["power"] == 1500.0
+
+
+def test_ein_stummer_verbraucher_bekommt_keine_zahl():
+    """Ein Strich ins Nichts behauptet ein Gerät, über das man nichts weiß."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "power_entity": "sensor.haus",
+            "diverter_power_entity": ["sensor.stab", "sensor.wallbox"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.haus", 2000, "W")
+    hass.states.setzen("sensor.stab", 900, "W")
+    hass.states.setzen("sensor.wallbox", "unavailable", "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+    assert [v["power"] for v in umleiter["loads"]] == [900.0, None]
+
+
+def test_das_symbol_steht_in_den_daten():
+    """Die Karte kann es nicht raten - es kommt aus der Konfiguration."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "diverter_power_entity": ["sensor.stab"],
+            "diverter_icon": "car",
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.stab", 900, "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+    assert umleiter["icon"] == "car"
+
+
+def test_ein_unbekanntes_symbol_faellt_auf_den_speicher_zurueck():
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "diverter_power_entity": ["sensor.stab"],
+            "diverter_icon": "raumschiff",
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.stab", 900, "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+    assert umleiter["icon"] == "boiler"

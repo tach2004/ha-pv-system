@@ -875,6 +875,17 @@ Wiederholung und deshalb abgeschaltet – der zweite nie.
 | **… : je** | Auswahl | kWh, Liter, m³, kg oder Tonne – die Einheit, in der abgerechnet wird | kWh |
 | **… : Entität statt fester Zahl** | Entität | Für Preise, die am Markt schwanken. **Hat Vorrang**, wird genauso umgerechnet | Nur die feste Zahl |
 | **Wirkungsgrad der ersetzten Heizung** | % | Gasbrennwert rund 92, alter Kessel 80–88, Fernwärme 100, **Wärmepumpe = JAZ × 100** | 100 (nicht umrechnen) |
+| **Symbol in der Karte** | Auswahl | Warmwasserspeicher, Heizkörper, Wallbox, Wärmepumpe oder „Anderes Gerät" – womit die Karte sie unter dem Haus zeichnet | Warmwasserspeicher |
+
+**Die Verbraucher hängen unter dem Haus** – wie das Netz unter dem Zähler, und
+aus demselben Grund: Ihr Strom fließt hinter dem Zähler, sie sind Teil des
+Hauses. An jeder Leitung steht, was das Gerät gerade zieht.
+
+Gezeichnet wird nur, was eine Leistung meldet. Sind zwei Sensoren unter
+*Leistung Überschussverbraucher* eingetragen, stehen zwei Geräte nebeneinander;
+ab dem dritten rückt die Reihe nach links aus dem Kasten heraus, damit die
+Wattzahlen nicht aneinanderstoßen. Das Symbol gilt für alle zusammen – wer
+zwei verschiedene Geräte hat, erkennt sie am Namen beim Darüberfahren.
 
 ### Kosten und Ertrag (Standort)
 

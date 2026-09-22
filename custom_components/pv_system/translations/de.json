@@ -590,6 +590,7 @@
           "diverter_efficiency": "Wirkungsgrad der ersetzten Heizung",
           "diverter_energy_entity": "Zähler Überschussverbraucher",
           "diverter_fuel": "Ersetzt",
+          "diverter_icon": "Symbol in der Karte",
           "diverter_name": "Überschussverbraucher",
           "diverter_power_entity": "Leistung Überschussverbraucher",
           "diverter_price": "Preis des Ersetzten: feste Zahl",
@@ -602,6 +603,7 @@
           "diverter_efficiency": "Wie viel Wärme die **ersetzte** Heizung aus ihrem Brennstoff macht, in Prozent. Sie braucht mehr als eine Kilowattstunde Brennstoff für eine Kilowattstunde Wärme - genau darum geht es.\n\n• Gasbrennwertkessel: rund **92**\n• Älterer Gas- oder Ölkessel: **80** bis **88**\n• Pelletkessel: rund **90**\n• Fernwärme: **100** - übergeben wird Wärme, nicht Brennstoff\n• **Wärmepumpe: die Jahresarbeitszahl mal hundert.** Bei JAZ 3,5 also 350. Sie macht aus einer Kilowattstunde Strom dreieinhalb Kilowattstunden Wärme - ein Heizstab nur eine. Deshalb ist der Überschuss in einem Haus mit Wärmepumpe deutlich weniger wert, und das soll die Rechnung auch sagen.\n\n100 heißt: nicht umrechnen.",
           "diverter_energy_entity": "kWh-Zähler dieser Verbraucher. **Mehrere sind erlaubt** - sie werden addiert.\n\nDiese Kilowattstunden fließen wirklich im Haus. Ob sie Geld sparen, hängt davon ab, was sie ersetzen: Wer damit statt mit Gas heizt, spart Gas und nicht Strom - deshalb werden sie in der Ersparnis getrennt bewertet, mit den beiden Feldern weiter unten.\n\nLeer: Der Überschuss zählt wie jeder andere Eigenverbrauch.",
           "diverter_fuel": "Was dieser Verbraucher ersetzt. Davon hängt ab, was eine umgeleitete Kilowattstunde wert ist.\n\nErdgas, Flüssiggas, Öl, Pellets, Fernwärme oder Wärmepumpe: Der Wert ist der Preis dieses Brennstoffs je kWh - siehe die Felder darunter.\n\n„Nichts - es bleibt Strom“: Ein Hausspeicher oder ein Auto verbrennt nichts, es verschiebt Strom nach später. Dann ist eine Kilowattstunde genau den Arbeitspreis wert, und die Felder darunter werden ignoriert.",
+          "diverter_icon": "Womit die Karte die Verbraucher unter dem Haus zeichnet.\n\nEs gilt für alle zusammen - gibt es zwei, stehen sie mit demselben Symbol nebeneinander. Welcher welcher ist, verrät der Name beim Darüberfahren.",
           "diverter_name": "Wie der Verbraucher in der Karte heißen soll, z. B. „Heizstab“.",
           "diverter_power_entity": "Was die Überschussverbraucher gerade ziehen - der Heizstab im Brauchwasserspeicher, die Wallbox im Überschussladen, der Pufferspeicher der Wärmepumpe. **Mehrere sind erlaubt**; sie werden addiert.\n\nGemeint ist alles, was nur läuft, **weil** Überschuss da ist, und dabei Energie in einen Speicher legt - warmes Wasser, eine Autobatterie, ein Pufferspeicher. Ein Kühlschrank gehört nicht dazu: Der läuft sowieso.\n\nDiese Leistung wird vom Hausverbrauch abgezogen und ergibt den **Grundverbrauch** - das, was dein Haushalt ohne den Überschuss gebraucht hätte. Autarkie und Eigenverbrauch rechnen weiter auf dem **ganzen** Hausverbrauch; der Grundverbrauch steht daneben, weil nur er von Monat zu Monat vergleichbar ist.",
           "diverter_price": "Der Preis, **wie er auf deiner Rechnung steht** - nicht umgerechnet. Umrechnen ist Arbeit der Integration: Wie viele Kilowattstunden in einem Liter, einem Kubikmeter oder einer Tonne stecken, weiß sie, und den Wirkungsgrad fragt sie darunter ab.\n\nWelche Einheit gemeint ist, sagst du im Feld daneben. Erdgas wird meist je kWh oder je m³ abgerechnet, Flüssiggas je Liter oder Kilogramm, Heizöl je Liter, Pellets je Tonne, Fernwärme je kWh.\n\nWeil sich das ständig ändert, ist das Feld darunter meistens das bessere: eine Entität, die den Preis liefert.\n\nLeer: Es gilt der Arbeitspreis, und die Anlage rechnet sich reicher, als sie ist.",
@@ -655,6 +657,15 @@
         "lpg": "Flüssiggas",
         "oil": "Heizöl",
         "pellets": "Pellets oder Holz"
+      }
+    },
+    "diverter_icon": {
+      "options": {
+        "boiler": "Warmwasserspeicher",
+        "car": "Wallbox, Auto",
+        "heater": "Heizkörper, Pufferspeicher",
+        "heatpump": "Wärmepumpe",
+        "plug": "Anderes Gerät"
       }
     },
     "diverter_price_unit": {

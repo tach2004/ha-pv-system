@@ -76,6 +76,7 @@ from .const import (
     CONF_DIVERTER_EFFICIENCY,
     CONF_DIVERTER_ENERGY,
     CONF_DIVERTER_FUEL,
+    CONF_DIVERTER_ICON,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
@@ -147,6 +148,7 @@ from .const import (
     DEFAULT_NAME,
     DEFAULT_PLANT_NAME,
     DIVERTER_FUELS,
+    DIVERTER_ICONS,
     DIVERTER_PRICE_UNITS,
     DOMAIN,
     GRID_SIGNS,
@@ -380,6 +382,7 @@ UEBERSCHUSSFELDER: Final = (
     CONF_DIVERTER_PRICE_ENTITY,
     CONF_DIVERTER_PRICE_UNIT,
     CONF_DIVERTER_EFFICIENCY,
+    CONF_DIVERTER_ICON,
 )
 
 
@@ -412,6 +415,9 @@ def _felder_ueberschuss() -> dict[Any, Any]:
         ),
         vol.Optional(CONF_DIVERTER_PRICE_ENTITY): _sensor(),
         vol.Optional(CONF_DIVERTER_EFFICIENCY): _zahl(10, 800, 1, "%"),
+        vol.Optional(CONF_DIVERTER_ICON): _auswahl(
+            DIVERTER_ICONS, "diverter_icon"
+        ),
     }
 
 

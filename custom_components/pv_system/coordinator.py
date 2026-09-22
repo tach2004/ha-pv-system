@@ -66,6 +66,7 @@ from .const import (
     CONF_DIVERTER_EFFICIENCY,
     CONF_DIVERTER_ENERGY,
     CONF_DIVERTER_FUEL,
+    CONF_DIVERTER_ICON,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
@@ -1152,9 +1153,15 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Der Überschussverbraucher und der Teil davon, der aus PV oder
         # Batterie kam.
-        umleiterleistung = units.add(
-            *(units.watt(self.hass, e) for e in conf[CONF_DIVERTER_POWER])
-        )
+        # Jeder Verbraucher einzeln - die Karte reiht sie unter dem Haus auf.
+        # Die Summe entsteht daraus und nicht umgekehrt: Zwei Heizstäbe an
+        # derselben Heizung sind zwei Striche in der Karte und eine Zahl in
+        # der Rechnung.
+        umleiterliste = [
+            {"entity": e, "power": units.rund(units.watt(self.hass, e))}
+            for e in conf[CONF_DIVERTER_POWER]
+        ]
+        umleiterleistung = units.add(*(v["power"] for v in umleiterliste))
         umleitersonne = units.add(
             *(units.watt(self.hass, e) for e in conf[CONF_DIVERTER_SOLAR_POWER])
         )
@@ -1289,6 +1296,10 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 2,
             ),
             "grid_power": units.rund(netzumleitung),
+            # Für die Karte: die einzelnen Verbraucher mit ihrer Leistung und
+            # das Symbol, mit dem sie gezeichnet werden sollen.
+            "loads": umleiterliste,
+            "icon": conf[CONF_DIVERTER_ICON],
             "fuel": conf[CONF_DIVERTER_FUEL],
             # Wie beim Arbeitspreis: Die Entität gewinnt, die feste Zahl ist
             # der Rückfall. Gas und Öl wechseln am Markt wie Strom.
