@@ -67,6 +67,8 @@ from .const import (
     CONF_DIVERTER_ENERGY,
     CONF_DIVERTER_FUEL,
     CONF_DIVERTER_ICON,
+    CONF_DIVERTER_LOAD_ICONS,
+    CONF_DIVERTER_LOAD_NAMES,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
@@ -1158,8 +1160,18 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # derselben Heizung sind zwei Striche in der Karte und eine Zahl in
         # der Rechnung.
         umleiterliste = [
-            {"entity": e, "power": units.rund(units.watt(self.hass, e))}
-            for e in conf[CONF_DIVERTER_POWER]
+            {
+                "entity": e,
+                "power": units.rund(units.watt(self.hass, e)),
+                # Leer heißt: Die Karte nimmt den Namen aus Home Assistant.
+                # Ihn hier vorwegzunehmen hieße, ihn in die Attribute des
+                # Statussensors zu schreiben, und dort gehört er nicht hin.
+                "name": _slot(conf, CONF_DIVERTER_LOAD_NAMES, i),
+                # Leer heißt: Es gilt das gemeinsame Symbol.
+                "icon": _slot(conf, CONF_DIVERTER_LOAD_ICONS, i)
+                or conf[CONF_DIVERTER_ICON],
+            }
+            for i, e in enumerate(conf[CONF_DIVERTER_POWER])
         ]
         umleiterleistung = units.add(*(v["power"] for v in umleiterliste))
         umleitersonne = units.add(
@@ -1433,6 +1445,18 @@ def _wert_je_kwh(
     if anteil <= 0:
         return None
     return round(preis / kwh_je_einheit / anteil, 5)
+
+
+def _slot(conf: dict[str, Any], felder: tuple[str, ...], nummer: int) -> str:
+    """Der Eintrag für den n-ten Überschussverbraucher, sonst nichts.
+
+    Die Felder hängen an der Reihenfolge der Leistungssensoren. Wer mehr
+    Sensoren einträgt, als es Plätze gibt, bekommt für die weiteren die
+    Vorgabe - das ist besser als ein Absturz beim siebten Heizstab.
+    """
+    if nummer >= len(felder):
+        return ""
+    return str(conf.get(felder[nummer]) or "")
 
 
 def _nur_wenn_eingetragen(wert: float | None, entitaet: str | None) -> float | None:

@@ -215,6 +215,28 @@ DIVERTER_ICONS: Final = [
     "heatpump",             # Wärmepumpe
     "plug",                 # alles Übrige
 ]
+
+# Und dasselbe je Verbraucher.
+#
+# Wer zwei Geräte am Überschuss hängen hat - einen Heizstab und eine Wallbox -,
+# will sie in der Karte auseinanderhalten können. Name und Symbol gibt es
+# deshalb auch einzeln; CONF_DIVERTER_NAME und CONF_DIVERTER_ICON bleiben die
+# Vorgabe für alle, die nichts Eigenes bekommen.
+#
+# Die Felder hängen an der *Reihenfolge* der Leistungssensoren, nicht an deren
+# Entitäts-ID. Das ist der Preis dafür, dass ein Optionsdialog keine
+# wiederholbaren Blöcke kennt: Wer die Liste oben umsortiert, sortiert die
+# Namen hier mit um. Sechs Plätze reichen weit über das hinaus, was jemand an
+# einen Überschussregler hängt; wer mehr hat, bekommt für die weiteren den
+# Namen aus Home Assistant und das gemeinsame Symbol.
+DIVERTER_SLOTS: Final = 6
+CONF_DIVERTER_LOAD_NAMES: Final = tuple(
+    f"diverter_name_{nummer}" for nummer in range(1, DIVERTER_SLOTS + 1)
+)
+CONF_DIVERTER_LOAD_ICONS: Final = tuple(
+    f"diverter_icon_{nummer}" for nummer in range(1, DIVERTER_SLOTS + 1)
+)
+
 DEFAULT_DIVERTER_EFFICIENCY: Final = 100.0
 
 # ----------------------------------------------------------------- Darstellung

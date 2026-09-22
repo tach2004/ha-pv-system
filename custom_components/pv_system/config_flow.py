@@ -77,6 +77,8 @@ from .const import (
     CONF_DIVERTER_ENERGY,
     CONF_DIVERTER_FUEL,
     CONF_DIVERTER_ICON,
+    CONF_DIVERTER_LOAD_ICONS,
+    CONF_DIVERTER_LOAD_NAMES,
     CONF_DIVERTER_NAME,
     CONF_DIVERTER_POWER,
     CONF_DIVERTER_PRICE,
@@ -150,6 +152,7 @@ from .const import (
     DIVERTER_FUELS,
     DIVERTER_ICONS,
     DIVERTER_PRICE_UNITS,
+    DIVERTER_SLOTS,
     DOMAIN,
     GRID_SIGNS,
     PHASES,
@@ -383,6 +386,8 @@ UEBERSCHUSSFELDER: Final = (
     CONF_DIVERTER_PRICE_UNIT,
     CONF_DIVERTER_EFFICIENCY,
     CONF_DIVERTER_ICON,
+    *CONF_DIVERTER_LOAD_NAMES,
+    *CONF_DIVERTER_LOAD_ICONS,
 )
 
 
@@ -395,12 +400,18 @@ def _felder_haus() -> dict[Any, Any]:
     }
 
 
-def _felder_ueberschuss() -> dict[Any, Any]:
+def _felder_ueberschuss(anzahl: int = 0) -> dict[Any, Any]:
     """Alles zum Überschussverbraucher - ein eigener Schritt.
 
-    Zehn Felder, die zusammen eine einzige Frage beantworten: Was ist eine
-    umgeleitete Kilowattstunde wert? Zwischen Hausverbrauch und Energiezähler
-    standen sie wie ein Anhang; sie sind aber ein Thema für sich.
+    Ein Dutzend Felder, die zusammen eine einzige Frage beantworten: Was ist
+    eine umgeleitete Kilowattstunde wert? Zwischen Hausverbrauch und
+    Energiezähler standen sie wie ein Anhang; sie sind aber ein Thema für sich.
+
+    ``anzahl`` ist die Zahl der eingetragenen Leistungssensoren. So viele
+    Paare aus Name und Symbol werden zusätzlich angeboten - und keines mehr.
+    Wer einen einzigen Heizstab hat, soll nicht sechs leere Felderpaare
+    durchscrollen müssen; wer einen zweiten einträgt und den Dialog erneut
+    öffnet, findet das zweite Paar vor.
     """
     return {
         vol.Optional(CONF_DIVERTER_NAME): _text(),
@@ -418,6 +429,19 @@ def _felder_ueberschuss() -> dict[Any, Any]:
         vol.Optional(CONF_DIVERTER_ICON): _auswahl(
             DIVERTER_ICONS, "diverter_icon"
         ),
+        # Je Verbraucher, in derselben Reihenfolge wie die Leistungssensoren
+        # oben. Beides freiwillig: leer heißt "wie für alle".
+        **{
+            vol.Optional(feld): art
+            for nummer in range(min(anzahl, DIVERTER_SLOTS))
+            for feld, art in (
+                (CONF_DIVERTER_LOAD_NAMES[nummer], _text()),
+                (
+                    CONF_DIVERTER_LOAD_ICONS[nummer],
+                    _auswahl(DIVERTER_ICONS, "diverter_icon"),
+                ),
+            )
+        },
     }
 
 
@@ -835,7 +859,10 @@ class PvSystemOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="surplus",
             data_schema=_mit_vorschlag(
-                _felder_ueberschuss(), self._daten[CONF_HOUSE]
+                _felder_ueberschuss(
+                    len(self._daten[CONF_HOUSE].get(CONF_DIVERTER_POWER) or [])
+                ),
+                self._daten[CONF_HOUSE],
             ),
         )
 

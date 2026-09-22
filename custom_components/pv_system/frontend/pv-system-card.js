@@ -84,6 +84,7 @@ const NETZ_ABSTAND = 34;  // Länge der Senkrechten vom Zähler zum Netz
 // sichtbar, und seine Unterkante soll nicht durch die Unterlängen von
 // "Bezug aus dem Netz" laufen.
 const NETZ_H = 56;        // Höhe der Netzzeile ganz unten
+const UMLEITER_SCHIENE = 11;  // Abstand der Sammelschiene unter dem Haus
 // Abstand zwischen einem Kasten und dem nächsten Abgriff auf der Phase. Ohne
 // ihn stößt der erste Wechselrichter direkt an den Zähler, und der Abschnitt
 // dazwischen ist zu kurz, um seinen Fluss noch zu zeigen.
@@ -1608,10 +1609,16 @@ class PvSystemCard extends HTMLElement {
         36
       )
     );
-    // Unter den Phasen, nur wenn es Überschussverbraucher gibt: der
-    // Grundverbrauch, also das Haus ohne sie. Was sie selbst ziehen, stand
-    // früher links daneben - es steht jetzt unten an ihrem eigenen Symbol
-    // und wäre hier eine zweite Stelle für dieselbe Zahl.
+    // Unter den Phasen, nur wenn es Überschussverbraucher gibt: links, was
+    // sie zusammen ziehen, rechts der Grundverbrauch - das Haus ohne sie.
+    //
+    // Die Summe steht hier und nicht nur an den einzelnen Geräten: Bei zwei
+    // Verbrauchern müsste man sonst im Kopf addieren, um zu sehen, was
+    // gerade insgesamt in den Überschuss läuft.
+    this._ref(
+      haus, "house:umleiter",
+      e("text", { class: "mini", x: g.hausX + 10, y: g.bandY + g.bandH - 6 })
+    );
     this._ref(
       haus, "house:grund",
       e("text", {
@@ -1652,25 +1659,44 @@ class PvSystemCard extends HTMLElement {
     // Sie hängen unter dem Haus wie das Netz unter dem Zähler - und das ist
     // keine Spielerei, sondern die richtige Stelle: Ihr Strom fließt hinter
     // dem Zähler, sie sind Teil des Hauses. Deshalb gehen ihre Leitungen aus
-    // dem Hauskasten heraus und nicht aus der Phase.
+    // dem Hauskasten heraus und nicht aus einer Phase.
+    //
+    // Eine waagerechte Schiene verbindet sie mit der Zeile im Hauskasten, in
+    // der ihr Name und ihre Summe stehen. Ohne sie stünden unten drei Striche
+    // ohne erkennbaren Bezug zu dem, was oben "Heizstab 1,50 kW" heißt.
     //
     // Gezeichnet wird nur, was eine Leistung meldet. Kein Überschuss
     // eingerichtet, kein Strich.
     const verbraucher = _umleiterMitLeistung(this._daten);
     if (verbraucher.length) {
-      const art = (this._daten.house.diverter || {}).icon || "boiler";
+      const ySchiene = g.bandY + g.bandH + UMLEITER_SCHIENE;
       // Gleichmäßig unter dem Hauskasten verteilt: einer in der Mitte, zwei
       // auf den Dritteln, und so weiter. Ab dem dritten wird die Reihe nach
       // links breiter als der Kasten - dort ist Platz, und sonst stießen die
-      // Wattzahlen aneinander, sobald eine davon "10,50 kW" heißt.
-      const spanne = HAUS_B + Math.max(0, verbraucher.length - 2) * 34;
+      // Beschriftungen aneinander.
+      const spanne = HAUS_B + Math.max(0, verbraucher.length - 1) * 34;
       const abstand = spanne / (verbraucher.length + 1);
       const links = g.hausX + HAUS_B / 2 - spanne / 2;
+      const stellen = verbraucher.map((_, i) => links + abstand * (i + 1));
+
+      // Erst der Abgang aus dem Haus und die Schiene, dann die Geräte daran.
+      // Der Abgang sitzt unter der Zeile, zu der die Schiene gehört.
+      const quelle = g.hausX + 16;
+      this._leitung(
+        leitungen, quelle, g.bandY + g.bandH, quelle, ySchiene,
+        "umleiter:quelle", "f-haus", null
+      );
+      this._leitung(
+        leitungen,
+        Math.min(quelle, stellen[0]), ySchiene,
+        Math.max(quelle, stellen[stellen.length - 1]), ySchiene,
+        "umleiter:schiene", "f-haus", null
+      );
+
       verbraucher.forEach((last, i) => {
-        const x = links + abstand * (i + 1);
-        // Die Leitung endet über dem Symbol, nicht daneben.
+        const x = stellen[i];
         this._leitung(
-          leitungen, x, g.bandY + g.bandH, x, g.yNetz - 2, `umleiter:${i}`, "f-haus"
+          leitungen, x, ySchiene, x, g.yNetz - 6, `umleiter:${i}`, "f-haus", null
         );
         const block = e("g", {
           class: "block",
@@ -1678,22 +1704,27 @@ class PvSystemCard extends HTMLElement {
           tabindex: "0",
           role: "button",
         });
-        // Die Leistung sitzt mitten auf der Leitung und stellt sie frei -
-        // dieselbe Lösung wie bei den Phasen. Daneben wäre bei zwei
-        // Verbrauchern kein Platz.
-        this._ref(
-          block, `umleiter:${i}`,
-          e("text", {
-            class: "mini mittig freistellen",
-            x,
-            y: g.bandY + g.bandH + (g.yNetz - 2 - g.bandY - g.bandH) / 2 + 3.5,
-          })
+        block.appendChild(
+          this._umleiterSymbol(last.icon || "boiler", x - 13, g.yNetz - 6, 26)
         );
-        block.appendChild(this._umleiterSymbol(art, x - 15, g.yNetz - 2));
-        // Der Name steht nicht daneben - dafür ist kein Platz. Er steht im
-        // Tooltip, und ein Klick führt wie überall in die Detailtafel.
+        // Name und Leistung unter dem Symbol, klein und zurückhaltend: Das
+        // Bild trägt die Aussage, die Schrift ordnet sie nur zu. Ohne
+        // eingetragenen Namen rückt die Leistung an seine Stelle - eine
+        // leere Zeile sähe aus, als fehlte etwas.
+        const name = this._lastName(last, abstand);
+        if (name) {
+          block.appendChild(
+            e("text", { class: "mini mittig", x, y: g.yNetz + 30, text: name })
+          );
+        }
+        this._ref(
+          block, `umleiter:${i}:wert`,
+          e("text", { class: "klein mittig", x, y: g.yNetz + (name ? 42 : 31) })
+        );
+        // Welche Entität dahintersteckt, sagt der Tooltip - dafür ist ihr
+        // technischer Name gut genug.
         const titel = e("title");
-        titel.textContent = this._lastName(last);
+        titel.textContent = last.name || last.entity || "Überschussverbraucher";
         block.appendChild(titel);
         bloecke.appendChild(block);
       });
@@ -1740,12 +1771,22 @@ class PvSystemCard extends HTMLElement {
    *
    * ``groesse`` skaliert es; die Grundform ist dreißig Einheiten breit.
    */
-  /** Wie der Verbraucher heißt - aus Home Assistant, sonst aus der Entität. */
-  _lastName(last) {
-    const zustand =
-      this._hass && this._hass.states && this._hass.states[last.entity];
-    const name = zustand && zustand.attributes && zustand.attributes.friendly_name;
-    return name || last.entity || "Überschussverbraucher";
+  /**
+   * Die Beschriftung unter dem Symbol - ausschließlich der eingetragene Name.
+   *
+   * Bewusst kein Rückfall auf den Namen der Entität: Der heißt in der Praxis
+   * "Shelly Plus 1PM Kanal 0 Leistung" und sagt unter einem Symbol weniger
+   * als gar nichts. Wer eine Beschriftung will, schreibt sie hin.
+   *
+   * ``breite`` ist der Platz in Pixeln: Was nicht hineinpasst, wird gekürzt -
+   * zwei überlappende Namen sind schlimmer als einer mit Auslassungspunkten.
+   */
+  _lastName(last, breite = 0) {
+    const name = (last.name || "").trim();
+    if (!name || !breite) return name;
+    // Rund 4,6 Pixel je Zeichen bei neun Punkt - gemessen, nicht geraten.
+    const platz = Math.max(6, Math.floor((breite - 6) / 4.6));
+    return name.length <= platz ? name : `${name.slice(0, platz - 1)}…`;
   }
 
   _hausSymbol(x, y, groesse = 30) {
@@ -2336,14 +2377,25 @@ class PvSystemCard extends HTMLElement {
 
     const umleiter = d.house.diverter || {};
     this._setzen(
+      "house:umleiter",
+      umleiter.enabled ? `${umleiter.name} ${watt(umleiter.power, l)}` : ""
+    );
+    this._setzen(
       "house:grund",
-      umleiter.enabled ? `Grundverbrauch ${watt(d.house.base_power, l)}` : ""
+      umleiter.enabled ? `Grund ${watt(d.house.base_power, l)}` : ""
     );
     // Und an jedem Verbraucher unter dem Haus seine eigene Leistung.
-    _umleiterMitLeistung(d).forEach((verbraucher, i) => {
-      this._setzen(`umleiter:${i}`, watt(verbraucher.power, l));
+    const lasten = _umleiterMitLeistung(d);
+    lasten.forEach((verbraucher, i) => {
+      this._setzen(`umleiter:${i}:wert`, watt(verbraucher.power, l));
       this._fluss(`umleiter:${i}`, verbraucher.power, 3000);
     });
+    // Abgang und Schiene tragen die Summe - sie speisen ja alle zusammen.
+    if (lasten.length) {
+      const summe = lasten.reduce((a, v) => a + (zahl(v.power) || 0), 0);
+      this._fluss("umleiter:quelle", summe, 3000);
+      this._fluss("umleiter:schiene", summe, 3000);
+    }
 
     // Kennzahlenleiste
     this._setzen("kpi:pv", watt(t.pv_power, l));
