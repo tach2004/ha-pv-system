@@ -8,7 +8,7 @@ Zwei Dinge sind hier die Falle:
 * Ableitungen. Aus zwei von drei Größen die dritte zu rechnen ist richtig -
   aber nur, solange nicht durch null geteilt wird.
 
-    python3 -m pytest tests/test_kosten.py
+    python3 tests/test_kosten.py
 """
 
 from __future__ import annotations
@@ -1076,7 +1076,7 @@ def test_der_anteil_wird_weiter_getrennt_bewertet():
 def test_die_umleitung_geht_nicht_verloren_wenn_die_zaehler_verschieden_takten():
     """Der Zwischenzähler meldet jede Sekunde, der Ertragszähler selten.
 
-    Das ist der Normalfall: Ein Shelly vor dem Boiler liefert im Sekundentakt,
+    Das ist der Normalfall: Ein Messstecker vor dem Boiler liefert im Sekundentakt,
     der Ertragszähler eines Wechselrichters über MQTT alle halbe Minute. Wird
     je Messschritt gedeckelt, steht in vier von fünf Läufen ein Zuwachs beim
     einen und eine Null beim anderen - und das Minimum wirft ihn weg. Aus drei
@@ -1185,3 +1185,15 @@ def test_die_anlagen_amortisation_haengt_nicht_am_eigenverbrauch():
     assert ruhig["yield_kwh"] == wild["yield_kwh"]
     assert ruhig["yield"] == wild["yield"]
     assert ruhig["payback_progress"] == wild["payback_progress"]
+
+
+def _alle_tests():
+    for name, funktion in sorted(globals().items()):
+        if name.startswith("test_") and callable(funktion):
+            funktion()
+            print(f"  ok  {name}")
+
+
+if __name__ == "__main__":
+    _alle_tests()
+    print("alle Kostentests bestanden")

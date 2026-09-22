@@ -592,10 +592,11 @@ einen Wert von sich aus. Dann gilt:
 * Der Rest ist ganz normaler Netzbezug zum Arbeitspreis – er kostet Geld, statt
   welches zu sparen.
 
-Wer es **nicht trennen kann**, lässt die Felder leer. Dann gilt, was der Name
-sagt: Alles kam aus Überschuss. Für einen echten Überschussregler stimmt das
-auch. Als Notbremse rechnet die Integration ohnehin nie mehr um, als im selben
-Zeitraum überhaupt selbst genutzt wurde.
+Wer es **nicht trennen kann**, lässt die Felder leer. Dann wird der Anteil aus
+dem Netzbezug geschätzt – wie das geht und warum das keine Faustregel ist,
+steht unter [Grundverbrauch](#grundverbrauch). Als Notbremse rechnet die
+Integration ohnehin nie mehr um, als im selben Zeitraum überhaupt selbst
+genutzt wurde.
 
 #### Wohin zählt das Ganze?
 
@@ -868,7 +869,7 @@ Wiederholung und deshalb abgeschaltet – der zweite nie.
 | **Überschussverbraucher** | Text | Name in der Karte, z. B. „Heizstab“ | „Überschuss“ |
 | **Leistung Überschussverbraucher** | W, mehrere | Was sie gerade ziehen. Der Anteil aus Überschuss wird vom Hausverbrauch abgezogen → **Grundverbrauch** | Kein Grundverbrauch, kein Grundverbrauchssensor, keine Kartenzeile |
 | **Zähler Überschussverbraucher** | kWh, mehrere | Nur Anzeige. Bewertet wird der **Anteil aus Überschuss**, gemessen oder geschätzt – nicht dieser Zähler | Keine eigene Zeile in der Detailtabelle |
-| **Davon aus PV/Batterie: Leistung** | W, mehrere | Der Anteil, der gerade aus der eigenen Anlage kommt. **Nur er geht vom Grundverbrauch ab** | Wird aus dem Netzbezug geschätzt – siehe oben |
+| **Davon aus PV/Batterie: Leistung** | W, mehrere | Der Anteil, der gerade aus der eigenen Anlage kommt. **Nur er geht vom Grundverbrauch ab.** Einer je Verbraucher in derselben Reihenfolge wie die Leistungssensoren: Dann färbt die Karte jeden Abgang einzeln | Wird aus dem Netzbezug geschätzt – siehe oben |
 | **Davon aus PV/Batterie: Zähler** | kWh, mehrere | Dasselbe als Zählerstand. Ist er gesetzt, geht nur er in die Ersparnis ein – der Rest ist Netzbezug zum Arbeitspreis | Die geschätzte Leistung wird aufaddiert |
 | **Ersetzt** | Auswahl | Erdgas, Flüssiggas, Heizöl, Pellets, Fernwärme, Wärmepumpe oder „Nichts – es bleibt Strom“. Bei „Strom“ werden die Preisfelder ignoriert | Erdgas |
 | **Preis des Ersetzten: feste Zahl** | Geld | Der Preis von der Rechnung, **nicht umgerechnet** | Es gilt der Arbeitspreis |
@@ -902,6 +903,27 @@ Zeile darüber.
 Gezeichnet wird nur, was eine Leistung meldet. Die Reihe wird mit jedem
 weiteren Gerät breiter, damit die Beschriftungen nicht aneinanderstoßen; zu
 lange werden gekürzt.
+
+**Die Farbe des Abgangs sagt, woher der Strom kommt.** Gelb wie die Sonne,
+wenn das Gerät gerade überwiegend aus PV oder Batterie läuft; rot wie jeder
+andere Netzbezug in der Karte, wenn überwiegend aus dem Netz. Der Abgang aus
+dem Haus und die Schiene bleiben lila – sie gehören zum Haus, nicht zu einer
+Quelle.
+
+| Eingetragen | Woher die Karte es weiß | Die Abgänge |
+|---|---|---|
+| Zu **jedem** Leistungssensor ein *Davon aus PV/Batterie: Leistung*, in derselben Reihenfolge | aus dem Sensor des Geräts | jeder für sich |
+| Mehr oder weniger Anteilssensoren als Leistungssensoren | aus der Summe aller Anteilssensoren | alle gleich |
+| Kein Anteilssensor | aus dem Netzbezug geschätzt | alle gleich |
+
+Bei ungleicher Zahl lässt sich nicht feststellen, welcher Sensor zu welchem
+Gerät gehört – dann gilt lieber für alle dasselbe als für eines das Falsche.
+Schweigt ein eingetragener Sensor gerade, bleibt sein Abgang lila: Aus einer
+fehlenden Messung wird keine Behauptung.
+
+„Überwiegend" heißt: mehr als die Hälfte. Um die Hälfte herum liegt ein Band
+von zehn Prozent, damit eine Wallbox, die ständig nachregelt, ihre Linie nicht
+flackern lässt – sie wird erst unter 45 % rot und erst über 55 % wieder gelb.
 
 **Beschriftung und Symbol gibt es je Gerät** – bis zu sechs. Die Felder
 erscheinen im Dialog erst, wenn oben Leistungssensoren eingetragen sind, und

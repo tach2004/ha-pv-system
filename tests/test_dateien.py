@@ -531,6 +531,28 @@ def test_beispiel_dashboard_ist_gueltiges_yaml():
     assert any(karte.get("type") == "custom:pv-system-card" for karte in karten)
 
 
+def test_jede_testdatei_laeuft_vollstaendig_in_ci():
+    """Jeder Test muss auch wirklich laufen - nicht nur dastehen.
+
+    Die Dateien werden direkt aufgerufen, und ihr ``__main__``-Block sammelt
+    ein, was bis dahin an Tests definiert ist. Stand er mitten in der Datei,
+    lief alles darunter nie: So waren über hundert Tests grün, ohne je
+    ausgeführt worden zu sein, und eine ganze Datei stand gar nicht im
+    Arbeitsablauf.
+    """
+    ablauf = (WURZEL / ".github" / "workflows" / "validate.yml").read_text("utf-8")
+    for datei in sorted((WURZEL / "tests").glob("test_*.py")):
+        baum = ast.parse(datei.read_text("utf-8"))
+        letzte = baum.body[-1]
+        assert (
+            isinstance(letzte, ast.If)
+            and ast.unparse(letzte.test) == "__name__ == '__main__'"
+        ), f"{datei.name}: der __main__-Block muss ganz am Ende stehen"
+        assert f"python3 tests/{datei.name}" in ablauf, (
+            f"{datei.name} wird in validate.yml nicht ausgeführt"
+        )
+
+
 def _alle_tests():
     for name, funktion in sorted(globals().items()):
         if name.startswith("test_") and callable(funktion):

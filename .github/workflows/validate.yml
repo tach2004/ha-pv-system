@@ -36,11 +36,12 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install pyyaml ruff
-      - name: Rechnung, Struktur und Dateien
+      - name: Rechnung, Struktur, Sensoren, Kosten und Dateien
         run: |
           python3 tests/test_rechnung.py
           python3 tests/test_topologie.py
           python3 tests/test_sensoren.py
+          python3 tests/test_kosten.py
           python3 tests/test_dateien.py
       - name: Übersetzungen sind aktuell
         run: |

@@ -402,10 +402,6 @@ def _alle_tests():
             print(f"  ok  {name}")
 
 
-if __name__ == "__main__":
-    _alle_tests()
-    print("alle Rechentests bestanden")
-
 
 # ------------------------------------------------- Hybrid und Hausverbrauch
 
@@ -607,3 +603,8 @@ def test_ohne_preise_bleibt_der_kostenblock_leer():
     kosten = k._berechnen()["costs"]
     assert kosten["configured"] is False
     assert kosten["periods"]["day"]["cost"] is None
+
+
+if __name__ == "__main__":
+    _alle_tests()
+    print("alle Rechentests bestanden")

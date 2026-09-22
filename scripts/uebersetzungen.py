@@ -994,17 +994,27 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "mit Netzstrom. Dieselbe Kilowattstunde ist einmal geschenkte "
             "Energie und einmal eine Rechnung über den vollen Arbeitspreis. "
             "Nur der Teil, der aus der eigenen Anlage kam, wird mit dem Preis "
-            "des Ersetzten bewertet.\n\nLeer: Es gilt, was der Name sagt - "
-            "alles kam aus Überschuss. Für einen echten Überschussregler "
-            "stimmt das auch.",
+            "des Ersetzten bewertet.\n\n**Einer je Verbraucher, in derselben "
+            "Reihenfolge wie die Leistungssensoren oben:** Dann zeigt die "
+            "Karte an jedem Gerät einzeln, woher sein Strom gerade kommt - "
+            "gelb aus PV/Batterie, rot aus dem Netz. Sind es mehr oder weniger "
+            "als Leistungssensoren, gilt der Anteil aller zusammen für jedes "
+            "Gerät.\n\nLeer: Der Anteil wird aus dem Netzbezug geschätzt - was "
+            "das Haus gerade aus dem Netz zieht, kann nicht aus Überschuss "
+            "stammen.",
             "**Only if you can measure it separately.** The part of the power "
             "above that is currently coming from PV or battery.\n\nWhy it "
             "matters: an immersion heater runs on surplus in July and on grid "
             "power in January. The same kilowatt hour is free energy once and "
             "a full-price bill the next time. Only the part that came from "
             "your own system is valued with the price of what it "
-            "replaces.\n\nEmpty: what the name says applies - all of it came "
-            "from surplus. For a true surplus controller that is correct.",
+            "replaces.\n\n**One per load, in the same order as the power "
+            "sensors above:** then the card shows for each device where its "
+            "power is coming from right now - yellow from PV/battery, red from "
+            "the grid. With more or fewer than there are power sensors, the "
+            "share of all of them together applies to every device.\n\n"
+            "Empty: the share is estimated from grid import - whatever the "
+            "house is drawing from the grid cannot have come from surplus.",
         ),
         "diverter_solar_energy_entity": (
             "Dasselbe als kWh-Zähler: die Kilowattstunden des Verbrauchers, "

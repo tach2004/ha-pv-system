@@ -179,10 +179,6 @@ def _alle_tests():
             print(f"  ok  {name}")
 
 
-if __name__ == "__main__":
-    _alle_tests()
-    print("alle Struktur-Tests bestanden")
-
 
 def test_preise_ziehen_aus_der_darstellung_um():
     """Bis 0.0.3 standen Arbeitspreis und Vergütung unter "Darstellung".
@@ -212,3 +208,8 @@ def test_neuer_preis_gewinnt_gegen_den_alten_ort():
         }
     )
     assert daten["costs"]["price_per_kwh"] == 0.41
+
+
+if __name__ == "__main__":
+    _alle_tests()
+    print("alle Struktur-Tests bestanden")

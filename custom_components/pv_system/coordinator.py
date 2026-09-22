@@ -1159,17 +1159,38 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Die Summe entsteht daraus und nicht umgekehrt: Zwei Heizstäbe an
         # derselben Heizung sind zwei Striche in der Karte und eine Zahl in
         # der Rechnung.
+        #
+        # Steht zu jedem Leistungssensor ein "Davon aus PV/Batterie", gehören
+        # sie paarweise zusammen - in derselben Reihenfolge, wie Name und
+        # Symbol auch. Dann weiß die Karte für jedes Gerät einzeln, woher sein
+        # Strom kommt. Bei ungleicher Zahl ist die Zuordnung nicht
+        # festzustellen: Welchem von drei Geräten gehört der eine Sensor?
+        # Dann gibt es keine Einzelwerte, und die Karte nimmt den Anteil des
+        # ganzen Blocks. Entschieden wird das an der Konfiguration, nicht
+        # daran, welcher Sensor gerade antwortet.
+        einzeln = bool(conf[CONF_DIVERTER_POWER]) and len(
+            conf[CONF_DIVERTER_SOLAR_POWER]
+        ) == len(conf[CONF_DIVERTER_POWER])
         umleiterliste = [
             {
                 "entity": e,
                 "power": units.rund(units.watt(self.hass, e)),
-                # Leer heißt: Die Karte nimmt den Namen aus Home Assistant.
-                # Ihn hier vorwegzunehmen hieße, ihn in die Attribute des
-                # Statussensors zu schreiben, und dort gehört er nicht hin.
+                # Leer heißt: Unter dem Symbol steht nur die Leistung. Der
+                # Name der Entität wäre kein Ersatz - siehe die Karte.
                 "name": _slot(conf, CONF_DIVERTER_LOAD_NAMES, i),
                 # Leer heißt: Es gilt das gemeinsame Symbol.
                 "icon": _slot(conf, CONF_DIVERTER_LOAD_ICONS, i)
                 or conf[CONF_DIVERTER_ICON],
+                # None heißt hier: Der Sensor ist eingetragen, schweigt aber
+                # gerade. Das ist etwas anderes als "gibt es nicht" - dafür
+                # steht "split_per_load" im Block.
+                "solar_power": (
+                    units.rund(
+                        units.watt(self.hass, conf[CONF_DIVERTER_SOLAR_POWER][i])
+                    )
+                    if einzeln
+                    else None
+                ),
             }
             for i, e in enumerate(conf[CONF_DIVERTER_POWER])
         ]
@@ -1348,6 +1369,9 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "split": bool(
                 conf[CONF_DIVERTER_SOLAR_POWER] or conf[CONF_DIVERTER_SOLAR_ENERGY]
             ),
+            # Hat jedes Gerät seinen eigenen Anteilssensor? Nur dann färbt die
+            # Karte jeden Abgang für sich, sonst alle nach dem Block.
+            "split_per_load": einzeln,
             "entities": {
                 "power": conf[CONF_DIVERTER_POWER],
                 "energy": conf[CONF_DIVERTER_ENERGY],
