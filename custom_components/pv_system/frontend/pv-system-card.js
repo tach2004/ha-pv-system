@@ -455,6 +455,10 @@ class PvSystemCard extends HTMLElement {
     this._refs = new Map();
     this._flows = new Map();
     this._pfeile = new Map();
+    // Neu gezeichnet heißt: neue Reihe unter dem Haus, neue Plätze. Welche
+    // Farbe Platz 2 vorher hatte, gilt für das Gerät, das jetzt dort steht,
+    // nicht mehr.
+    this._herkunftAlt = new Map();
 
     inhalt.appendChild(this._diagramm());
     if (!this._config.compact) inhalt.appendChild(this._kennzahlen());
@@ -1767,15 +1771,10 @@ class PvSystemCard extends HTMLElement {
   /* -------------------------------------------------------------- Symbole */
 
   /**
-   * Ein Haus: Dach und Wände, mehr braucht es nicht.
-   *
-   * ``groesse`` skaliert es; die Grundform ist dreißig Einheiten breit.
-   */
-  /**
    * Die Beschriftung unter dem Symbol - ausschließlich der eingetragene Name.
    *
    * Bewusst kein Rückfall auf den Namen der Entität: Der heißt in der Praxis
-   * "Shelly Plus 1PM Kanal 0 Leistung" und sagt unter einem Symbol weniger
+   * "Zwischenstecker Kanal 0 Leistung" und sagt unter einem Symbol weniger
    * als gar nichts. Wer eine Beschriftung will, schreibt sie hin.
    *
    * ``breite`` ist der Platz in Pixeln: Was nicht hineinpasst, wird gekürzt -
@@ -1789,6 +1788,11 @@ class PvSystemCard extends HTMLElement {
     return name.length <= platz ? name : `${name.slice(0, platz - 1)}…`;
   }
 
+  /**
+   * Ein Haus: Dach und Wände, mehr braucht es nicht.
+   *
+   * ``groesse`` skaliert es; die Grundform ist dreißig Einheiten breit.
+   */
   _hausSymbol(x, y, groesse = 30) {
     const s = groesse / 30;
     const gruppe = e("g", {
@@ -2384,11 +2388,13 @@ class PvSystemCard extends HTMLElement {
       "house:grund",
       umleiter.enabled ? `Grund ${watt(d.house.base_power, l)}` : ""
     );
-    // Und an jedem Verbraucher unter dem Haus seine eigene Leistung.
+    // Und an jedem Verbraucher unter dem Haus seine eigene Leistung - und
+    // in der Farbe seines Abgangs, woher sie gerade kommt.
     const lasten = _umleiterMitLeistung(d);
     lasten.forEach((verbraucher, i) => {
       this._setzen(`umleiter:${i}:wert`, watt(verbraucher.power, l));
       this._fluss(`umleiter:${i}`, verbraucher.power, 3000);
+      this._flussfarbe(`umleiter:${i}`, this._herkunft(i, verbraucher, umleiter));
     });
     // Abgang und Schiene tragen die Summe - sie speisen ja alle zusammen.
     if (lasten.length) {
@@ -2520,6 +2526,39 @@ class PvSystemCard extends HTMLElement {
     // und abwärts bei Einspeisung.
     this._faerben("netz", (netzleistung || 0) > 0);
     this._fluss("netz", netzleistung, 5000, (netzleistung || 0) > 0);
+  }
+
+  /**
+   * Woher ein Überschussverbraucher gerade seinen Strom bezieht - als Farbe.
+   *
+   * Gelb wie die Sonne, wenn das meiste aus PV oder Batterie kommt; rot wie
+   * jeder andere Netzbezug in der Karte, wenn nicht. Dieselbe Sprache wie am
+   * Hybrid-Wechselrichter, der rot wird, sobald er aus dem Netz zieht.
+   *
+   * Hat jedes Gerät seinen eigenen Sensor "Davon aus PV/Batterie", zählt
+   * dessen Anteil. Sonst gilt, was für den ganzen Block bekannt ist -
+   * gemessen oder aus dem Netzbezug geschätzt -, und alle Abgänge zeigen
+   * dasselbe. Schweigt ein eingetragener Sensor, bleibt die Linie lila: Aus
+   * einer fehlenden Messung wird keine Behauptung.
+   *
+   * Um die Hälfte herum liegt ein Band von zehn Prozent. Eine Wallbox, die im
+   * Minutentakt nachregelt, pendelt sonst genau dort und ließe ihre Linie
+   * flackern.
+   */
+  _herkunft(platz, last, umleiter) {
+    const eigen = !!umleiter.split_per_load;
+    const leistung = zahl(eigen ? last.power : umleiter.power);
+    const sonne = zahl(eigen ? last.solar_power : umleiter.solar_power);
+    if (leistung === null || sonne === null || leistung <= 0) {
+      this._herkunftAlt.delete(platz);
+      return "f-haus";
+    }
+    const vorher = this._herkunftAlt.get(platz);
+    const schwelle =
+      vorher === "f-solar" ? 0.45 : vorher === "f-bezug" ? 0.55 : 0.5;
+    const farbe = sonne / leistung >= schwelle ? "f-solar" : "f-bezug";
+    this._herkunftAlt.set(platz, farbe);
+    return farbe;
   }
 
   /**

@@ -543,10 +543,6 @@ def _alle_tests():
             print(f"  ok  {name}")
 
 
-if __name__ == "__main__":
-    _alle_tests()
-    print("alle Sensortests bestanden")
-
 
 # --------------------------------------------------------------- Grundpreis
 
@@ -1439,8 +1435,98 @@ def test_jeder_verbraucher_bekommt_seinen_eigenen_namen_und_sein_symbol():
     assert [v["icon"] for v in lasten] == ["boiler", "car"]
 
 
+def test_jeder_verbraucher_bekommt_seinen_eigenen_pv_anteil():
+    """Zu jedem Leistungssensor ein Anteilssensor - paarweise, in Reihenfolge."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "diverter_power_entity": ["sensor.stab", "sensor.wallbox"],
+            "diverter_solar_power_entity": ["sensor.stab_pv", "sensor.wallbox_pv"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.stab", 1200, "W")
+    hass.states.setzen("sensor.stab_pv", 1200, "W")
+    hass.states.setzen("sensor.wallbox", 2300, "W")
+    hass.states.setzen("sensor.wallbox_pv", 0, "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+
+    assert umleiter["split_per_load"] is True
+    assert [v["solar_power"] for v in umleiter["loads"]] == [1200.0, 0.0]
+    # Die Summe bleibt, was sie war.
+    assert umleiter["solar_power"] == 1200.0
+
+
+def test_bei_ungleicher_zahl_gibt_es_keine_einzelnen_anteile():
+    """Welchem von zwei Geräten gehört der eine Sensor? Das weiß niemand."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "diverter_power_entity": ["sensor.stab", "sensor.wallbox"],
+            "diverter_solar_power_entity": ["sensor.stab_pv"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.stab", 1200, "W")
+    hass.states.setzen("sensor.stab_pv", 1200, "W")
+    hass.states.setzen("sensor.wallbox", 2300, "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+
+    assert umleiter["split_per_load"] is False
+    assert [v["solar_power"] for v in umleiter["loads"]] == [None, None]
+    # Der Block kennt seinen Anteil trotzdem - die Karte nimmt dann ihn.
+    assert umleiter["solar_power"] == 1200.0
+
+
+def test_ohne_anteilssensor_gilt_der_geschaetzte_anteil_des_blocks():
+    """Keine Einzelwerte, aber eine Schätzung für alle zusammen."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "diverter_power_entity": ["sensor.stab"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.stab", 1500, "W")
+    hass.states.setzen("sensor.netz", 600, "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+
+    assert umleiter["split_per_load"] is False
+    assert umleiter["loads"][0]["solar_power"] is None
+    assert umleiter["solar_power"] == 900.0
+
+
+def test_ein_stummer_anteilssensor_wird_nicht_durch_die_schaetzung_ersetzt():
+    """Eingetragen und still heißt unbekannt - nicht "dann eben geschätzt"."""
+    aufbau = _aufbau(
+        house={
+            "calculate": True,
+            "diverter_power_entity": ["sensor.stab", "sensor.wallbox"],
+            "diverter_solar_power_entity": ["sensor.stab_pv", "sensor.wallbox_pv"],
+        }
+    )
+    hass = ha_stubs.HomeAssistant()
+    hass.states.setzen("sensor.stab", 1200, "W")
+    hass.states.setzen("sensor.stab_pv", 1200, "W")
+    hass.states.setzen("sensor.wallbox", 2300, "W")
+    hass.states.setzen("sensor.wallbox_pv", "unavailable", "W")
+    umleiter = PvSystemCoordinator(
+        hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
+    )._berechnen()["house"]["diverter"]
+
+    # Die Zuordnung hängt an der Konfiguration, nicht daran, wer antwortet.
+    assert umleiter["split_per_load"] is True
+    assert [v["solar_power"] for v in umleiter["loads"]] == [1200.0, None]
+
+
 def test_ohne_eigene_angaben_bleibt_der_name_leer():
-    """Kein Rückfall auf die Entität - die heißt "sensor.shelly_kanal_0"."""
+    """Kein Rückfall auf die Entität - die heißt "sensor.zwischenstecker_kanal_0"."""
     aufbau = _aufbau(
         house={
             "calculate": True,
@@ -1508,3 +1594,8 @@ def test_ein_unbekanntes_symbol_faellt_auf_den_speicher_zurueck():
         hass, ha_stubs.ConfigEntry("Zuhause", aufbau)
     )._berechnen()["house"]["diverter"]
     assert umleiter["icon"] == "boiler"
+
+
+if __name__ == "__main__":
+    _alle_tests()
+    print("alle Sensortests bestanden")
