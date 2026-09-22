@@ -302,6 +302,35 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         netzbezug = _nur_wenn_eingetragen(
             netz["import_energy"], netz["entities"]["import_energy"]
         )
+
+        # Welcher Weg zum Eigenverbrauch gilt, entscheidet die Konfiguration -
+        # nicht, welcher Zähler gerade antwortet.
+        #
+        # Es gibt zwei Wege: "erzeugt minus eingespeist" und "verbraucht minus
+        # bezogen". Beide führen zur selben Größe, aber aus ganz verschiedenen
+        # Zahlen: Der eine rechnet mit Lebenserträgen von ein paar tausend
+        # Kilowattstunden, der andere mit einem Hausverbrauch, der ein
+        # Vielfaches davon sein kann.
+        #
+        # Bisher wurde der zweite genommen, sobald der erste keine Zahl lieferte.
+        # Nach einem Neustart melden aber nicht alle Sensoren gleichzeitig: Ein
+        # Ertragszähler, der zehn Sekunden braucht, ließ die Rechnung auf den
+        # anderen Weg springen - und zwar um tausende Kilowattstunden. Die
+        # Plausibilitätsprüfung hielt das für einen Zählertausch, verankerte neu,
+        # und "Ertrag heute" stand wieder bei null. Beim Zurückkommen dasselbe
+        # rückwärts.
+        #
+        # Also: Haben alle Anlagen einen Ertragszähler, gilt der erste Weg -
+        # und wenn er gerade schweigt, ist der Eigenverbrauch unbekannt statt
+        # anders gerechnet.
+        ueber_ertrag = bool(anlagen) and all(
+            _ertragszaehler_entitaet(a) for a in anlagen
+        )
+        eigen = (
+            eigenverbrauch_kwh(erzeugung, einspeisung, None, None)
+            if ueber_ertrag
+            else eigenverbrauch_kwh(None, None, haus["house_energy"], netzbezug)
+        )
         zaehler = {
             "import": netz["import_energy"],
             "export": netz["export_energy"],
@@ -322,12 +351,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if conf_haus[CONF_DIVERTER_SOLAR_ENERGY]
                 else staende.get("divert")
             ),
-            "own": eigenverbrauch_kwh(
-                erzeugung,
-                einspeisung,
-                haus["house_energy"],
-                netzbezug,
-            ),
+            "own": eigen,
             # Hausverbrauch und Grundverbrauch als Zählerstand. Ein
             # eingetragener Zähler gewinnt - er misst, statt zu rechnen. Ohne
             # ihn kommt der Stand aus dem Integral über die Leistung, also aus
@@ -1432,6 +1456,20 @@ def _anlagenzaehler(anlage: dict[str, Any]) -> float | None:
     if wr["enabled"] and (wr.get("entities") or {}).get("energy"):
         return wr["energy"]
     return anlage["modules"]["energy"]
+
+
+def _ertragszaehler_entitaet(anlage: dict[str, Any]) -> str | None:
+    """Welche Entität den Ertrag dieser Anlage zählt - oder keine.
+
+    Das Gegenstück zu _anlagenzaehler: Der eine liefert den Wert, dieser die
+    Frage, ob es ihn überhaupt geben kann. Der Unterschied ist der zwischen
+    "nicht eingetragen" und "gerade stumm", und daran hängt mehr, als es
+    aussieht - siehe _kosten.
+    """
+    wr = anlage["inverter"]
+    if wr["enabled"] and (wr.get("entities") or {}).get("energy"):
+        return wr["entities"]["energy"]
+    return (anlage["modules"].get("entities") or {}).get("energy")
 
 
 def _abrechnungsertrag(anlagen: list[dict[str, Any]]) -> float | None:

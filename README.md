@@ -260,6 +260,18 @@ Die selbst genutzten Kilowattstunden entstehen aus *erzeugt minus
 eingespeist*, sobald ein Ertragszähler eingetragen ist – sonst aus
 *verbraucht minus bezogen*.
 
+**Welcher Weg gilt, entscheidet die Konfiguration** – nicht, welcher Zähler
+gerade antwortet. Die beiden Wege führen zur selben Größe, rechnen aber mit
+ganz verschiedenen Zahlen: der eine mit Lebenserträgen von ein paar tausend
+Kilowattstunden, der andere mit einem Hausverbrauch, der ein Vielfaches davon
+sein kann. Zwischen ihnen zu springen, weil ein Sensor nach dem Neustart zehn
+Sekunden braucht, sieht für die Plausibilitätsprüfung aus wie ein
+Zählertausch – und „Ertrag heute" begänne wieder bei null.
+
+Haben also alle Anlagen einen Ertragszähler, gilt dieser Weg. Schweigt einer,
+ist der Eigenverbrauch für diesen Augenblick **unbekannt** statt anders
+gerechnet.
+
 ### Ersparnis, Erlös, Ertrag – wo ist der Unterschied?
 
 Drei Begriffe, die leicht durcheinandergehen:
