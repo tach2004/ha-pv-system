@@ -450,6 +450,18 @@ Drei Größen gehen hinein, und es lohnt sich zu wissen, welche:
 Unter **sieben Tagen** bleiben Jahresrate und Restzeit leer:
 Aus drei Tagen auf ein Jahr hochzurechnen ergibt eine Zahl, die nichts sagt.
 
+**Zwei Amortisationen, zwei Wege.** Das ist leicht zu übersehen und bei der
+Fehlersuche entscheidend:
+
+| | Woher der Ertrag kommt | Wenn etwas schiefging |
+|---|---|---|
+| **Standort** | dem Geldspeicher, der bei jedem Lauf fortschreibt | bleibt drin – der Speicher vergisst nichts, auch keinen Fehler |
+| **je Anlage** | wird bei jedem Lauf aus den Mengen neu gerechnet | heilt sich von selbst, sobald die Mengen stimmen |
+
+Wenn der Gesamtzeitraum einmal falsche Beträge trägt, ist `pv_system.reset_costs`
+der Ausweg: Er leert den Geldspeicher und die Periodenmarken. Was in der
+Konfiguration steht – Investition, Inbetriebnahme, Ertrag davor – bleibt.
+
 **Preisänderungen verändern die Vergangenheit nicht.** Das ist der Kern der
 ganzen Rechnung: Bei jedem Lauf wird nur die *Differenz* seit dem letzten Lauf
 bewertet, mit dem Preis, der in diesem Augenblick gilt, und auf einen

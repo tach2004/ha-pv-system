@@ -1116,3 +1116,72 @@ def test_mehr_umleitung_als_eigenverbrauch_wird_gedeckelt():
     assert tag["own_kwh"] == 0.5
     assert tag["diverted_kwh"] == 0.5
     assert tag["savings_base"] == 0.0
+
+
+# ------------------------------------- Was die Amortisation wirklich trägt
+#
+# Zwei verschiedene Wege, und das ist leicht zu übersehen:
+#
+# * Der **Standort** amortisiert über den Geldspeicher. Der schreibt bei jedem
+#   Lauf fort und vergisst nichts - auch keinen Fehler.
+# * Jede **Anlage** rechnet bei jedem Lauf neu, aus den Mengen des
+#   Gesamtzeitraums. Ein Fehler heilt dort von selbst, sobald die Mengen
+#   wieder stimmen.
+
+
+def test_der_ueberschuss_landet_ueber_den_geldspeicher_in_der_amortisation():
+    """Der Korrekturposten ist der Weg dorthin - und war deshalb anfällig.
+
+    Eine umgeleitete Kilowattstunde ist den Preis des ersetzten Brennstoffs
+    wert, nicht den Arbeitspreis. Die Differenz führt der Geldspeicher als
+    eigenen Posten mit, und der geht in "Ertrag gesamt" ein - die Grundlage
+    der Amortisation.
+    """
+    preise = {**PREISE, "price": 0.338, "diverted": 0.11}
+    # Eine kleine Investition, damit die Prozentzahl überhaupt sichtbar wird.
+    anlage = _eine_anlage(investment=10.0)
+    ohne = _rechner()
+    ohne.rechnen({"own": 100.0}, preise, {}, anlage)
+    a = ohne.rechnen({"own": 105.0}, preise, {}, anlage)
+
+    mit = _rechner()
+    mit.rechnen({"own": 100.0, "diverted": 20.0}, preise, {}, anlage)
+    b = mit.rechnen({"own": 105.0, "diverted": 23.0}, preise, {}, anlage)
+
+    # 3 der 5 kWh gingen in den Heizstab und sind Gas wert statt Strom.
+    unterschied = round(3.0 * (0.338 - 0.11), 2)
+    gespart = round(
+        a["periods"]["total"]["yield"] - b["periods"]["total"]["yield"], 2
+    )
+    assert gespart == unterschied
+    # Und damit steht die Amortisation entsprechend niedriger.
+    assert b["payback_progress"] < a["payback_progress"]
+
+
+def test_die_anlagen_amortisation_haengt_nicht_am_eigenverbrauch():
+    """Sie rechnet aus dem Ertragszähler der Anlage, nicht aus "own".
+
+    Deshalb hat der Wegwechsel beim Neustart sie nie berührt - und deshalb
+    heilt sie sich auch, wenn woanders etwas schiefging.
+    """
+    anlagen = _eine_anlage()
+    r = _rechner()
+    r.rechnen(
+        {"own": 100.0, "anlage:a1": 500.0, "export": 200.0}, PREISE, {}, anlagen
+    )
+    # Derselbe Anlagenertrag, aber ein wild springender Eigenverbrauch.
+    ruhig = r.rechnen(
+        {"own": 104.0, "anlage:a1": 504.0, "export": 201.0}, PREISE, {}, anlagen
+    )["plants"]["a1"]
+
+    r2 = _rechner()
+    r2.rechnen(
+        {"own": 100.0, "anlage:a1": 500.0, "export": 200.0}, PREISE, {}, anlagen
+    )
+    wild = r2.rechnen(
+        {"own": 9000.0, "anlage:a1": 504.0, "export": 201.0}, PREISE, {}, anlagen
+    )["plants"]["a1"]
+
+    assert ruhig["yield_kwh"] == wild["yield_kwh"]
+    assert ruhig["yield"] == wild["yield"]
+    assert ruhig["payback_progress"] == wild["payback_progress"]
