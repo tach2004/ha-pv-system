@@ -37,6 +37,7 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -884,6 +885,15 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     daten = coordinator.data or {}
 
+    # Das Standortgerät zuerst und ausdrücklich anlegen. Anlagen und Netz
+    # hängen darunter, und das geht seit Home Assistant 2026.8 über die
+    # Registry-ID des Standorts ("via_device_id") - die gibt es erst, wenn
+    # das Gerät angelegt ist. Der frühere Weg über seine Kennung
+    # ("via_device") ist abgekündigt und fällt mit 2027.8 weg.
+    standort = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, **_standort_geraet(entry)
+    )
+
     sensoren: list[SensorEntity] = [
         StandortSensor(coordinator, beschreibung)
         for beschreibung in STANDORT
@@ -898,7 +908,7 @@ async def async_setup_entry(
 
     for nummer, anlage in enumerate(daten.get("plants", [])):
         sensoren.extend(
-            AnlagenSensor(coordinator, beschreibung, nummer)
+            AnlagenSensor(coordinator, beschreibung, nummer, standort.id)
             for beschreibung in ANLAGE
             if _anlage_passt(beschreibung, anlage)
         )
@@ -906,15 +916,30 @@ async def async_setup_entry(
     netz = daten.get("grid", {})
     for phase in PHASES[: netz.get("phases_count") or 3]:
         if netz.get("phases", {}).get(phase, {}).get("entities", {}).get("power"):
-            sensoren.append(PhasenSensor(coordinator, phase, "power"))
-            sensoren.append(PhasenSensor(coordinator, phase, "voltage"))
+            sensoren.append(PhasenSensor(coordinator, phase, "power", standort.id))
+            sensoren.append(PhasenSensor(coordinator, phase, "voltage", standort.id))
         if any(
             anlage["inverter"]["enabled"] and anlage["inverter"]["phase"] == phase
             for anlage in daten.get("plants", [])
         ):
-            sensoren.append(PhasenSensor(coordinator, phase, "pv_power"))
+            sensoren.append(PhasenSensor(coordinator, phase, "pv_power", standort.id))
 
     async_add_entities(sensoren)
+
+
+def _standort_geraet(entry: PvSystemConfigEntry) -> DeviceInfo:
+    """Das Gerät des Standorts.
+
+    Einmal hier, damit Setup und Sensoren wirklich dasselbe anmelden und keiner
+    den Namen des anderen überschreibt.
+    """
+    return DeviceInfo(
+        identifiers={(DOMAIN, entry.entry_id)},
+        name=entry.title,
+        manufacturer="PV-System",
+        model="Photovoltaik-Standort",
+        entry_type=None,
+    )
 
 
 class PvBasis(CoordinatorEntity[PvSystemCoordinator], SensorEntity):
@@ -965,16 +990,6 @@ class PvBasis(CoordinatorEntity[PvSystemCoordinator], SensorEntity):
             self._geschrieben = monotonic()
         super()._handle_coordinator_update()
 
-    @property
-    def _standort_geraet(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry_id)},
-            name=self.coordinator.config_entry.title,
-            manufacturer="PV-System",
-            model="Photovoltaik-Standort",
-            entry_type=None,
-        )
-
 
 class StandortSensor(PvBasis):
     """Summenwerte über alle Anlagen und den Netzanschluss."""
@@ -987,7 +1002,7 @@ class StandortSensor(PvBasis):
         super().__init__(coordinator)
         self.entity_description = beschreibung
         self._attr_unique_id = f"{self._entry_id}_{beschreibung.key}"
-        self._attr_device_info = self._standort_geraet
+        self._attr_device_info = _standort_geraet(coordinator.config_entry)
         if beschreibung.spiegel and beschreibung.spiegel(coordinator.data or {}):
             self._attr_entity_registry_enabled_default = False
 
@@ -1127,7 +1142,7 @@ class StatusSensor(PvBasis):
     def __init__(self, coordinator: PvSystemCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._entry_id}_status"
-        self._attr_device_info = self._standort_geraet
+        self._attr_device_info = _standort_geraet(coordinator.config_entry)
         # Das zuletzt geschriebene Wort und das, was sich gerade bewirbt.
         self._wort: str | None = None
         self._kandidat: str | None = None
@@ -1261,6 +1276,7 @@ class AnlagenSensor(AnlagenKostenSensor, PvBasis):
         coordinator: PvSystemCoordinator,
         beschreibung: PvSensorDescription,
         nummer: int,
+        standort_id: str,
     ) -> None:
         super().__init__(coordinator)
         self.entity_description = beschreibung
@@ -1281,7 +1297,7 @@ class AnlagenSensor(AnlagenKostenSensor, PvBasis):
             name=anlage[CONF_NAME],
             manufacturer="PV-System",
             model=_anlagenmodell(anlage),
-            via_device=(DOMAIN, self._entry_id),
+            via_device_id=standort_id,
         )
 
     @property
@@ -1327,7 +1343,9 @@ class PhasenSensor(PvBasis):
     eingespeist wird.
     """
 
-    def __init__(self, coordinator: PvSystemCoordinator, phase: str, art: str) -> None:
+    def __init__(
+        self, coordinator: PvSystemCoordinator, phase: str, art: str, standort_id: str
+    ) -> None:
         super().__init__(coordinator)
         self._phase = phase
         self._art = art
@@ -1340,7 +1358,7 @@ class PhasenSensor(PvBasis):
             manufacturer="PV-System",
             model=(coordinator.data or {}).get("grid", {}).get("meter_model")
             or "Netzanschluss",
-            via_device=(DOMAIN, self._entry_id),
+            via_device_id=standort_id,
         )
         if art == "voltage":
             self._attr_device_class = SensorDeviceClass.VOLTAGE

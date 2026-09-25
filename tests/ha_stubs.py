@@ -283,6 +283,36 @@ class DeviceInfo(dict):
     pass
 
 
+class DeviceRegistry:
+    """Legt Geräte an und vergibt eine ID - wie das echte Register.
+
+    Mehr braucht es nicht: Die Sensoren verweisen über diese ID auf den
+    Standort, und die Tests wollen sehen, dass es dieselbe ist.
+    """
+
+    def __init__(self) -> None:
+        self.geraete: dict[frozenset, types.SimpleNamespace] = {}
+
+    def async_get_or_create(self, *, config_entry_id: str, **felder: Any):
+        if "via_device" in felder:
+            raise TypeError("via_device ist abgekündigt - via_device_id nehmen")
+        schluessel = frozenset(felder.get("identifiers") or ())
+        if schluessel not in self.geraete:
+            self.geraete[schluessel] = types.SimpleNamespace(
+                id=f"geraet{len(self.geraete) + 1}",
+                config_entry_id=config_entry_id,
+                **felder,
+            )
+        return self.geraete[schluessel]
+
+
+def geraeteregister(hass: Any) -> DeviceRegistry:
+    """Ein Register je Home-Assistant-Instanz, wie ``dr.async_get``."""
+    if not hasattr(hass, "_geraeteregister"):
+        hass._geraeteregister = DeviceRegistry()
+    return hass._geraeteregister
+
+
 AddConfigEntryEntitiesCallback = Any
 
 
@@ -385,7 +415,11 @@ def installieren() -> None:
         SensorEntityDescription=SensorEntityDescription,
         SensorStateClass=SensorStateClass,
     )
-    modul("homeassistant.helpers.device_registry", DeviceInfo=DeviceInfo)
+    modul(
+        "homeassistant.helpers.device_registry",
+        DeviceInfo=DeviceInfo,
+        async_get=geraeteregister,
+    )
     modul(
         "homeassistant.helpers.entity_platform",
         AddConfigEntryEntitiesCallback=AddConfigEntryEntitiesCallback,

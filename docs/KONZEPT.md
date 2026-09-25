@@ -157,19 +157,29 @@ Aus demselben Grund steht am Ende der Kartendatei ein
 „nicht angemeldet" melden, obwohl die Karte in der nativen Registry längst
 steht.
 
-### Warum die Mindestversion 2025.2 ist
+### Warum die Mindestversion 2026.8 ist
 
-`LOVELACE_DATA` gibt es erst seit Home Assistant 2025.2. Davor lag Lovelace als
-einfaches Dict unter `hass.data["lovelace"]`; der Import in `__init__.py`
-schlüge dort fehl. Die Zahl in der `hacs.json` ist also keine Schätzung,
-sondern die Fassung, ab der die Integration überhaupt lädt.
+Anlagen und Netz hängen als eigene Geräte unter dem Standort. Home Assistant
+verknüpft das seit 2026.8 über die Registry-ID des Standortgeräts
+(`via_device_id`). Der frühere Weg über seine Kennung (`via_device`) ist
+seitdem abgekündigt – ab 2026.9 mit einer Warnung im Protokoll – und fällt mit
+2027.8 weg; danach würden die Sensoren von Anlagen und Netz nicht mehr
+angelegt. Vor 2026.8 wiederum kennt das
+Geräteregister `via_device_id` nicht und verwirft dieselben Sensoren. Einen
+Weg für beide gibt es nicht ohne eine Weiche im Code; die Mindestversion ist
+die sauberere Lösung. HACS lädt eine Fassung nur herunter, wenn die
+`hacs.json` ihres Tags zur installierten Home-Assistant-Version passt – ältere
+Installationen bleiben auf 1.3.0.
 
-Ein zweiter Stolperstein liegt später: In 2026.2 wurde das Feld `mode` des
+Die Zahl in der `hacs.json` ist also keine Schätzung. Die Grenze davor lag bei
+2025.2: Erst seitdem gibt es `LOVELACE_DATA`, über das die Integration ihre
+Karte einträgt.
+
+Ein Stolperstein aus der Zeit dazwischen: In 2026.2 wurde das Feld `mode` des
 Datensatzes in `resource_mode` umbenannt – seitdem können Dashboards und
-Ressourcen getrennt im Speicher oder in YAML liegen. Ein fester Zugriff auf
-einen der beiden Namen ließe die halbe Bandbreite der unterstützten Fassungen
-mit einem `AttributeError` stehen, und zwar genau beim Eintragen der Karte.
-`_ressourcen_modus()` fragt deshalb beide Namen ab.
+Ressourcen getrennt im Speicher oder in YAML liegen. `_ressourcen_modus()`
+fragt beide Namen ab. Seit der Mindestversion 2026.8 wäre der alte Name nicht
+mehr nötig; die Abfrage kostet aber nichts.
 
 Beides ist nicht durch Lesen der Dokumentation entstanden, sondern durch einen
 Abgleich der Importe gegen den Quelltext von Home Assistant 2024.11 bis 2026.9.
