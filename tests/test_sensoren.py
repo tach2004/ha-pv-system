@@ -1596,6 +1596,47 @@ def test_ein_unbekanntes_symbol_faellt_auf_den_speicher_zurueck():
     assert umleiter["icon"] == "boiler"
 
 
+
+# ---------------------------------------------------------------- Geräte
+
+
+def test_anlagen_und_netz_haengen_ueber_die_registry_id_am_standort():
+    """Seit 2026.8 über die ID des Geräts, nicht mehr über seine Kennung.
+
+    ``via_device`` ist abgekündigt und fällt mit Home Assistant 2027.8 weg.
+    Dann würden Anlagen- und Netzsensoren gar nicht mehr angelegt.
+    """
+    koordinator, s = _sensoren()
+    register = ha_stubs.geraeteregister(koordinator.hass)
+    standort = register.geraete[frozenset({("pv_system", "testeintrag")})]
+
+    darunter = [
+        x for x in s.values()
+        if isinstance(x, (sensor.AnlagenSensor, sensor.PhasenSensor))
+    ]
+    assert any(isinstance(x, sensor.AnlagenSensor) for x in darunter)
+    assert any(isinstance(x, sensor.PhasenSensor) for x in darunter)
+    for x in darunter:
+        geraet = x._attr_device_info
+        assert "via_device" not in geraet, x.unique_id
+        assert geraet["via_device_id"] == standort.id, x.unique_id
+
+
+def test_das_vorab_angelegte_standortgeraet_gleicht_dem_der_sensoren():
+    """Sonst überschreiben sich Setup und Sensoren gegenseitig den Namen."""
+    koordinator, s = _sensoren()
+    register = ha_stubs.geraeteregister(koordinator.hass)
+    standort = register.geraete[frozenset({("pv_system", "testeintrag")})]
+
+    for x in s.values():
+        if isinstance(x, (sensor.StandortSensor, sensor.StatusSensor)):
+            geraet = x._attr_device_info
+            assert geraet["identifiers"] == standort.identifiers
+            assert geraet["name"] == standort.name == "Zuhause"
+            assert geraet["manufacturer"] == standort.manufacturer
+            assert geraet["model"] == standort.model
+
+
 if __name__ == "__main__":
     _alle_tests()
     print("alle Sensortests bestanden")

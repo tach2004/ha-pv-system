@@ -1,8 +1,9 @@
 # Installation und Einrichtung
 
-Vorausgesetzt wird **Home Assistant 2025.2 oder neuer** – erst ab dieser
-Fassung gibt es die Schnittstelle, über die die Integration ihre Karte
-einträgt.
+Vorausgesetzt wird **Home Assistant 2026.8.0 oder neuer** – erst ab dieser
+Fassung lassen sich Geräte über ihre Registry-ID verknüpfen, und so hängen
+Anlagen und Netz am Standort. Ältere Installationen bekommen über HACS die
+Fassung 1.3.0 und bleiben dort.
 
 ## 1. Installieren
 

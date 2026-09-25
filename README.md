@@ -120,6 +120,13 @@ und einbringt.
 
 ## Installation
 
+**Vorausgesetzt wird Home Assistant 2026.8.0 oder neuer.** Ab Version 2.0.0
+hängen Anlagen und Netz über eine Schnittstelle am Standort, die es erst seit
+2026.8 gibt; die alte ist abgekündigt und fällt mit 2027.8 weg. Auf älteren
+Installationen lädt HACS die neue Fassung gar nicht erst herunter – dort
+bleibt 1.3.0 stehen und läuft weiter. Wer von Hand installiert, achtet selbst
+darauf.
+
 ### Über HACS (empfohlen)
 
 1. HACS → drei Punkte oben rechts → **Benutzerdefinierte Repositories**

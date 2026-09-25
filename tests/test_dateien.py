@@ -492,12 +492,18 @@ def test_lovelace_feldname_wird_nicht_fest_verdrahtet():
 
 
 def test_mindestversion_ist_belegt():
-    """2025.2.0 ist die Fassung, in der LOVELACE_DATA eingeführt wurde.
+    """2026.8.0 ist die Fassung, in der via_device_id eingeführt wurde.
 
-    Davor lag Lovelace als einfaches Dict unter hass.data["lovelace"], und der
-    Import in __init__.py schlüge fehl. Die Zahl ist also keine Schätzung.
+    Darüber hängen Anlagen und Netz am Standort. Davor kannte das
+    Geräteregister nur via_device; ein unbekannter Name im DeviceInfo, und die
+    Sensoren von Anlagen und Netz würden gar nicht erst angelegt. Die Zahl ist
+    also keine Schätzung. Die frühere Grenze - 2025.2.0, LOVELACE_DATA - liegt
+    darunter und ist damit mit abgedeckt.
     """
-    assert _json(WURZEL / "hacs.json")["homeassistant"] == "2025.2.0"
+    assert _json(WURZEL / "hacs.json")["homeassistant"] == "2026.8.0"
+    quelle = (INTEGRATION / "sensor.py").read_text("utf-8")
+    assert "via_device_id=" in quelle
+    assert "via_device=" not in quelle
 
 
 def test_marke_wird_mit_ausgeliefert():

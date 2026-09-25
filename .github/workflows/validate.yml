@@ -134,6 +134,35 @@ jobs:
           fehlend = set(STRUKTUR) - set(verschmolzen)
           assert not fehlend, f"nicht beim Recorder abgemeldet: {sorted(fehlend)}"
           print(f"Recorder: {len(STRUKTUR)} Attribute abgemeldet")
+
+          # Die Geräte, am echten Geräteregister. Was in einem DeviceInfo
+          # steht, übergibt Home Assistant als Parameter an
+          # async_get_or_create - ein Name, den es dort nicht mehr gibt, wäre
+          # ein TypeError beim Anlegen, und die Sensoren fehlten. So wäre es
+          # mit via_device in 2027.8 gekommen. Abgekündigte Namen fallen
+          # schon vorher auf, solange Home Assistant die Liste führt.
+          import ast, inspect
+          from homeassistant.helpers import device_registry as dr
+
+          parameter = set(
+              inspect.signature(dr.DeviceRegistry.async_get_or_create).parameters
+          )
+          baum = ast.parse(
+              pathlib.Path("custom_components/pv_system/sensor.py").read_text("utf-8")
+          )
+          genutzt = {
+              wort.arg
+              for knoten in ast.walk(baum)
+              if isinstance(knoten, ast.Call)
+              and getattr(knoten.func, "id", None) == "DeviceInfo"
+              for wort in knoten.keywords
+          }
+          assert "via_device_id" in genutzt, "Anlagen und Netz hängen nicht am Standort"
+          fehlend = genutzt - parameter
+          assert not fehlend, f"unbekannt im Geräteregister: {sorted(fehlend)}"
+          veraltet = genutzt & set(getattr(dr, "_DEPRECATED_DEVICE_INFO_PARAMETERS", {}))
+          assert not veraltet, f"abgekündigt: {sorted(veraltet)}"
+          print(f"Geräte: {len(genutzt)} Felder, alle bekannt")
           PY
 
   karte:
