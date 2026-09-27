@@ -1187,6 +1187,286 @@ def test_die_anlagen_amortisation_haengt_nicht_am_eigenverbrauch():
     assert ruhig["payback_progress"] == wild["payback_progress"]
 
 
+# --------------------------------------------- Gemessen und "davor" getrennt
+#
+# Der Gesamtzeitraum hat zwei Quellen: was seit dem ersten Lauf durch die
+# Zähler ging, und was jemand als Vorgeschichte eingetragen hat. Im Dialog
+# "Kostenzähler leeren" muss man sie auseinanderhalten können - der erste
+# Haken wirft nur die erste weg.
+
+
+def test_der_gesamtzeitraum_weist_das_gemessene_getrennt_aus():
+    """3823 kWh in der Bilanz, null davon gemessen - beides muss dastehen."""
+    r = _rechner()
+    preise = {"price": 0.3376, "currency": "EUR", "prior_import": 3823.0}
+    for _ in range(3):
+        gesamt = r.rechnen({"import": 3823.0, "export": 0.0, "own": 0.0},
+                           preise, {}, [])["periods"]["total"]
+
+    # Die Summe trägt die Vorgeschichte.
+    assert gesamt["import_kwh"] == 3823.0
+    assert gesamt["cost"] == round(3823.0 * 0.3376, 2)
+    # Gemessen wurde davon nichts.
+    assert gesamt["measured"]["import_kwh"] == 0.0
+    assert gesamt["measured"]["cost"] == 0.0
+
+
+def test_das_gemessene_waechst_mit_den_zaehlern():
+    """Und zwar nur um das, was wirklich durch sie ging."""
+    r = _rechner()
+    preise = {"price": 0.30, "feed_in": 0.08, "currency": "EUR",
+              "prior_import": 1000.0}
+    r.rechnen({"import": 500.0, "export": 20.0, "own": 0.0}, preise, {}, [])
+    gesamt = r.rechnen({"import": 510.0, "export": 25.0, "own": 0.0},
+                       preise, {}, [])["periods"]["total"]
+
+    assert gesamt["measured"]["import_kwh"] == 10.0
+    assert gesamt["measured"]["export_kwh"] == 5.0
+    assert gesamt["measured"]["cost"] == round(10.0 * 0.30, 2)
+    assert gesamt["measured"]["revenue"] == round(5.0 * 0.08, 2)
+    # Die Summe zählt die Vorgeschichte dazu, das Gemessene nicht.
+    assert gesamt["import_kwh"] == 1010.0
+
+
+# ------------------------------------------------- Zählertausch ohne Verlust
+#
+# Der Ertrag einer Anlage entsteht aus "Stand bei Einrichtung + seither
+# gemessen", und die Amortisation rechnet bei jedem Lauf neu daraus. Fiel das
+# "seither" nach einem neuen Sensor auf null, verlor die Anlage ihre ganze
+# Messzeit - nach zwei Jahren wäre das kein Rundungsfehler mehr.
+
+
+def test_ein_zaehlertausch_verliert_den_ertrag_der_anlage_nicht():
+    """Der neue Sensor beginnt bei null, die Anlage nicht."""
+    r = _rechner()
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 9000.0}]
+    for stand in (9000.0, 9020.0, 9040.0, 9060.0):
+        vorher = r.rechnen({"anlage:a1": stand}, PREISE, {}, anlagen)
+    assert vorher["plants"]["a1"]["yield_kwh"] == 9060.0
+
+    # Neuer Sensor, er fängt bei null an.
+    for stand in (0.0, 2.0, 4.0):
+        nachher = r.rechnen({"anlage:a1": stand}, PREISE, {}, anlagen)
+    # 9000 eingetragen + 60 mit dem alten gemessen + 4 mit dem neuen.
+    assert nachher["plants"]["a1"]["yield_kwh"] == 9064.0
+
+
+def test_der_uebertrag_rettet_nur_den_letzten_echten_stand():
+    """Stand kurz die falsche Entität im Feld, gehört ihr Wert nicht dazu."""
+    r = _rechner()
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 9000.0}]
+    r.rechnen({"anlage:a1": 100.0}, PREISE, {}, anlagen)
+    r.rechnen({"anlage:a1": 120.0}, PREISE, {}, anlagen)
+    # Eine völlig andere Entität - ein Sprung, den die Prüfung abfängt.
+    r.rechnen({"anlage:a1": 50000.0}, PREISE, {}, anlagen)
+    # Und wieder die richtige.
+    ergebnis = r.rechnen({"anlage:a1": 125.0}, PREISE, {}, anlagen)
+    # 9000 eingetragen + die 20 gemessenen. Nicht 49000.
+    assert ergebnis["plants"]["a1"]["yield_kwh"] == 9020.0
+
+
+def test_der_tag_fuellt_die_luecke_eines_tauschs_nicht():
+    """Nur der Gesamtzeitraum trägt weiter - Tag und Monat heilen von selbst."""
+    r = _rechner()
+    r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    r.rechnen({"import": 140.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    ergebnis = r.rechnen({"import": 3.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    assert ergebnis["periods"]["day"]["import_kwh"] == 0.0
+    # Der Gesamtzeitraum dagegen kennt die vierzig noch.
+    assert ergebnis["periods"]["total"]["import_kwh"] == 40.0
+
+
+def test_der_uebertrag_uebersteht_einen_neustart():
+    """Er liegt bei den Marken auf der Platte, nicht nur im Speicher."""
+    hass = ha_stubs.HomeAssistant()
+    r = _MitUhr(hass)
+    r.rechnen({"import": 100.0}, PREISE, {})
+    r.rechnen({"import": 140.0}, PREISE, {})
+    r.rechnen({"import": 0.0}, PREISE, {})
+    asyncio.run(r.async_speichern())
+
+    zweiter = _MitUhr(hass)
+    zweiter._rechner._store = r._store
+    asyncio.run(zweiter.async_laden())
+    zweiter._uhr = r._uhr
+    ergebnis = zweiter.rechnen({"import": 5.0}, PREISE, {})
+    assert ergebnis["periods"]["total"]["import_kwh"] == 45.0
+
+
+def test_ein_speicher_ohne_uebertrag_laeuft_einfach_weiter():
+    """Beim Update ist die Marke noch ohne das Feld - das darf nichts kosten."""
+    rechner = _rechner()
+    beginn = _jetzt() - timedelta(days=30)
+    # So sah eine Marke vor dieser Fassung aus: werte, geld, letzte - kein
+    # "uebertrag".
+    rechner._rechner._marken["total"] = {
+        "start": beginn.isoformat(),
+        "werte": {"import": 100.0},
+        "geld": {"cost": 50.0, "revenue": 0.0, "savings": 0.0, "base": 0.0},
+        "letzte": {"import": 100.0},
+    }
+    gesamt = rechner.rechnen({"import": 112.0}, PREISE, {})["periods"]["total"]
+    assert gesamt["import_kwh"] == 12.0
+    assert gesamt["measured"]["import_kwh"] == 12.0
+
+
+def test_zuruecksetzen_wirft_auch_den_uebertrag_weg():
+    """Der erste Haken im Dialog räumt wirklich alles Gemessene ab."""
+    r = _rechner()
+    r.rechnen({"import": 100.0}, PREISE, {})
+    r.rechnen({"import": 140.0}, PREISE, {})
+    r.rechnen({"import": 0.0}, PREISE, {})
+    assert r.rechnen({"import": 0.0}, PREISE, {})["periods"]["total"]["import_kwh"] == 40.0
+
+    r.zuruecksetzen()
+    ergebnis = r.rechnen({"import": 0.0}, PREISE, {})
+    assert ergebnis["periods"]["total"]["import_kwh"] == 0.0
+    assert ergebnis["periods"]["total"]["measured"]["import_kwh"] == 0.0
+
+
+
+# ------------------------------------------ Umgeleitet vor der Einrichtung
+#
+# Was bis zur Einrichtung in den Heizstab ging, steckt im "Stand des
+# Ertragszählers" der Anlagen und gilt dort als selbst genutzt - also zum
+# Arbeitspreis. Ersetzt der Verbraucher aber Gas, ist das regelmäßig das
+# Doppelte dessen, was die Kilowattstunde wirklich wert war.
+
+
+def test_die_ersparnis_der_anlagen_ergibt_die_des_standorts():
+    """Der Standort ist die Summe seiner Anlagen - auch mit Heizstab.
+
+    Umgeleitete Kilowattstunden werden nach dem Erzeugungsanteil verteilt.
+    Liefe das auseinander, stünde in der Kachel eine Ersparnis, die keine
+    Anlage erwirtschaftet hat - und die Amortisationen passten nicht zur
+    Bilanz darüber.
+    """
+    # Glatte Preise mit Absicht: 0,337 und 0,112 ergeben hier 1,235 EUR und
+    # damit genau die Rundungsgrenze - der Test prüfte dann die Fließkomma-
+    # darstellung und nicht die Rechnung.
+    preise = {"price": 0.30, "feed_in": 0.08, "diverted": 0.10, "currency": "EUR"}
+    anlagen = [
+        {"id": "a1", "investment": 1000.0, "prior_yield": 0.0},
+        {"id": "a2", "investment": 1000.0, "prior_yield": 0.0},
+    ]
+    r = _rechner()
+    r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0, "diverted": 0.0,
+               "anlage:a1": 0.0, "anlage:a2": 0.0}, preise, {}, anlagen)
+    erg = r.rechnen({"import": 0.0, "export": 0.0, "own": 20.0, "diverted": 8.0,
+                     "anlage:a1": 15.0, "anlage:a2": 5.0}, preise, {}, anlagen)
+
+    # a1 hat drei Viertel erzeugt: 15 der 20 eigenen und 6 der 8 umgeleiteten.
+    assert erg["plants"]["a1"]["savings"] == round(9 * 0.30 + 6 * 0.10, 2)
+    assert erg["plants"]["a2"]["savings"] == round(3 * 0.30 + 2 * 0.10, 2)
+    summe = sum(erg["plants"][a["id"]]["savings"] for a in anlagen)
+    assert round(summe, 2) == erg["periods"]["total"]["savings"]
+
+
+def test_umgeleitet_davor_wird_mit_dem_wert_des_ersetzten_bewertet():
+    """610 kWh Heizstab davor: nicht zum Strompreis, sondern zum Gaswert."""
+    preis, gas, menge = 0.337, 0.112, 610.0
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 6000.0,
+                "prior_export": 3000.0}]
+    stand = {"import": 0.0, "export": 0.0, "own": 0.0, "anlage:a1": 6000.0}
+
+    def ersparnis(umgeleitet):
+        preise = {"price": preis, "diverted": gas, "currency": "EUR"}
+        if umgeleitet is not None:
+            preise["prior_diverted"] = umgeleitet
+        r = _rechner()
+        for _ in range(2):
+            erg = r.rechnen(dict(stand), preise, {}, anlagen)
+        return erg["periods"]["total"]["savings"]
+
+    ohne, mit = ersparnis(None), ersparnis(menge)
+    assert round(ohne - mit, 2) == round(menge * (preis - gas), 2)
+
+
+def test_umgeleitet_davor_geht_nach_der_erzeugung_davor_an_die_anlagen():
+    """Eine Anlage, die vorher nicht stand, bekommt davon nichts ab."""
+    preise = {"price": 0.337, "diverted": 0.112, "currency": "EUR",
+              "prior_diverted": 610.0}
+    anlagen = [
+        {"id": "a1", "investment": 8000.0, "prior_yield": 6000.0, "prior_export": 3000.0},
+        {"id": "a2", "investment": 4000.0, "prior_yield": 2000.0, "prior_export": 1000.0},
+        {"id": "a3", "investment": 3000.0, "prior_yield": 0.0, "prior_export": 0.0},
+    ]
+    stand = {"import": 0.0, "export": 0.0, "own": 0.0,
+             "anlage:a1": 6000.0, "anlage:a2": 2000.0, "anlage:a3": 0.0}
+    r = _rechner()
+    for _ in range(2):
+        erg = r.rechnen(dict(stand), preise, {}, anlagen)
+
+    ohne = {"price": 0.337, "diverted": 0.112, "currency": "EUR"}
+    r2 = _rechner()
+    for _ in range(2):
+        vergleich = r2.rechnen(dict(stand), ohne, {}, anlagen)
+
+    abzug = {
+        a["id"]: round(vergleich["plants"][a["id"]]["yield"]
+                       - erg["plants"][a["id"]]["yield"], 2)
+        for a in anlagen
+    }
+    # 6000 von 8000 kWh Erzeugung davor, also drei Viertel - und für die
+    # Anlage ohne Vorgeschichte nichts.
+    gesamt = round(610.0 * (0.337 - 0.112), 2)
+    assert abzug["a1"] == round(gesamt * 0.75, 2)
+    assert abzug["a2"] == round(gesamt * 0.25, 2)
+    assert abzug["a3"] == 0.0
+    # Und die Summe der Anlagen ist der Abzug am Standort.
+    assert round(sum(abzug.values()), 2) == gesamt
+
+
+def test_umgeleitet_davor_kann_nicht_groesser_sein_als_der_eigenverbrauch():
+    """Ein Vertipper darf die Ersparnis nicht ins Negative ziehen."""
+    preise = {"price": 0.35, "diverted": 0.10, "currency": "EUR",
+              "prior_diverted": 999999.0}
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 1000.0,
+                "prior_export": 900.0}]
+    r = _rechner()
+    for _ in range(2):
+        erg = r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0,
+                         "anlage:a1": 1000.0}, preise, {}, anlagen)
+    gesamt = erg["periods"]["total"]
+    # Selbst genutzt wurden davor 100 kWh - mehr kann nicht umgeleitet worden
+    # sein. Also 100 x 0,10 statt 100 x 0,35.
+    assert gesamt["savings"] == round(100 * 0.10, 2)
+
+
+def test_ohne_eigenen_wertansatz_aendert_umgeleitet_davor_nichts():
+    """Ersetzt der Verbraucher Strom, ist die Kilowattstunde dasselbe wert."""
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 1000.0,
+                "prior_export": 0.0}]
+    stand = {"import": 0.0, "export": 0.0, "own": 0.0, "anlage:a1": 1000.0}
+    werte = []
+    for umgeleitet in (None, 500.0):
+        preise = {"price": 0.35, "currency": "EUR"}
+        if umgeleitet is not None:
+            preise["prior_diverted"] = umgeleitet
+        r = _rechner()
+        for _ in range(2):
+            erg = r.rechnen(dict(stand), preise, {}, anlagen)
+        werte.append(erg["periods"]["total"]["savings"])
+    assert werte[0] == werte[1] == round(1000 * 0.35, 2)
+
+
+def test_umgeleitet_davor_ruehrt_das_gemessene_nicht_an():
+    """Die Vorgeschichte gehört in den Gesamtzeitraum, nicht in den Tag."""
+    preise = {"price": 0.35, "diverted": 0.10, "currency": "EUR",
+              "prior_diverted": 400.0}
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 1000.0,
+                "prior_export": 0.0}]
+    r = _rechner()
+    r.rechnen({"own": 0.0, "diverted": 0.0, "anlage:a1": 1000.0}, preise, {}, anlagen)
+    erg = r.rechnen({"own": 10.0, "diverted": 4.0, "anlage:a1": 1010.0},
+                    preise, {}, anlagen)
+    tag = erg["periods"]["day"]
+    # Heute: 6 kWh Haushalt zum Strompreis, 4 kWh Heizstab zum Gaswert.
+    assert tag["savings"] == round(6 * 0.35 + 4 * 0.10, 2)
+    assert tag["diverted_kwh"] == 4.0
+
+
+
 def _alle_tests():
     for name, funktion in sorted(globals().items()):
         if name.startswith("test_") and callable(funktion):

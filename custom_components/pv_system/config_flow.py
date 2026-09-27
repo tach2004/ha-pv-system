@@ -26,6 +26,7 @@ from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
+from homeassistant.util import dt as dt_util
 
 from .const import (
     BASE_PRICE_UNITS,
@@ -132,6 +133,7 @@ from .const import (
     CONF_PHASES,
     CONF_PLANTS,
     CONF_POWER_SIGN,
+    CONF_PRIOR_DIVERTED,
     CONF_PRIOR_EXPORT,
     CONF_PRIOR_IMPORT,
     CONF_PRIOR_PRICE,
@@ -385,6 +387,7 @@ UEBERSCHUSSFELDER: Final = (
     CONF_DIVERTER_PRICE_ENTITY,
     CONF_DIVERTER_PRICE_UNIT,
     CONF_DIVERTER_EFFICIENCY,
+    CONF_PRIOR_DIVERTED,
     CONF_DIVERTER_ICON,
     *CONF_DIVERTER_LOAD_NAMES,
     *CONF_DIVERTER_LOAD_ICONS,
@@ -426,6 +429,7 @@ def _felder_ueberschuss(anzahl: int = 0) -> dict[Any, Any]:
         ),
         vol.Optional(CONF_DIVERTER_PRICE_ENTITY): _sensor(),
         vol.Optional(CONF_DIVERTER_EFFICIENCY): _zahl(10, 800, 1, "%"),
+        vol.Optional(CONF_PRIOR_DIVERTED): _zahl(0, 10000000, "any", "kWh"),
         vol.Optional(CONF_DIVERTER_ICON): _auswahl(
             DIVERTER_ICONS, "diverter_icon"
         ),
@@ -1018,6 +1022,12 @@ class PvSystemOptionsFlow(OptionsFlow):
             kosten[feld] = None
         self._daten[CONF_COSTS] = kosten
 
+        # Der umgeleitete Teil davor steht beim Überschuss, nicht bei den
+        # Preisen - geleert gehört er trotzdem, er ist dieselbe Art Angabe.
+        haus = dict(self._daten.get(CONF_HOUSE) or {})
+        haus[CONF_PRIOR_DIVERTED] = None
+        self._daten[CONF_HOUSE] = haus
+
         anlagen = []
         for anlage in self._daten.get(CONF_PLANTS) or []:
             anlage = dict(anlage)
@@ -1030,24 +1040,41 @@ class PvSystemOptionsFlow(OptionsFlow):
 
 
 def _kostenstand(koordinator: Any) -> str:
-    """Was gerade im Gesamtzeitraum steht - damit man weiß, was man wegwirft."""
+    """Was der erste Haken wegwirft - und nur das.
+
+    Ausdrücklich nicht der Gesamtzeitraum: Der enthält auch die
+    "davor"-Angaben aus der Konfiguration, und die bleiben stehen. Stand hier
+    die Summe, las sich die Zeile wie eine Drohung - "3823 kWh, 1290 Euro" -,
+    während der Haken in Wirklichkeit ein paar gemessene Wattstunden löscht.
+    """
     daten = getattr(koordinator, "data", None) or {}
     kosten = daten.get("costs") or {}
     gesamt = (kosten.get("periods") or {}).get("total") or {}
-    if not gesamt:
+    messung = gesamt.get("measured") or {}
+    if not messung:
         return "Es ist noch nichts gemessen worden."
     waehrung = kosten.get("currency") or "EUR"
 
     def _geld(wert: Any) -> str:
         return "–" if wert is None else f"{float(wert):.2f} {waehrung}"
 
+    def _menge(wert: Any) -> str:
+        return "–" if wert is None else f"{float(wert):.1f} kWh"
+
     return (
-        f"Bezogen {gesamt.get('import_kwh') or 0:.0f} kWh, "
-        f"eingespeist {gesamt.get('export_kwh') or 0:.0f} kWh.\n"
-        f"Kosten {_geld(gesamt.get('cost'))}, "
-        f"Vergütung {_geld(gesamt.get('feed_in'))}, "
-        f"Ersparnis {_geld(gesamt.get('savings'))}."
+        f"- Bezogen {_menge(messung.get('import_kwh'))}, "
+        f"eingespeist {_menge(messung.get('export_kwh'))}\n"
+        f"- Kosten {_geld(messung.get('cost'))}, "
+        f"Vergütung {_geld(messung.get('revenue'))}, "
+        f"Ersparnis {_geld(messung.get('savings'))}\n"
+        f"- Gemessen seit {_seit(gesamt.get('measured_since'))}"
     )
+
+
+def _seit(zeitpunkt: Any) -> str:
+    """Ein gespeicherter Zeitstempel als Datum - sonst "dem ersten Lauf"."""
+    tag = dt_util.parse_datetime(str(zeitpunkt or "")) if zeitpunkt else None
+    return tag.strftime("%d.%m.%Y") if tag else "dem ersten Lauf"
 
 
 def _vorherstand(daten: dict[str, Any]) -> str:
@@ -1075,6 +1102,14 @@ def _vorherstand(daten: dict[str, Any]) -> str:
     if kosten.get(CONF_PRIOR_EXPORT):
         zeilen.append(
             f"- Einspeisung davor: {float(kosten[CONF_PRIOR_EXPORT]):,.0f} kWh".replace(
+                ",", "."
+            )
+        )
+
+    umgeleitet = (daten.get(CONF_HOUSE) or {}).get(CONF_PRIOR_DIVERTED)
+    if umgeleitet:
+        zeilen.append(
+            f"- Aus Überschuss umgeleitet davor: {float(umgeleitet):,.0f} kWh".replace(
                 ",", "."
             )
         )

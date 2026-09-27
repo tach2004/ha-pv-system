@@ -2844,6 +2844,10 @@ class PvSystemCard extends HTMLElement {
           ? [["Autarkie Grundverbrauch", prozent(h.base_self_sufficiency, l)]]
           : []),
         ["Eigenverbrauch", prozent(h.self_consumption, l)],
+        // Erst die Leistungen, dann die Zähler - und die Aufteilung jeweils
+        // direkt unter der Größe, zu der sie gehört. Standen Watt und
+        // Kilowattstunden gemischt untereinander, las sich "aus PV/Batterie"
+        // wie die Aufteilung des Zählers darüber.
         ...(h.diverter && h.diverter.enabled
           ? [
               // Es dürfen mehrere sein - zwei Heizstäbe an derselben Heizung
@@ -2856,6 +2860,19 @@ class PvSystemCard extends HTMLElement {
                   ? h.diverter.entities.power[0]
                   : null,
               ],
+              // Die Aufteilung der Leistung, wenn jemand sie messen kann: Was
+              // aus der eigenen Anlage kam, ist die Ersparnis wert; der Rest
+              // ist ganz normaler Netzbezug, den dieser Verbraucher
+              // verursacht hat.
+              ...(h.diverter.split
+                ? [
+                    [
+                      `${h.diverter.name} aus PV/Batterie`,
+                      watt(h.diverter.solar_power, l),
+                    ],
+                    [`${h.diverter.name} aus dem Netz`, watt(h.diverter.grid_power, l)],
+                  ]
+                : []),
               [
                 `${h.diverter.name} Zähler`,
                 einheit(h.diverter.energy, "kWh", 2, l),
@@ -2863,15 +2880,20 @@ class PvSystemCard extends HTMLElement {
                   ? h.diverter.entities.energy[0]
                   : null,
               ],
-            ]
-          : []),
-        // Die Aufteilung, wenn jemand sie messen kann: Was aus der eigenen
-        // Anlage kam, ist die Ersparnis wert; der Rest ist ganz normaler
-        // Netzbezug, den dieser Verbraucher verursacht hat.
-        ...(h.diverter && h.diverter.split
-          ? [
-              [`${h.diverter.name} aus PV/Batterie`, watt(h.diverter.solar_power, l)],
-              [`${h.diverter.name} aus dem Netz`, watt(h.diverter.grid_power, l)],
+              // Und dieselbe Aufteilung als Zählerstand - nur wenn sie auch
+              // gezählt wird. Genau dieser Stand geht in die Ersparnis ein;
+              // ohne ihn stünde daneben eine Schätzung.
+              ...(h.diverter.entities.solar_energy.length
+                ? [
+                    [
+                      `${h.diverter.name} Zähler aus PV/Batterie`,
+                      einheit(h.diverter.solar_energy, "kWh", 2, l),
+                      h.diverter.entities.solar_energy.length === 1
+                        ? h.diverter.entities.solar_energy[0]
+                        : null,
+                    ],
+                  ]
+                : []),
             ]
           : []),
         // Die beiden Quoten noch einmal über die letzte volle Stunde - das

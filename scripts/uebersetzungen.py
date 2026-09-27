@@ -386,6 +386,10 @@ FELDER: dict[str, T] = {
         "Stand des Ertragszählers bei Einrichtung",
         "Yield meter reading at setup",
     ),
+    "prior_diverted": (
+        "Aus Überschuss umgeleitet bei Einrichtung",
+        "Diverted from surplus at setup",
+    ),
 }
 
 HINWEISE: dict[str, T] = {
@@ -1026,6 +1030,31 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "this counter feeds the savings - the remainder is ordinary grid "
             "consumption at the energy price.",
         ),
+        "prior_diverted": (
+            "**Wie viele Kilowattstunden bis zur Einrichtung schon aus PV "
+            "oder Batterie in diesen Verbraucher gegangen sind.** Eine "
+            "einmalige Zahl über alle Anlagen zusammen, kein Sensor.\n\n"
+            "Wozu: Diese Kilowattstunden stecken schon im „Stand des "
+            "Ertragszählers“ der Anlagen und gelten dort als selbst genutzt - "
+            "also zum Arbeitspreis. Für einen Heizstab, der Gas ersetzt, ist "
+            "das der falsche Wert und oft das Doppelte. Mit dieser Zahl werden "
+            "sie nachträglich auf den Wert des Ersetzten umgestellt, genau wie "
+            "alles, was seit der Einrichtung gemessen wird.\n\nAuf die "
+            "Anlagen verteilt wird sie nach deren Erzeugung davor: Eine Anlage, "
+            "die vorher noch nicht stand, bekommt nichts ab.\n\nLeer oder 0: "
+            "Alles davor zählt wie gewöhnlicher Eigenverbrauch.",
+            "**How many kilowatt hours went into this load from PV or battery "
+            "before setup.** A one-off number across all plants, not a "
+            "sensor.\n\nWhat for: those kilowatt hours are already part of "
+            "the plants' “yield meter reading” and count as self-used there - "
+            "at the energy price. For an immersion heater replacing gas that "
+            "is the wrong value, often twice too high. This number moves them "
+            "to the value of what they replaced, exactly as happens for "
+            "everything measured since setup.\n\nIt is split across the "
+            "plants by their yield before setup: a plant that did not exist "
+            "back then gets none of it.\n\nEmpty or 0: everything before "
+            "counts as ordinary self-consumption.",
+        ),
         "diverter_fuel": (
             "Was dieser Verbraucher ersetzt. Davon hängt ab, was eine "
             "umgeleitete Kilowattstunde wert ist.\n\nErdgas, Flüssiggas, Öl, "
@@ -1465,7 +1494,8 @@ UEBERSCHUSSFELDER = [
     "diverter_name", "diverter_power_entity", "diverter_energy_entity",
     "diverter_solar_power_entity", "diverter_solar_energy_entity",
     "diverter_fuel", "diverter_price", "diverter_price_unit",
-    "diverter_price_entity", "diverter_efficiency", "diverter_icon",
+    "diverter_price_entity", "diverter_efficiency", "prior_diverted",
+    "diverter_icon",
     *[f"diverter_name_{n}" for n in range(1, 7)],
     *[f"diverter_icon_{n}" for n in range(1, 7)],
 ]
@@ -1835,7 +1865,9 @@ def baum(sprache) -> dict:
                             "Gesamtzeitraum trägt den Fehler weiter, bis "
                             "jemand ihn leert.\n\nDer Gesamtzeitraum hat "
                             "**zwei Quellen**, und deshalb gibt es zwei "
-                            "Haken.\n\n---\n\n**1. Gemessen seit dem "
+                            "Haken. Sie überschneiden sich nicht - zusammen "
+                            "ergeben sie das, was in der Bilanz "
+                            "steht.\n\n---\n\n**1. Gemessen seit dem "
                             "ersten Lauf**\n\n{stand}\n\nDas liegt im "
                             "Speicher der Integration. Der erste Haken wirft "
                             "es weg und verankert alle Zähler bei ihrem "
@@ -1862,7 +1894,9 @@ def baum(sprache) -> dict:
                             "rollover; the total period carries the error "
                             "until somebody clears it.\n\nThe total period "
                             "has **two sources**, which is why there are two "
-                            "checkboxes.\n\n---\n\n**1. Measured since the "
+                            "checkboxes. They do not overlap - together they "
+                            "make up what the balance "
+                            "shows.\n\n---\n\n**1. Measured since the "
                             "first run**\n\n{stand}\n\nThis lives in the "
                             "integration's own store. The first box throws it "
                             "away and re-anchors every counter at today's "
