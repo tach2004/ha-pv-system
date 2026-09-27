@@ -1325,6 +1325,119 @@ def test_zuruecksetzen_wirft_auch_den_uebertrag_weg():
 
 
 
+# ------------------------------------------ Umgeleitet vor der Einrichtung
+#
+# Was bis zur Einrichtung in den Heizstab ging, steckt im "Stand des
+# Ertragszählers" der Anlagen und gilt dort als selbst genutzt - also zum
+# Arbeitspreis. Ersetzt der Verbraucher aber Gas, ist das regelmäßig das
+# Doppelte dessen, was die Kilowattstunde wirklich wert war.
+
+
+def test_umgeleitet_davor_wird_mit_dem_wert_des_ersetzten_bewertet():
+    """610 kWh Heizstab davor: nicht zum Strompreis, sondern zum Gaswert."""
+    preis, gas, menge = 0.337, 0.112, 610.0
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 6000.0,
+                "prior_export": 3000.0}]
+    stand = {"import": 0.0, "export": 0.0, "own": 0.0, "anlage:a1": 6000.0}
+
+    def ersparnis(umgeleitet):
+        preise = {"price": preis, "diverted": gas, "currency": "EUR"}
+        if umgeleitet is not None:
+            preise["prior_diverted"] = umgeleitet
+        r = _rechner()
+        for _ in range(2):
+            erg = r.rechnen(dict(stand), preise, {}, anlagen)
+        return erg["periods"]["total"]["savings"]
+
+    ohne, mit = ersparnis(None), ersparnis(menge)
+    assert round(ohne - mit, 2) == round(menge * (preis - gas), 2)
+
+
+def test_umgeleitet_davor_geht_nach_der_erzeugung_davor_an_die_anlagen():
+    """Eine Anlage, die vorher nicht stand, bekommt davon nichts ab."""
+    preise = {"price": 0.337, "diverted": 0.112, "currency": "EUR",
+              "prior_diverted": 610.0}
+    anlagen = [
+        {"id": "a1", "investment": 8000.0, "prior_yield": 6000.0, "prior_export": 3000.0},
+        {"id": "a2", "investment": 4000.0, "prior_yield": 2000.0, "prior_export": 1000.0},
+        {"id": "a3", "investment": 3000.0, "prior_yield": 0.0, "prior_export": 0.0},
+    ]
+    stand = {"import": 0.0, "export": 0.0, "own": 0.0,
+             "anlage:a1": 6000.0, "anlage:a2": 2000.0, "anlage:a3": 0.0}
+    r = _rechner()
+    for _ in range(2):
+        erg = r.rechnen(dict(stand), preise, {}, anlagen)
+
+    ohne = {"price": 0.337, "diverted": 0.112, "currency": "EUR"}
+    r2 = _rechner()
+    for _ in range(2):
+        vergleich = r2.rechnen(dict(stand), ohne, {}, anlagen)
+
+    abzug = {
+        a["id"]: round(vergleich["plants"][a["id"]]["yield"]
+                       - erg["plants"][a["id"]]["yield"], 2)
+        for a in anlagen
+    }
+    # 6000 von 8000 kWh Erzeugung davor, also drei Viertel - und für die
+    # Anlage ohne Vorgeschichte nichts.
+    gesamt = round(610.0 * (0.337 - 0.112), 2)
+    assert abzug["a1"] == round(gesamt * 0.75, 2)
+    assert abzug["a2"] == round(gesamt * 0.25, 2)
+    assert abzug["a3"] == 0.0
+    # Und die Summe der Anlagen ist der Abzug am Standort.
+    assert round(sum(abzug.values()), 2) == gesamt
+
+
+def test_umgeleitet_davor_kann_nicht_groesser_sein_als_der_eigenverbrauch():
+    """Ein Vertipper darf die Ersparnis nicht ins Negative ziehen."""
+    preise = {"price": 0.35, "diverted": 0.10, "currency": "EUR",
+              "prior_diverted": 999999.0}
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 1000.0,
+                "prior_export": 900.0}]
+    r = _rechner()
+    for _ in range(2):
+        erg = r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0,
+                         "anlage:a1": 1000.0}, preise, {}, anlagen)
+    gesamt = erg["periods"]["total"]
+    # Selbst genutzt wurden davor 100 kWh - mehr kann nicht umgeleitet worden
+    # sein. Also 100 x 0,10 statt 100 x 0,35.
+    assert gesamt["savings"] == round(100 * 0.10, 2)
+
+
+def test_ohne_eigenen_wertansatz_aendert_umgeleitet_davor_nichts():
+    """Ersetzt der Verbraucher Strom, ist die Kilowattstunde dasselbe wert."""
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 1000.0,
+                "prior_export": 0.0}]
+    stand = {"import": 0.0, "export": 0.0, "own": 0.0, "anlage:a1": 1000.0}
+    werte = []
+    for umgeleitet in (None, 500.0):
+        preise = {"price": 0.35, "currency": "EUR"}
+        if umgeleitet is not None:
+            preise["prior_diverted"] = umgeleitet
+        r = _rechner()
+        for _ in range(2):
+            erg = r.rechnen(dict(stand), preise, {}, anlagen)
+        werte.append(erg["periods"]["total"]["savings"])
+    assert werte[0] == werte[1] == round(1000 * 0.35, 2)
+
+
+def test_umgeleitet_davor_ruehrt_das_gemessene_nicht_an():
+    """Die Vorgeschichte gehört in den Gesamtzeitraum, nicht in den Tag."""
+    preise = {"price": 0.35, "diverted": 0.10, "currency": "EUR",
+              "prior_diverted": 400.0}
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 1000.0,
+                "prior_export": 0.0}]
+    r = _rechner()
+    r.rechnen({"own": 0.0, "diverted": 0.0, "anlage:a1": 1000.0}, preise, {}, anlagen)
+    erg = r.rechnen({"own": 10.0, "diverted": 4.0, "anlage:a1": 1010.0},
+                    preise, {}, anlagen)
+    tag = erg["periods"]["day"]
+    # Heute: 6 kWh Haushalt zum Strompreis, 4 kWh Heizstab zum Gaswert.
+    assert tag["savings"] == round(6 * 0.35 + 4 * 0.10, 2)
+    assert tag["diverted_kwh"] == 4.0
+
+
+
 def _alle_tests():
     for name, funktion in sorted(globals().items()):
         if name.startswith("test_") and callable(funktion):

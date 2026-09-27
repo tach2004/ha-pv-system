@@ -133,6 +133,7 @@ from .const import (
     CONF_PHASES,
     CONF_PLANTS,
     CONF_POWER_SIGN,
+    CONF_PRIOR_DIVERTED,
     CONF_PRIOR_EXPORT,
     CONF_PRIOR_IMPORT,
     CONF_PRIOR_PRICE,
@@ -386,6 +387,7 @@ UEBERSCHUSSFELDER: Final = (
     CONF_DIVERTER_PRICE_ENTITY,
     CONF_DIVERTER_PRICE_UNIT,
     CONF_DIVERTER_EFFICIENCY,
+    CONF_PRIOR_DIVERTED,
     CONF_DIVERTER_ICON,
     *CONF_DIVERTER_LOAD_NAMES,
     *CONF_DIVERTER_LOAD_ICONS,
@@ -427,6 +429,7 @@ def _felder_ueberschuss(anzahl: int = 0) -> dict[Any, Any]:
         ),
         vol.Optional(CONF_DIVERTER_PRICE_ENTITY): _sensor(),
         vol.Optional(CONF_DIVERTER_EFFICIENCY): _zahl(10, 800, 1, "%"),
+        vol.Optional(CONF_PRIOR_DIVERTED): _zahl(0, 10000000, "any", "kWh"),
         vol.Optional(CONF_DIVERTER_ICON): _auswahl(
             DIVERTER_ICONS, "diverter_icon"
         ),
@@ -1019,6 +1022,12 @@ class PvSystemOptionsFlow(OptionsFlow):
             kosten[feld] = None
         self._daten[CONF_COSTS] = kosten
 
+        # Der umgeleitete Teil davor steht beim Überschuss, nicht bei den
+        # Preisen - geleert gehört er trotzdem, er ist dieselbe Art Angabe.
+        haus = dict(self._daten.get(CONF_HOUSE) or {})
+        haus[CONF_PRIOR_DIVERTED] = None
+        self._daten[CONF_HOUSE] = haus
+
         anlagen = []
         for anlage in self._daten.get(CONF_PLANTS) or []:
             anlage = dict(anlage)
@@ -1093,6 +1102,14 @@ def _vorherstand(daten: dict[str, Any]) -> str:
     if kosten.get(CONF_PRIOR_EXPORT):
         zeilen.append(
             f"- Einspeisung davor: {float(kosten[CONF_PRIOR_EXPORT]):,.0f} kWh".replace(
+                ",", "."
+            )
+        )
+
+    umgeleitet = (daten.get(CONF_HOUSE) or {}).get(CONF_PRIOR_DIVERTED)
+    if umgeleitet:
+        zeilen.append(
+            f"- Aus Überschuss umgeleitet davor: {float(umgeleitet):,.0f} kWh".replace(
                 ",", "."
             )
         )

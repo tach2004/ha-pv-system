@@ -386,6 +386,10 @@ FELDER: dict[str, T] = {
         "Stand des Ertragszählers bei Einrichtung",
         "Yield meter reading at setup",
     ),
+    "prior_diverted": (
+        "Aus Überschuss umgeleitet bei Einrichtung",
+        "Diverted from surplus at setup",
+    ),
 }
 
 HINWEISE: dict[str, T] = {
@@ -1026,6 +1030,31 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "this counter feeds the savings - the remainder is ordinary grid "
             "consumption at the energy price.",
         ),
+        "prior_diverted": (
+            "**Wie viele Kilowattstunden bis zur Einrichtung schon aus PV "
+            "oder Batterie in diesen Verbraucher gegangen sind.** Eine "
+            "einmalige Zahl über alle Anlagen zusammen, kein Sensor.\n\n"
+            "Wozu: Diese Kilowattstunden stecken schon im „Stand des "
+            "Ertragszählers“ der Anlagen und gelten dort als selbst genutzt - "
+            "also zum Arbeitspreis. Für einen Heizstab, der Gas ersetzt, ist "
+            "das der falsche Wert und oft das Doppelte. Mit dieser Zahl werden "
+            "sie nachträglich auf den Wert des Ersetzten umgestellt, genau wie "
+            "alles, was seit der Einrichtung gemessen wird.\n\nAuf die "
+            "Anlagen verteilt wird sie nach deren Erzeugung davor: Eine Anlage, "
+            "die vorher noch nicht stand, bekommt nichts ab.\n\nLeer oder 0: "
+            "Alles davor zählt wie gewöhnlicher Eigenverbrauch.",
+            "**How many kilowatt hours went into this load from PV or battery "
+            "before setup.** A one-off number across all plants, not a "
+            "sensor.\n\nWhat for: those kilowatt hours are already part of "
+            "the plants' “yield meter reading” and count as self-used there - "
+            "at the energy price. For an immersion heater replacing gas that "
+            "is the wrong value, often twice too high. This number moves them "
+            "to the value of what they replaced, exactly as happens for "
+            "everything measured since setup.\n\nIt is split across the "
+            "plants by their yield before setup: a plant that did not exist "
+            "back then gets none of it.\n\nEmpty or 0: everything before "
+            "counts as ordinary self-consumption.",
+        ),
         "diverter_fuel": (
             "Was dieser Verbraucher ersetzt. Davon hängt ab, was eine "
             "umgeleitete Kilowattstunde wert ist.\n\nErdgas, Flüssiggas, Öl, "
@@ -1465,7 +1494,8 @@ UEBERSCHUSSFELDER = [
     "diverter_name", "diverter_power_entity", "diverter_energy_entity",
     "diverter_solar_power_entity", "diverter_solar_energy_entity",
     "diverter_fuel", "diverter_price", "diverter_price_unit",
-    "diverter_price_entity", "diverter_efficiency", "diverter_icon",
+    "diverter_price_entity", "diverter_efficiency", "prior_diverted",
+    "diverter_icon",
     *[f"diverter_name_{n}" for n in range(1, 7)],
     *[f"diverter_icon_{n}" for n in range(1, 7)],
 ]

@@ -120,6 +120,7 @@ from .const import (
     CONF_PHASES,
     CONF_PLANTS,
     CONF_POWER_SIGN,
+    CONF_PRIOR_DIVERTED,
     CONF_PRIOR_EXPORT,
     CONF_PRIOR_IMPORT,
     CONF_PRIOR_PRICE,
@@ -409,6 +410,9 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "currency": conf[CONF_CURRENCY],
                 "prior_import": conf[CONF_PRIOR_IMPORT],
                 "prior_price": conf[CONF_PRIOR_PRICE],
+                # Steht beim Überschuss und nicht bei den Preisen: Es ist eine
+                # Menge, keine Zahl je Kilowattstunde.
+                "prior_diverted": conf_haus[CONF_PRIOR_DIVERTED],
                 # Ersetzt der Verbraucher Strom (ein Speicher, ein Auto), gibt
                 # es keinen anderen Preis: Die Kilowattstunde bleibt eine
                 # Kilowattstunde und ist genau den Arbeitspreis wert.

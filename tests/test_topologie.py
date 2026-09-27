@@ -172,6 +172,24 @@ def test_unsinnige_reihenfolge_faellt_auf_den_platz_zurueck():
     assert [a["order"] for a in daten["plants"]] == [1, 1]
 
 
+def test_umgeleitet_davor_ist_eine_zahl_im_hausblock():
+    """Die Angabe steht beim Überschuss, nicht bei den Preisen.
+
+    Sie ist eine Menge und gehört zum Verbraucher - genau wie sein Brennstoff
+    und sein Wirkungsgrad, mit denen sie zusammen gerechnet wird.
+    """
+    haus = topology.haus_normalisieren(
+        {"diverter_power_entity": ["sensor.stab"], "prior_diverted": "610"}
+    )
+    assert haus["prior_diverted"] == 610.0
+    # Nicht eingetragen heißt None und nicht null - sonst stünde da eine
+    # Behauptung über eine Vorgeschichte, die niemand kennt.
+    assert topology.haus_normalisieren(None)["prior_diverted"] is None
+    # Und Unsinn wird nicht übernommen.
+    assert topology.haus_normalisieren({"prior_diverted": "viel"})["prior_diverted"] is None
+
+
+
 def _alle_tests():
     for name, funktion in sorted(globals().items()):
         if name.startswith("test_") and callable(funktion):

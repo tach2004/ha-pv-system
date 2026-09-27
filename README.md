@@ -730,6 +730,36 @@ Der **Netzbezug bleibt dabei ungeteilt**: Was der Verbraucher aus dem Netz
 gezogen hat, steckt jetzt im Grundverbrauch – und sein Bezug gehört dorthin,
 wo sein Verbrauch steht.
 
+#### Was schon vor der Einrichtung in den Verbraucher ging
+
+Seit der Einrichtung wird jede umgeleitete Kilowattstunde mit dem Wert des
+Ersetzten bewertet. Für die Zeit davor ging das nicht: Diese Kilowattstunden
+stecken im *Stand des Ertragszählers* der Anlagen und gelten dort als selbst
+genutzt – also zum vollen Arbeitspreis. Bei einem Heizstab, der Gas ersetzt,
+ist das regelmäßig das Doppelte.
+
+Dafür gibt es **Aus Überschuss umgeleitet bei Einrichtung**: eine einzige Zahl
+über alle Anlagen zusammen. Sie stellt diese Kilowattstunden nachträglich auf
+den Wert des Ersetzten um.
+
+    Abzug = umgeleitet davor × (Wert des Ersetzten − Durchschnittspreis davor)
+
+610 kWh bei 0,337 €/kWh Arbeitspreis und 0,112 €/kWh Gaswert sind demnach
+137,25 € weniger Ersparnis – und genau so viel weniger Ertrag.
+
+**Auf die Anlagen verteilt wird nach ihrer Erzeugung davor**, nicht nach ihrer
+heutigen. Zwei Anlagen mit 6000 und 2000 kWh Vorgeschichte tragen drei Viertel
+und ein Viertel; eine dritte, die damals noch nicht stand, bekommt nichts ab.
+Die Summe über die Anlagen ist derselbe Betrag wie am Standort.
+
+Es ist bewusst **eine** Zahl und kein Feld je Anlage: Der Verbraucher hängt am
+Hausanschluss und weiß nicht, aus welcher Anlage sein Strom kam. Drei Felder
+wären drei Schätzungen statt einer.
+
+Bewertet wird mit dem **heutigen** Wert des Ersetzten – einen „Gaspreis davor"
+gibt es nicht. Wer das genauer braucht, trägt beim Durchschnittspreis davor
+entsprechend nach.
+
 Bei mehreren Anlagen wird der umgeleitete Anteil nach der Erzeugung aufgeteilt –
 wie die Einspeisung auch, und mit derselben Einschränkung: Es stimmt, solange
 die Anlagen zur selben Zeit liefern.
@@ -906,6 +936,7 @@ Wiederholung und deshalb abgeschaltet – der zweite nie.
 | **… : je** | Auswahl | kWh, Liter, m³, kg oder Tonne – die Einheit, in der abgerechnet wird | kWh |
 | **… : Entität statt fester Zahl** | Entität | Für Preise, die am Markt schwanken. **Hat Vorrang**, wird genauso umgerechnet | Nur die feste Zahl |
 | **Wirkungsgrad der ersetzten Heizung** | % | Gasbrennwert rund 92, alter Kessel 80–88, Fernwärme 100, **Wärmepumpe = JAZ × 100** | 100 (nicht umrechnen) |
+| **Aus Überschuss umgeleitet bei Einrichtung** | kWh | Was bis zur Einrichtung schon aus PV/Batterie in diesen Verbraucher ging. Wird auf den Wert des Ersetzten umgestellt statt auf den Arbeitspreis – siehe unten | Alles davor zählt wie gewöhnlicher Eigenverbrauch |
 | **Symbol in der Karte** | Auswahl | Warmwasserspeicher, Heizkörper, Wallbox, Wärmepumpe oder „Anderes Gerät" – die **Vorgabe** für alle | Warmwasserspeicher |
 | **n. Verbraucher: Beschriftung** | Freitext | Was unter dem Symbol steht. **Nicht** der Entitätsname – den will unter einem Symbol niemand lesen | Nur die Leistung steht darunter |
 | **n. Verbraucher: Symbol** | Auswahl | Das Symbol dieses einen Geräts | Das gemeinsame Symbol |

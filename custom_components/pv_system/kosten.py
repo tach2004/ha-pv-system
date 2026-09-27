@@ -280,6 +280,16 @@ class Kostenrechner:
         umleitpreis = _zahl(preise.get("diverted"))
 
         vorher = self._vorher(preise, anlagen)
+        # Was von der Vorgeschichte in den Überschussverbraucher ging. Ohne
+        # diese Zahl steckt es im Eigenverbrauch davor und wird dort mit dem
+        # Arbeitspreis bewertet - für einen Heizstab, der Gas ersetzt, ist das
+        # der falsche Wert und regelmäßig das Doppelte.
+        #
+        # Gedeckelt wie im Geldspeicher: Umgeleitet werden kann nur, was auch
+        # selbst genutzt wurde.
+        vorher_umgeleitet = min(
+            _zahl(preise.get("prior_diverted")) or 0.0, vorher["own"]
+        )
         # Zuerst die Prüfung: Ein Zähler, der nicht mehr derselbe ist, darf
         # weder in eine Menge noch in einen Betrag eingehen.
         frisch, letzte_staende = self._pruefen(zaehler, jetzt)
@@ -324,7 +334,7 @@ class Kostenrechner:
         # Hochrechnung mit dem heutigen Preis.
         zeitraeume[PERIOD_TOTAL] = self._gesamtgeld(
             zeitraeume[PERIOD_TOTAL], gespeichert, vorher, preise, arbeitspreis,
-            grundpreis, jetzt, gemessen,
+            grundpreis, jetzt, gemessen, vorher_umgeleitet,
         )
         if veraendert:
             self._merken()
@@ -337,6 +347,7 @@ class Kostenrechner:
             jetzt,
             _zahl(preise.get("prior_price")),
             umleitpreis,
+            vorher_umgeleitet,
         )
         # Die Rohmengen waren nur für die Aufteilung auf die Anlagen nötig.
         for zeitraum in zeitraeume.values():
@@ -501,6 +512,7 @@ class Kostenrechner:
         grundpreis: float,
         jetzt: datetime,
         gemessen: dict[str, Any],
+        vorher_umgeleitet: float = 0.0,
     ) -> dict[str, Any]:
         """Den Gesamtzeitraum aus Geldspeicher und Vorher-Werten bauen.
 
@@ -535,10 +547,15 @@ class Kostenrechner:
             )
         ersparnis = None
         if frueher is not None or gespeichert["savings"]:
+            # Derselbe Korrekturposten wie im Geldspeicher, nur für die Zeit
+            # davor: Der umgeleitete Teil steckt schon im Eigenverbrauch und
+            # ist dort mit dem Arbeitspreis bewertet. Abgezogen wird die
+            # Differenz zu dem, was er wirklich ersetzt hat.
             ersparnis = round(
                 gespeichert["savings"]
                 + gespeichert.get("divert", 0.0)
-                + vorher.get("own", 0.0) * (frueher or 0.0),
+                + vorher.get("own", 0.0) * (frueher or 0.0)
+                + vorher_umgeleitet * _abstand(_zahl(preise.get("diverted")), frueher),
                 2,
             )
 
@@ -814,6 +831,7 @@ class Kostenrechner:
         jetzt: datetime,
         preis_vorher: float | None = None,
         umleitpreis: float | None = None,
+        vorher_umgeleitet: float = 0.0,
     ) -> dict[str, Any]:
         """Ertrag und Amortisation je Anlage, seit ihrer Inbetriebnahme.
 
@@ -835,6 +853,11 @@ class Kostenrechner:
             for anlage in anlagen
         }
         summe = sum(gemessen.values())
+        # Die Vorgeschichte wird nach ihrem eigenen Maßstab aufgeteilt: Was
+        # eine Anlage bis zur Einrichtung erzeugt hat, sagt nichts darüber,
+        # was sie seither liefert - eine Anlage von 2026 hat davor nichts
+        # beigetragen und bekommt vom umgeleiteten Teil davor auch nichts ab.
+        summe_vorher = sum(_zahl(a.get("prior_yield")) or 0.0 for a in anlagen)
         einspeisung_gemessen = max(
             0.0,
             (_zahl(gesamt.get("export_kwh")) or 0.0)
@@ -868,11 +891,16 @@ class Kostenrechner:
             # rechnete sich jede Anlage die Heizstab-Kilowattstunden zum
             # Strompreis gut, und das sind sie nicht wert.
             umgeleitet = min(eigen_jetzt, umleitung * anteil)
+            anteil_vorher = (
+                vorher_erzeugt / summe_vorher if summe_vorher > 0 else 0.0
+            )
+            umgeleitet_vorher = min(eigen_vorher, vorher_umgeleitet * anteil_vorher)
             ersparnis = (
                 round(
                     eigen_jetzt * preis
                     + umgeleitet * _abstand(umleitpreis, preis)
-                    + eigen_vorher * (frueher or 0.0),
+                    + eigen_vorher * (frueher or 0.0)
+                    + umgeleitet_vorher * _abstand(umleitpreis, frueher),
                     2,
                 )
                 if preis is not None

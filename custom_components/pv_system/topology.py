@@ -120,6 +120,7 @@ from .const import (
     CONF_PHASES,
     CONF_PLANTS,
     CONF_POWER_SIGN,
+    CONF_PRIOR_DIVERTED,
     CONF_PRIOR_EXPORT,
     CONF_PRIOR_IMPORT,
     CONF_PRIOR_PRICE,
@@ -447,6 +448,7 @@ def haus_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         CONF_DIVERTER_EFFICIENCY: _zahl(
             roh.get(CONF_DIVERTER_EFFICIENCY), DEFAULT_DIVERTER_EFFICIENCY
         ),
+        CONF_PRIOR_DIVERTED: _zahl(roh.get(CONF_PRIOR_DIVERTED), None),
         CONF_DIVERTER_ICON: _auswahl(
             roh.get(CONF_DIVERTER_ICON), DIVERTER_ICONS, DIVERTER_ICON_BOILER
         ),

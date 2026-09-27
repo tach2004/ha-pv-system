@@ -202,6 +202,14 @@ HEIZWERT: Final[dict[str, dict[str, float]]] = {
 # Jahresarbeitszahl mal hundert. Dieselbe Zahl, dasselbe Rechnen.
 CONF_DIVERTER_EFFICIENCY: Final = "diverter_efficiency"
 
+# Was bis zur Einrichtung schon in den Überschussverbraucher geflossen ist -
+# als eine einzige Zahl, wie alle anderen "bei Einrichtung"-Angaben auch.
+#
+# Ohne sie steckt diese Energie im Eigenverbrauch davor und wird dort mit dem
+# Arbeitspreis bewertet. Für einen Heizstab, der Gas ersetzt, ist das der
+# falsche Wert - und zwar regelmäßig das Doppelte.
+CONF_PRIOR_DIVERTED: Final = "prior_diverted"
+
 # Das Symbol, mit dem die Karte den Überschussverbraucher unter das Haus
 # zeichnet. Nicht aus Material Design geholt, sondern selbst gezeichnet: Die
 # Karte baut ihr SVG aus eigenen Pfaden und hat keinen Zugriff auf die
