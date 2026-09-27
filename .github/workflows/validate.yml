@@ -163,6 +163,44 @@ jobs:
           veraltet = genutzt & set(getattr(dr, "_DEPRECATED_DEVICE_INFO_PARAMETERS", {}))
           assert not veraltet, f"abgekündigt: {sorted(veraltet)}"
           print(f"Geräte: {len(genutzt)} Felder, alle bekannt")
+
+          # Der Dialog "Kostenzähler leeren" nennt zwei Quellen und muss sie
+          # auch auseinanderhalten. Er zeigte einmal den ganzen
+          # Gesamtzeitraum unter der Überschrift "Gemessen seit dem ersten
+          # Lauf" - also auch die eingetragene Vorgeschichte, die der Haken
+          # gar nicht anrührt. Hier steht er zum ersten Mal am echten Home
+          # Assistant, weil er sonst nirgends geprüft wird.
+          import types
+
+          koordinator = types.SimpleNamespace(
+              data={
+                  "costs": {
+                      "currency": "EUR",
+                      "periods": {
+                          "total": {
+                              "import_kwh": 3823.0,
+                              "cost": 1290.66,
+                              "measured": {
+                                  "import_kwh": 12.5,
+                                  "export_kwh": 3.0,
+                                  "own_kwh": 0.0,
+                                  "cost": 4.22,
+                                  "revenue": 0.24,
+                                  "savings": 0.0,
+                              },
+                              "measured_since": "2026-09-27T10:00:00+02:00",
+                          }
+                      },
+                  }
+              }
+          )
+          text = cf._kostenstand(koordinator)
+          assert "12.5 kWh" in text, text
+          assert "4.22 EUR" in text, text
+          assert "3823" not in text, f"der Dialog zeigt die Vorgeschichte: {text}"
+          assert "1290" not in text, f"der Dialog zeigt die Vorgeschichte: {text}"
+          assert "27.09.2026" in text, text
+          print("Dialog: zeigt das Gemessene, nicht die Summe")
           PY
 
   karte:

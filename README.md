@@ -415,6 +415,16 @@ Fassung 1.1.10 falsch gelöst:
   nicht. Und welcher Zähler einer Anlage gilt, entscheidet allein die
   Konfiguration – nicht mehr, welcher gerade antwortet.
 
+**Ein Zählertausch kostet keine Kilowattstunden mehr.** Beim Verankern wird
+gemerkt, wie weit der alte Zähler gekommen war; dieser Übertrag bleibt im
+Gesamtzeitraum stehen. Das war nötig, weil der Ertrag einer Anlage aus *Stand
+bei Einrichtung + seither gemessen* entsteht und die Amortisation ihn bei jedem
+Lauf daraus neu rechnet – ein neuer Sensor warf sie sonst auf den Stand bei der
+Einrichtung zurück. Übernommen wird der **letzte Stand vor dem Tausch**, nicht
+der neue: Stand kurz die falsche Entität im Feld, wäre deren Wert sonst als
+Ertrag verbucht worden. Tag, Monat und Jahr bekommen keinen Übertrag – sie
+beginnen beim nächsten Wechsel ohnehin von vorn.
+
 Der anteilige Grundpreis steht in der Karte als eigene Zeile. Ohne sie stünde
 an einem Tag ohne Netzbezug ein Betrag, den niemand erklären kann.
 
@@ -468,6 +478,19 @@ Fehlersuche entscheidend:
 Wenn der Gesamtzeitraum einmal falsche Beträge trägt, ist `pv_system.reset_costs`
 der Ausweg: Er leert den Geldspeicher und die Periodenmarken. Was in der
 Konfiguration steht – Investition, Inbetriebnahme, Ertrag davor – bleibt.
+
+**Der Gesamtzeitraum hat zwei Quellen, und sie überschneiden sich nicht:** was
+seit dem ersten Lauf durch die Zähler ging, und die „davor"-Angaben aus der
+Konfiguration. Deshalb hat der Dialog *Kostenzähler leeren* zwei Haken, und
+deshalb steht dort unter jedem, was genau er wegwirft. Wer den Bezugszähler
+gerade erst eingetragen hat, sieht in der Bilanz tausend Euro neben null
+gemessenen Kilowattstunden – das ist kein Fehler, sondern die eingetragene
+Vorgeschichte. Sie wird erst zur Hälfte einer Rechnung, wenn auch die Anlagen
+ihren *Stand des Ertragszählers bei Einrichtung* tragen.
+
+Damit das aufgeht, müssen die „davor"-Angaben **denselben Zeitraum** abdecken.
+Steht beim Bezug nur, was seit dem Einbau eines Zwischenzählers lief, beim
+Ertrag aber alles seit der Inbetriebnahme, fällt die Bilanz zu schön aus.
 
 **Preisänderungen verändern die Vergangenheit nicht.** Das ist der Kern der
 ganzen Rechnung: Bei jedem Lauf wird nur die *Differenz* seit dem letzten Lauf

@@ -1187,6 +1187,144 @@ def test_die_anlagen_amortisation_haengt_nicht_am_eigenverbrauch():
     assert ruhig["payback_progress"] == wild["payback_progress"]
 
 
+# --------------------------------------------- Gemessen und "davor" getrennt
+#
+# Der Gesamtzeitraum hat zwei Quellen: was seit dem ersten Lauf durch die
+# Zähler ging, und was jemand als Vorgeschichte eingetragen hat. Im Dialog
+# "Kostenzähler leeren" muss man sie auseinanderhalten können - der erste
+# Haken wirft nur die erste weg.
+
+
+def test_der_gesamtzeitraum_weist_das_gemessene_getrennt_aus():
+    """3823 kWh in der Bilanz, null davon gemessen - beides muss dastehen."""
+    r = _rechner()
+    preise = {"price": 0.3376, "currency": "EUR", "prior_import": 3823.0}
+    for _ in range(3):
+        gesamt = r.rechnen({"import": 3823.0, "export": 0.0, "own": 0.0},
+                           preise, {}, [])["periods"]["total"]
+
+    # Die Summe trägt die Vorgeschichte.
+    assert gesamt["import_kwh"] == 3823.0
+    assert gesamt["cost"] == round(3823.0 * 0.3376, 2)
+    # Gemessen wurde davon nichts.
+    assert gesamt["measured"]["import_kwh"] == 0.0
+    assert gesamt["measured"]["cost"] == 0.0
+
+
+def test_das_gemessene_waechst_mit_den_zaehlern():
+    """Und zwar nur um das, was wirklich durch sie ging."""
+    r = _rechner()
+    preise = {"price": 0.30, "feed_in": 0.08, "currency": "EUR",
+              "prior_import": 1000.0}
+    r.rechnen({"import": 500.0, "export": 20.0, "own": 0.0}, preise, {}, [])
+    gesamt = r.rechnen({"import": 510.0, "export": 25.0, "own": 0.0},
+                       preise, {}, [])["periods"]["total"]
+
+    assert gesamt["measured"]["import_kwh"] == 10.0
+    assert gesamt["measured"]["export_kwh"] == 5.0
+    assert gesamt["measured"]["cost"] == round(10.0 * 0.30, 2)
+    assert gesamt["measured"]["revenue"] == round(5.0 * 0.08, 2)
+    # Die Summe zählt die Vorgeschichte dazu, das Gemessene nicht.
+    assert gesamt["import_kwh"] == 1010.0
+
+
+# ------------------------------------------------- Zählertausch ohne Verlust
+#
+# Der Ertrag einer Anlage entsteht aus "Stand bei Einrichtung + seither
+# gemessen", und die Amortisation rechnet bei jedem Lauf neu daraus. Fiel das
+# "seither" nach einem neuen Sensor auf null, verlor die Anlage ihre ganze
+# Messzeit - nach zwei Jahren wäre das kein Rundungsfehler mehr.
+
+
+def test_ein_zaehlertausch_verliert_den_ertrag_der_anlage_nicht():
+    """Der neue Sensor beginnt bei null, die Anlage nicht."""
+    r = _rechner()
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 9000.0}]
+    for stand in (9000.0, 9020.0, 9040.0, 9060.0):
+        vorher = r.rechnen({"anlage:a1": stand}, PREISE, {}, anlagen)
+    assert vorher["plants"]["a1"]["yield_kwh"] == 9060.0
+
+    # Neuer Sensor, er fängt bei null an.
+    for stand in (0.0, 2.0, 4.0):
+        nachher = r.rechnen({"anlage:a1": stand}, PREISE, {}, anlagen)
+    # 9000 eingetragen + 60 mit dem alten gemessen + 4 mit dem neuen.
+    assert nachher["plants"]["a1"]["yield_kwh"] == 9064.0
+
+
+def test_der_uebertrag_rettet_nur_den_letzten_echten_stand():
+    """Stand kurz die falsche Entität im Feld, gehört ihr Wert nicht dazu."""
+    r = _rechner()
+    anlagen = [{"id": "a1", "investment": 8000.0, "prior_yield": 9000.0}]
+    r.rechnen({"anlage:a1": 100.0}, PREISE, {}, anlagen)
+    r.rechnen({"anlage:a1": 120.0}, PREISE, {}, anlagen)
+    # Eine völlig andere Entität - ein Sprung, den die Prüfung abfängt.
+    r.rechnen({"anlage:a1": 50000.0}, PREISE, {}, anlagen)
+    # Und wieder die richtige.
+    ergebnis = r.rechnen({"anlage:a1": 125.0}, PREISE, {}, anlagen)
+    # 9000 eingetragen + die 20 gemessenen. Nicht 49000.
+    assert ergebnis["plants"]["a1"]["yield_kwh"] == 9020.0
+
+
+def test_der_tag_fuellt_die_luecke_eines_tauschs_nicht():
+    """Nur der Gesamtzeitraum trägt weiter - Tag und Monat heilen von selbst."""
+    r = _rechner()
+    r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    r.rechnen({"import": 140.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    ergebnis = r.rechnen({"import": 3.0, "export": 0.0, "own": 0.0}, PREISE, {})
+    assert ergebnis["periods"]["day"]["import_kwh"] == 0.0
+    # Der Gesamtzeitraum dagegen kennt die vierzig noch.
+    assert ergebnis["periods"]["total"]["import_kwh"] == 40.0
+
+
+def test_der_uebertrag_uebersteht_einen_neustart():
+    """Er liegt bei den Marken auf der Platte, nicht nur im Speicher."""
+    hass = ha_stubs.HomeAssistant()
+    r = _MitUhr(hass)
+    r.rechnen({"import": 100.0}, PREISE, {})
+    r.rechnen({"import": 140.0}, PREISE, {})
+    r.rechnen({"import": 0.0}, PREISE, {})
+    asyncio.run(r.async_speichern())
+
+    zweiter = _MitUhr(hass)
+    zweiter._rechner._store = r._store
+    asyncio.run(zweiter.async_laden())
+    zweiter._uhr = r._uhr
+    ergebnis = zweiter.rechnen({"import": 5.0}, PREISE, {})
+    assert ergebnis["periods"]["total"]["import_kwh"] == 45.0
+
+
+def test_ein_speicher_ohne_uebertrag_laeuft_einfach_weiter():
+    """Beim Update ist die Marke noch ohne das Feld - das darf nichts kosten."""
+    rechner = _rechner()
+    beginn = _jetzt() - timedelta(days=30)
+    # So sah eine Marke vor dieser Fassung aus: werte, geld, letzte - kein
+    # "uebertrag".
+    rechner._rechner._marken["total"] = {
+        "start": beginn.isoformat(),
+        "werte": {"import": 100.0},
+        "geld": {"cost": 50.0, "revenue": 0.0, "savings": 0.0, "base": 0.0},
+        "letzte": {"import": 100.0},
+    }
+    gesamt = rechner.rechnen({"import": 112.0}, PREISE, {})["periods"]["total"]
+    assert gesamt["import_kwh"] == 12.0
+    assert gesamt["measured"]["import_kwh"] == 12.0
+
+
+def test_zuruecksetzen_wirft_auch_den_uebertrag_weg():
+    """Der erste Haken im Dialog räumt wirklich alles Gemessene ab."""
+    r = _rechner()
+    r.rechnen({"import": 100.0}, PREISE, {})
+    r.rechnen({"import": 140.0}, PREISE, {})
+    r.rechnen({"import": 0.0}, PREISE, {})
+    assert r.rechnen({"import": 0.0}, PREISE, {})["periods"]["total"]["import_kwh"] == 40.0
+
+    r.zuruecksetzen()
+    ergebnis = r.rechnen({"import": 0.0}, PREISE, {})
+    assert ergebnis["periods"]["total"]["import_kwh"] == 0.0
+    assert ergebnis["periods"]["total"]["measured"]["import_kwh"] == 0.0
+
+
+
 def _alle_tests():
     for name, funktion in sorted(globals().items()):
         if name.startswith("test_") and callable(funktion):

@@ -26,6 +26,7 @@ from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
+from homeassistant.util import dt as dt_util
 
 from .const import (
     BASE_PRICE_UNITS,
@@ -1030,24 +1031,41 @@ class PvSystemOptionsFlow(OptionsFlow):
 
 
 def _kostenstand(koordinator: Any) -> str:
-    """Was gerade im Gesamtzeitraum steht - damit man weiß, was man wegwirft."""
+    """Was der erste Haken wegwirft - und nur das.
+
+    Ausdrücklich nicht der Gesamtzeitraum: Der enthält auch die
+    "davor"-Angaben aus der Konfiguration, und die bleiben stehen. Stand hier
+    die Summe, las sich die Zeile wie eine Drohung - "3823 kWh, 1290 Euro" -,
+    während der Haken in Wirklichkeit ein paar gemessene Wattstunden löscht.
+    """
     daten = getattr(koordinator, "data", None) or {}
     kosten = daten.get("costs") or {}
     gesamt = (kosten.get("periods") or {}).get("total") or {}
-    if not gesamt:
+    messung = gesamt.get("measured") or {}
+    if not messung:
         return "Es ist noch nichts gemessen worden."
     waehrung = kosten.get("currency") or "EUR"
 
     def _geld(wert: Any) -> str:
         return "–" if wert is None else f"{float(wert):.2f} {waehrung}"
 
+    def _menge(wert: Any) -> str:
+        return "–" if wert is None else f"{float(wert):.1f} kWh"
+
     return (
-        f"Bezogen {gesamt.get('import_kwh') or 0:.0f} kWh, "
-        f"eingespeist {gesamt.get('export_kwh') or 0:.0f} kWh.\n"
-        f"Kosten {_geld(gesamt.get('cost'))}, "
-        f"Vergütung {_geld(gesamt.get('feed_in'))}, "
-        f"Ersparnis {_geld(gesamt.get('savings'))}."
+        f"- Bezogen {_menge(messung.get('import_kwh'))}, "
+        f"eingespeist {_menge(messung.get('export_kwh'))}\n"
+        f"- Kosten {_geld(messung.get('cost'))}, "
+        f"Vergütung {_geld(messung.get('revenue'))}, "
+        f"Ersparnis {_geld(messung.get('savings'))}\n"
+        f"- Gemessen seit {_seit(gesamt.get('measured_since'))}"
     )
+
+
+def _seit(zeitpunkt: Any) -> str:
+    """Ein gespeicherter Zeitstempel als Datum - sonst "dem ersten Lauf"."""
+    tag = dt_util.parse_datetime(str(zeitpunkt or "")) if zeitpunkt else None
+    return tag.strftime("%d.%m.%Y") if tag else "dem ersten Lauf"
 
 
 def _vorherstand(daten: dict[str, Any]) -> str:
