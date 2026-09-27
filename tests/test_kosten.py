@@ -1333,6 +1333,35 @@ def test_zuruecksetzen_wirft_auch_den_uebertrag_weg():
 # Doppelte dessen, was die Kilowattstunde wirklich wert war.
 
 
+def test_die_ersparnis_der_anlagen_ergibt_die_des_standorts():
+    """Der Standort ist die Summe seiner Anlagen - auch mit Heizstab.
+
+    Umgeleitete Kilowattstunden werden nach dem Erzeugungsanteil verteilt.
+    Liefe das auseinander, stünde in der Kachel eine Ersparnis, die keine
+    Anlage erwirtschaftet hat - und die Amortisationen passten nicht zur
+    Bilanz darüber.
+    """
+    # Glatte Preise mit Absicht: 0,337 und 0,112 ergeben hier 1,235 EUR und
+    # damit genau die Rundungsgrenze - der Test prüfte dann die Fließkomma-
+    # darstellung und nicht die Rechnung.
+    preise = {"price": 0.30, "feed_in": 0.08, "diverted": 0.10, "currency": "EUR"}
+    anlagen = [
+        {"id": "a1", "investment": 1000.0, "prior_yield": 0.0},
+        {"id": "a2", "investment": 1000.0, "prior_yield": 0.0},
+    ]
+    r = _rechner()
+    r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0, "diverted": 0.0,
+               "anlage:a1": 0.0, "anlage:a2": 0.0}, preise, {}, anlagen)
+    erg = r.rechnen({"import": 0.0, "export": 0.0, "own": 20.0, "diverted": 8.0,
+                     "anlage:a1": 15.0, "anlage:a2": 5.0}, preise, {}, anlagen)
+
+    # a1 hat drei Viertel erzeugt: 15 der 20 eigenen und 6 der 8 umgeleiteten.
+    assert erg["plants"]["a1"]["savings"] == round(9 * 0.30 + 6 * 0.10, 2)
+    assert erg["plants"]["a2"]["savings"] == round(3 * 0.30 + 2 * 0.10, 2)
+    summe = sum(erg["plants"][a["id"]]["savings"] for a in anlagen)
+    assert round(summe, 2) == erg["periods"]["total"]["savings"]
+
+
 def test_umgeleitet_davor_wird_mit_dem_wert_des_ersetzten_bewertet():
     """610 kWh Heizstab davor: nicht zum Strompreis, sondern zum Gaswert."""
     preis, gas, menge = 0.337, 0.112, 610.0

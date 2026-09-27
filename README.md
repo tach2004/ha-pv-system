@@ -742,10 +742,19 @@ Dafür gibt es **Aus Überschuss umgeleitet bei Einrichtung**: eine einzige Zahl
 über alle Anlagen zusammen. Sie stellt diese Kilowattstunden nachträglich auf
 den Wert des Ersetzten um.
 
-    Abzug = umgeleitet davor × (Wert des Ersetzten − Durchschnittspreis davor)
+    Ersparnis daraus = umgeleitet davor × Wert des Ersetzten
+    Abzug            = umgeleitet davor × (Arbeitspreis − Wert des Ersetzten)
 
-610 kWh bei 0,337 €/kWh Arbeitspreis und 0,112 €/kWh Gaswert sind demnach
-137,25 € weniger Ersparnis – und genau so viel weniger Ertrag.
+Ein Beispiel mit 610 kWh, 0,337 €/kWh Arbeitspreis und 0,112 €/kWh Gaswert:
+
+| | |
+|---|---|
+| bisher angesetzt | 610 × 0,337 = **205,57 €** |
+| richtig | 610 × 0,112 = **68,32 €** |
+| Abzug von der Ersparnis | **137,25 €** |
+
+In die Ersparnis fließt also nur noch der Gaswert – der Rest des
+Eigenverbrauchs davor bleibt beim Arbeitspreis.
 
 **Auf die Anlagen verteilt wird nach ihrer Erzeugung davor**, nicht nach ihrer
 heutigen. Zwei Anlagen mit 6000 und 2000 kWh Vorgeschichte tragen drei Viertel
