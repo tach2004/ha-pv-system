@@ -226,6 +226,17 @@ eine Lithiumzelle dort weder geladen werden darf noch lange gesund bleibt. Wer
 Animationen abgeschaltet hat, bekommt statt des Blinkens einen Schimmer um die
 Zahl.
 
+Im **Wechselrichterkasten** steht die Temperatur unten vor der Phasenmarke, in
+denselben Farben, aber mit anderen Stufen: grün bis 50 °C, orange bis 65 °C,
+darüber rot und blinkend. Ein Wechselrichter verträgt deutlich mehr als eine
+Zelle; vierzig Grad am Kühlkörper sind an einem Sommernachmittag gewöhnlich.
+Ab etwa fünfundsechzig drosseln viele Geräte – wo genau, steht im Datenblatt,
+die Stufen hier sind bewusst vorsichtig. Kälte ist für ihn kein Thema, unten
+gibt es keine Warnung.
+
+Entschieden wird bei beiden an der **angezeigten** ganzen Zahl: 29,6 °C
+erscheint als „30 °C" und ist dann auch orange, nicht grün.
+
 Die Kennzahlenleiste steht von links nach rechts in der Reihenfolge, in der man
 danach fragt: **Netz · Erzeugung · Verbrauch · Autarkie · Installiert ·
 Speicher**, und – sobald ein Arbeitspreis hinterlegt ist – **Ertrag heute ·
@@ -473,7 +484,11 @@ Fehlersuche entscheidend:
 | | Woher der Ertrag kommt | Wenn etwas schiefging |
 |---|---|---|
 | **Standort** | dem Geldspeicher, der bei jedem Lauf fortschreibt | bleibt drin – der Speicher vergisst nichts, auch keinen Fehler |
-| **je Anlage** | wird bei jedem Lauf aus den Mengen neu gerechnet | heilt sich von selbst, sobald die Mengen stimmen |
+| **je Anlage** | einem Konto je Anlage, ebenfalls Lauf für Lauf fortgeschrieben (seit 2.1) | bleibt drin, wie am Standort |
+
+Beide folgen damit derselben Regel: Jede Kilowattstunde wird **in dem Moment**
+bewertet, in dem sie fließt, zum Preis dieses Moments – und danach nicht mehr
+angefasst. Ein Ertrag kann deshalb nicht sinken.
 
 Wenn der Gesamtzeitraum einmal falsche Beträge trägt, ist `pv_system.reset_costs`
 der Ausweg: Er leert den Geldspeicher und die Periodenmarken. Was in der
@@ -535,10 +550,35 @@ können wäre nur eine Gelegenheit, sich zu widersprechen. Unter *Kosten und
 Ertrag* stehen deshalb nur noch die Preise.
 
 Wie viel eine **einzelne** Anlage ins Netz gespeist hat, misst niemand: Am
-Hausanschluss hängt ein Zähler für alle zusammen. Die Einspeisung wird deshalb
-nach dem Anteil an der Gesamterzeugung aufgeteilt. Das trifft zu, solange die
-Anlagen zur selben Zeit liefern, und liegt daneben, wenn eine nach Osten und
-eine nach Westen zeigt. In der Karte steht deshalb „geschätzt" daneben.
+Hausanschluss hängt ein Zähler für alle zusammen. Aufgeteilt wird deshalb nach
+der **Leistung im selben Augenblick**: Wer gerade die Hälfte liefert, bekommt
+die Hälfte der Kilowattstunde, die gerade ins Netz geht. Dasselbe gilt für den
+Überschussverbraucher. In der Karte steht trotzdem „geschätzt" daneben – es
+bleibt eine Zuordnung, keine Messung.
+
+Bis 2.0 wurde stattdessen die **gesamte bisherige** Einspeisung bei jedem Lauf
+neu nach dem Anteil an der Lebenserzeugung verteilt. Das hatte eine sichtbare
+Folge: Speiste mittags die große Anlage ein, sank der Anteil der kleinen, und
+ein Teil der Einspeisung von gestern wanderte rückwirkend zu ihr – ihr Ertrag
+fiel, obwohl sie gerade nichts tat. Eine Anlage mit Akku, die nachts liefert,
+traf das jeden Mittag.
+
+Warum die **Leistung** und nicht die Zähler: Ein Ertragszähler, der nur alle
+halbe Minute meldet, zeigt dazwischen neunundzwanzigmal null. Nach Zählern
+aufgeteilt, ginge seine Anlage in fast jedem Lauf leer aus. Die Leistung steht
+bei jedem Lauf da. Hinkt der Zähler hinterher, wartet die Buchung des
+Eigenverbrauchs, statt ins Minus zu gehen.
+
+Beim Update auf 2.1 wird jede Anlage einmal mit dem Stand vorbelegt, den sie
+bis dahin zeigte. Die Zahl in der Karte springt nicht; sie hört nur auf zu
+wandern.
+
+**Was jede Anlage heute erzeugt hat** steht in ihrer Kostenansicht (Tipp auf
+den Ertrag über den Modulen) für heute, den Monat und das Jahr, und im
+Wechselrichter unter *Ertrag heute*. Gezählt wird hinter dem Wechselrichter,
+sobald einer mit Ertragszähler eingetragen ist – also nach den Verlusten in
+Laderegler, Leitung und Wechselrichter. Fehlt der, kommt die Zahl von den
+Modulen und trägt den Zusatz „(Module)".
 
 ### Überschussverbraucher
 

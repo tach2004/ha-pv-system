@@ -1467,6 +1467,158 @@ def test_umgeleitet_davor_ruehrt_das_gemessene_nicht_an():
 
 
 
+# ------------------------------------------- Ertrag je Anlage, Lauf für Lauf
+#
+# Bis 2.0 entstand der Ertrag einer Anlage bei jedem Lauf neu, und die ganze
+# bisherige Einspeisung wurde nach dem Anteil an der Lebenserzeugung verteilt.
+# Speiste mittags die große Anlage ein, wanderte ein Teil davon rückwirkend
+# zur kleinen - deren Ertrag sank, obwohl sie gar nichts tat.
+
+_DREI = [{"id": "gross", "investment": 4000.0, "prior_yield": 0.0},
+         {"id": "akku", "investment": 1000.0, "prior_yield": 0.0},
+         {"id": "klein", "investment": 800.0, "prior_yield": 0.0}]
+
+
+class _Tag:
+    """Ein Tag in halben Stunden, mit Zählern und Leistung je Anlage."""
+
+    def __init__(self, preise, anlagen=_DREI, zaehlertakt=1):
+        self.r = _rechner(schritt=timedelta(minutes=30))
+        self.preise, self.anlagen, self.takt = preise, anlagen, zaehlertakt
+        self.z = {"import": 0.0, "export": 0.0, "own": 0.0, "diverted": 0.0,
+                  **{f"anlage:{a['id']}": 0.0 for a in anlagen}}
+        self.wahr = {a["id"]: 0.0 for a in anlagen}
+        self.lauf = 0
+        self.erg = self.r.rechnen(dict(self.z), preise, {}, anlagen)
+
+    def schritt(self, export=0.0, divert=0.0, **kwh):
+        """``kwh`` je Anlage in dieser halben Stunde."""
+        self.lauf += 1
+        for kennung, menge in kwh.items():
+            self.wahr[kennung] += menge
+        erzeugt = sum(kwh.values())
+        self.z["export"] += export
+        self.z["own"] += erzeugt - export
+        self.z["diverted"] += divert
+        # Ein träger Ertragszähler meldet nur jeden n-ten Lauf - dazwischen
+        # steht er still. Die Leistung dagegen ist immer da.
+        if self.lauf % self.takt == 0:
+            for kennung, stand in self.wahr.items():
+                self.z[f"anlage:{kennung}"] = stand
+        leistung = {f"anlage:{k}": kwh.get(k, 0.0) * 2000 for k in self.wahr}
+        self.erg = self.r.rechnen(dict(self.z), self.preise, leistung, self.anlagen)
+        return {k: self.erg["plants"][k]["yield"] for k in self.wahr}
+
+
+def test_eine_anlage_verliert_nichts_wenn_eine_andere_einspeist():
+    """Der gemeldete Fall: nachts Akku, mittags speist die große ein."""
+    tag = _Tag({"price": 0.3376, "feed_in": None, "currency": "EUR"})
+    tag.schritt(akku=0.1)
+    nach_der_nacht = tag.schritt(akku=0.1)["akku"]
+    # Mittags liefert allein die große Anlage und speist dabei ein.
+    for _ in range(4):
+        assert tag.schritt(gross=1.5, export=1.0)["akku"] == nach_der_nacht
+
+
+def test_der_ertrag_einer_anlage_sinkt_nie():
+    """Über einen ganzen gemischten Tag, mit Heizstab und Einspeisung."""
+    tag = _Tag({"price": 0.3376, "feed_in": 0.08, "diverted": 0.112,
+                "currency": "EUR"})
+    vorher = None
+    for i in range(48):
+        if i < 12 or i > 40:
+            werte = tag.schritt(akku=0.08)
+        elif i % 3:
+            werte = tag.schritt(gross=1.2, klein=0.3, export=0.7,
+                                divert=0.3 if i % 2 else 0.0)
+        else:
+            werte = tag.schritt(gross=0.4, klein=0.1, akku=0.1)
+        if vorher:
+            for kennung, wert in werte.items():
+                assert wert >= vorher[kennung], (i, kennung, vorher[kennung], wert)
+        vorher = werte
+
+
+def test_ein_traeger_ertragszaehler_kostet_keine_kilowattstunde():
+    """Meldet der Zähler nur jede fünfte Runde, kommt am Ende dasselbe heraus."""
+    preise = {"price": 0.3376, "feed_in": 0.08, "currency": "EUR"}
+    flink, traege = _Tag(preise), _Tag(preise, zaehlertakt=5)
+    vorher = None
+    for _ in range(20):
+        flink.schritt(gross=1.0, klein=0.5, export=0.6)
+        werte = traege.schritt(gross=1.0, klein=0.5, export=0.6)
+        # Unterwegs nie ins Minus: Die Einspeisung wird jede Runde gebucht,
+        # der Zähler holt erst jede fünfte auf - dazwischen wartet die
+        # Buchung des Eigenverbrauchs, statt abzuziehen.
+        if vorher:
+            for kennung, wert in werte.items():
+                assert wert >= vorher[kennung], (kennung, vorher[kennung], wert)
+        vorher = werte
+    # Und am Ende steht dasselbe da wie mit einem flinken Zähler.
+    assert flink.erg["plants"] == traege.erg["plants"]
+
+
+def test_die_anlagen_ergeben_zusammen_den_standort():
+    """Jede Kilowattstunde landet genau einmal bei genau einer Anlage."""
+    tag = _Tag({"price": 0.30, "feed_in": 0.08, "diverted": 0.10,
+                "currency": "EUR"})
+    for i in range(20):
+        tag.schritt(gross=1.0, klein=0.5, akku=0.2 if i % 2 else 0.0,
+                    export=0.4, divert=0.2)
+    gesamt = tag.erg["periods"]["total"]
+    anlagen = tag.erg["plants"].values()
+    # Je Anlage auf den Cent gerundet - drei Rundungen, also höchstens
+    # anderthalb Cent Abstand.
+    assert abs(sum(a["savings"] for a in anlagen) - gesamt["savings"]) <= 0.015
+    assert abs(sum(a["revenue"] for a in anlagen) - gesamt["revenue"]) <= 0.015
+
+
+def test_ein_neuer_preis_bewertet_die_anlage_nicht_rueckwirkend():
+    """Wie am Standort: Was gebucht ist, bleibt zu seinem damaligen Preis."""
+    tag = _Tag({"price": 0.30, "currency": "EUR"})
+    for _ in range(4):
+        tag.schritt(gross=1.0)
+    vorher = tag.erg["plants"]["gross"]["savings"]
+    tag.preise = {"price": 0.50, "currency": "EUR"}
+    tag.schritt()  # nichts erzeugt, nur der Preis ist anders
+    assert tag.erg["plants"]["gross"]["savings"] == vorher
+
+
+def test_ein_speicher_von_vorher_wird_ohne_sprung_uebernommen():
+    """Beim Update hat der Speicher noch keine Konten - die Zahl muss stehen bleiben.
+
+    Vorbelegt wird mit der Aufteilung, die bis 2.0 galt: nach dem Anteil an
+    der Erzeugung seit dem ersten Lauf, zum heutigen Preis.
+    """
+    preise = {"price": 0.30, "feed_in": 0.08, "currency": "EUR"}
+    r = _rechner(schritt=timedelta(minutes=30))
+    anlagen = [{"id": "a", "investment": 1000.0}, {"id": "b", "investment": 1000.0}]
+    r.rechnen({"export": 0.0, "own": 0.0, "anlage:a": 0.0, "anlage:b": 0.0},
+              preise, {}, anlagen)
+    r.rechnen({"export": 4.0, "own": 16.0, "anlage:a": 15.0, "anlage:b": 5.0},
+              preise, {}, anlagen)
+    # So sah der Speicher vor dieser Fassung aus: ohne Konten je Anlage.
+    del r._rechner._marken["total"]["anlagen"]
+    erg = r.rechnen({"export": 4.0, "own": 16.0, "anlage:a": 15.0, "anlage:b": 5.0},
+                    preise, {}, anlagen)
+    # a hat drei Viertel erzeugt: 3 der 4 kWh Einspeisung, 12 selbst genutzt.
+    assert erg["plants"]["a"]["yield"] == round(12 * 0.30 + 3 * 0.08, 2)
+    assert erg["plants"]["b"]["yield"] == round(4 * 0.30 + 1 * 0.08, 2)
+
+
+def test_jede_anlage_kennt_ihren_ertrag_von_heute_in_kwh():
+    """Zum Vergleich der Anlagen untereinander - nicht nur in Euro."""
+    tag = _Tag({"price": 0.30, "currency": "EUR"})
+    for _ in range(3):
+        tag.schritt(gross=1.0, klein=0.25)
+    anlage = tag.erg["plants"]["gross"]
+    assert anlage["yield_day_kwh"] == 3.0
+    assert anlage["yield_month_kwh"] == 3.0
+    assert anlage["yield_year_kwh"] == 3.0
+    assert tag.erg["plants"]["klein"]["yield_day_kwh"] == 0.75
+    assert tag.erg["plants"]["akku"]["yield_day_kwh"] == 0.0
+
+
 def _alle_tests():
     for name, funktion in sorted(globals().items()):
         if name.startswith("test_") and callable(funktion):

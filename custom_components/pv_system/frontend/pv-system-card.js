@@ -149,7 +149,9 @@ function wattVz(wert, sprache) {
  * nicht um ein Grad hin oder her.
  */
 function _waerme(grad) {
-  const n = zahl(grad);
+  // Entschieden wird an der Zahl, die dasteht: 29,6 Grad zeigt die Karte als
+  // "30 °C" - und die darf dann nicht grün sein, während 30,0 orange ist.
+  const n = zahl(grad) === null ? null : Math.round(zahl(grad));
   if (n === null) return "";
   // Über vierzig und unter fünf Grad wird es für eine Lithiumzelle kritisch:
   // oben droht Alterung, unten darf sie nicht mehr geladen werden. Beides
@@ -157,6 +159,26 @@ function _waerme(grad) {
   if (n >= 40) return "heiss warnen";
   if (n >= 30) return "warm";
   if (n < 5) return "kalt warnen";
+  return "kuehl";
+}
+
+/**
+ * Die Temperatur eines Wechselrichters - dieselben Farben wie beim Akku,
+ * aber andere Stufen.
+ *
+ * Ein Wechselrichter verträgt deutlich mehr Wärme als eine Lithiumzelle;
+ * vierzig Grad am Kühlkörper sind an einem Sommernachmittag unter Last ganz
+ * gewöhnlich. Ab fünfzig wird es warm, ab fünfundsechzig drosseln viele Geräte
+ * ihre Leistung - wo genau, steht im Datenblatt, die Stufen hier sind bewusst
+ * vorsichtig. Kälte ist für ihn kein Thema, deshalb gibt es unten keine
+ * Warnung.
+ */
+function _wrWaerme(grad) {
+  // Wie beim Akku: entschieden wird an der angezeigten, ganzen Zahl.
+  const n = zahl(grad) === null ? null : Math.round(zahl(grad));
+  if (n === null) return "";
+  if (n >= 65) return "heiss warnen";
+  if (n >= 50) return "warm";
   return "kuehl";
 }
 
@@ -1245,6 +1267,13 @@ class PvSystemCard extends HTMLElement {
       // Phasenmarke – bei drei Wechselrichtern auf zwei Phasen die wichtigste
       // Information der ganzen Karte.
       const px = x + M.spalte - 56;
+      // Die Temperatur steht direkt vor der Phasenmarke, rechtsbündig - so
+      // bleibt links Platz für "100 % von 10,00 kW".
+      this._ref(
+        box,
+        `${id}:inverter:temp`,
+        e("text", { class: "mini rechts", x: px - 6, y: g.yWr + 56 })
+      );
       box.appendChild(
         e("rect", {
           x: px, y: g.yWr + 44, width: 34, height: 16, rx: 8,
@@ -2287,6 +2316,18 @@ class PvSystemCard extends HTMLElement {
             : `${prozent(w.load, l)} von ${watt(w.rated_power, l)}`
         );
         this._setzen(`${id}:inverter:phase`, String(w.phase || "l1").toUpperCase());
+        // Ganze Grad wie beim Akku; die Detailtabelle zeigt die Nachkommastelle.
+        this._setzen(
+          `${id}:inverter:temp`,
+          w.temperature !== null && w.temperature !== undefined
+            ? einheit(w.temperature, "°C", 0, l)
+            : ""
+        );
+        this._attr(
+          `${id}:inverter:temp`,
+          "class",
+          `mini rechts ${_wrWaerme(w.temperature)}`
+        );
         // Das Vorzeichen entscheidet über Richtung und Farbe. Minus heißt,
         // der Wechselrichter nimmt von der Phase statt abzugeben - im
         // Leerlauf ein paar Watt, beim Laden aus dem Netz mehr. Vorher lief
@@ -2784,6 +2825,18 @@ class PvSystemCard extends HTMLElement {
         ["Frequenz", einheit(w.frequency, "Hz", 2, l), w.entities.frequency],
         ["Temperatur", einheit(w.temperature, "°C", 1, l), w.entities.temperature],
         ["Ertrag", einheit(w.energy, "kWh", 2, l), w.entities.energy],
+        // Was heute hinter dem Wechselrichter angekommen ist - der Wert, mit
+        // dem sich die Anlagen vergleichen lassen. Nur wenn wirklich dieser
+        // Zähler die Anlage zählt; sonst stammte die Zahl von den Modulen,
+        // also von vor dem Wechselrichter.
+        ...(w.entities.energy
+          ? [
+              [
+                "Ertrag heute",
+                einheit((anlage.costs || {}).yield_day_kwh, "kWh", 2, l),
+              ],
+            ]
+          : []),
         ["Betriebsart", w.mode || "–", w.entities.mode],
         ["Gerät", [w.manufacturer, w.model || w.name].filter(Boolean).join(" ") || "–"],
       ];
@@ -3129,8 +3182,25 @@ class PvSystemCard extends HTMLElement {
     const k = anlage.costs || {};
     const w = (this._daten.costs || {}).currency;
     const m = anlage.modules;
+    // Gezählt wird hinter dem Wechselrichter, sobald einer mit Ertragszähler
+    // eingetragen ist. Sonst kommt die Zahl von den Modulen - vor Laderegler,
+    // Leitung und Wechselrichter, also um deren Verluste zu hoch. Das soll
+    // dann auch dranstehen.
+    const quelle =
+      anlage.inverter.enabled && anlage.inverter.entities.energy ? "" : " (Module)";
+    const erzeugt = (wert) =>
+      wert === null || wert === undefined ? "–" : `${einheit(wert, "kWh", 2, l)}${quelle}`;
     const zeilen = [
       ["Leistung jetzt", watt(m.power, l), m.entities.power],
+      // Zum Vergleich der Anlagen untereinander - unabhängig davon, ob
+      // Preise eingetragen sind. Kilowattstunden sind keine Kosten.
+      ...(k.yield_day_kwh !== null && k.yield_day_kwh !== undefined
+        ? [
+            ["Erzeugt heute", erzeugt(k.yield_day_kwh)],
+            ["Erzeugt diesen Monat", erzeugt(k.yield_month_kwh)],
+            ["Erzeugt dieses Jahr", erzeugt(k.yield_year_kwh)],
+          ]
+        : []),
       ["Installiert", m.peak_total ? watt(m.peak_total, l) : "–"],
       [
         "Wechselrichter",

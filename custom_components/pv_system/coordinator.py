@@ -389,6 +389,14 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for anlage in anlagen:
             zaehler[f"anlage:{anlage[CONF_ID]}"] = _anlagenzaehler(anlage)
 
+        # Und was jede Anlage in diesem Augenblick liefert. Daran entscheidet
+        # sich, wem die Kilowattstunde gehört, die gerade ins Netz oder in den
+        # Heizstab geht - an der Leistung und nicht am Zähler, weil ein Zähler,
+        # der nur alle halbe Minute meldet, dazwischen null zeigt.
+        leistungen_je_anlage = {
+            f"anlage:{anlage[CONF_ID]}": _anlagenleistung(anlage) for anlage in anlagen
+        }
+
         return self.kosten.rechnen(
             zaehler,
             {
@@ -426,6 +434,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "import": netz["import_power"],
                 "export": netz["export_power"],
                 "own": eigen_jetzt,
+                **leistungen_je_anlage,
             },
             [self._anlagenkosten(anlage) for anlage in anlagen],
         )
@@ -1519,6 +1528,20 @@ def _anlagenzaehler(anlage: dict[str, Any]) -> float | None:
     if wr["enabled"] and (wr.get("entities") or {}).get("energy"):
         return wr["energy"]
     return anlage["modules"]["energy"]
+
+
+def _anlagenleistung(anlage: dict[str, Any]) -> float | None:
+    """Was die Anlage gerade abgibt - hinter dem Wechselrichter, wenn es einen gibt.
+
+    Dieselbe Reihenfolge wie beim Ertragszähler: Der Wechselrichter misst,
+    was wirklich im Haus ankommt; die Module davor wissen nichts von den
+    Verlusten dazwischen. Zieht ein Hybrid gerade aus dem Netz, ist das keine
+    Abgabe - die Rechnung macht daraus null.
+    """
+    wr = anlage["inverter"]
+    if wr["enabled"] and wr.get("power") is not None:
+        return wr["power"]
+    return anlage["modules"].get("power")
 
 
 def _ertragszaehler_entitaet(anlage: dict[str, Any]) -> str | None:

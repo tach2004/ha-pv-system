@@ -324,11 +324,17 @@ class Kostenrechner:
         # Erst jetzt der Geldspeicher: Er hängt sich an dieselbe Marke wie der
         # Gesamtzeitraum, und die muss vorher angelegt sein - sonst stünde dort
         # kein Periodenanfang, und die Amortisation rechnete ab 1970.
-        gespeichert, neu_geld = self._geldspeicher(
+        gespeichert, neu_geld, schritt = self._geldspeicher(
             zaehler, arbeitspreis, verguetung, jetzt, frisch, umleitpreis,
             grundpreis,
         )
         veraendert = veraendert or neu_geld
+        # Und dasselbe je Anlage - mit den Mengen genau dieses Laufs, verteilt
+        # auf die Anlagen, die in diesem Moment liefern.
+        veraendert = self._anlagengeld(
+            anlagen, schritt, leistungen, gemessen, arbeitspreis, verguetung,
+            umleitpreis,
+        ) or veraendert
 
         # Der Gesamtzeitraum bekommt die mitgeführten Beträge statt der
         # Hochrechnung mit dem heutigen Preis.
@@ -339,6 +345,20 @@ class Kostenrechner:
         if veraendert:
             self._merken()
 
+        # Was jede Anlage heute, diesen Monat und dieses Jahr erzeugt hat.
+        # Die Zählerstände laufen ohnehin durch alle Zeiträume; hier werden
+        # sie nur abgelesen.
+        je_zeitraum = {
+            anlage["id"]: {
+                periode: _zahl(
+                    (zeitraeume[periode].get("_mengen") or {}).get(
+                        f"anlage:{anlage['id']}"
+                    )
+                )
+                for periode in (PERIOD_DAY, PERIOD_MONTH, PERIOD_YEAR)
+            }
+            for anlage in anlagen
+        }
         je_anlage = self._anlagen(
             anlagen,
             zeitraeume[PERIOD_TOTAL],
@@ -348,6 +368,8 @@ class Kostenrechner:
             _zahl(preise.get("prior_price")),
             umleitpreis,
             vorher_umgeleitet,
+            self._marken.get(PERIOD_TOTAL, {}).get("anlagen") or {},
+            je_zeitraum,
         )
         # Die Rohmengen waren nur für die Aufteilung auf die Anlagen nötig.
         for zeitraum in zeitraeume.values():
@@ -405,7 +427,7 @@ class Kostenrechner:
         frisch: set[str] | None = None,
         umleitpreis: float | None = None,
         grundpreis: float = 0.0,
-    ) -> tuple[dict[str, float], bool]:
+    ) -> tuple[dict[str, float], bool, dict[str, float]]:
         """Den seit dem ersten Lauf angefallenen Betrag fortschreiben.
 
         Bewertet wird immer nur die Differenz zur letzten Rechnung - mit dem
@@ -500,7 +522,197 @@ class Kostenrechner:
             if not menge or satz is None:
                 continue
             geld[feld] = round(geld[feld] + menge * satz, 4)
-        return geld, veraendert
+        # Die Mengen dieses einen Laufs gehen mit hinaus: Aus genau ihnen
+        # entsteht der Anteil jeder Anlage - siehe _anlagengeld.
+        return geld, veraendert, mengen
+
+    def _anlagengeld(
+        self,
+        anlagen: list[dict[str, Any]],
+        schritt: dict[str, float],
+        leistungen: dict[str, float | None],
+        gemessen: dict[str, Any],
+        preis: float | None,
+        verguetung: float | None,
+        umleitpreis: float | None,
+    ) -> bool:
+        """Das Geld jeder Anlage fortschreiben - Lauf für Lauf, wie am Standort.
+
+        Bis 2.0 entstand der Ertrag einer Anlage bei jedem Lauf neu: Die ganze
+        bisherige Einspeisung wurde nach dem Anteil an der *Lebens*erzeugung
+        auf die Anlagen verteilt. Speiste mittags die große Anlage ein, sank
+        der Anteil der kleinen - und mit ihm wanderte ein Teil der Einspeisung
+        von gestern Nacht zu ihr hinüber. Ihr Ertrag fiel, obwohl sie in dem
+        Augenblick gar nichts tat. Dasselbe galt für den Heizstab, und jeder
+        neue Arbeitspreis bewertete die ganze Vergangenheit um.
+
+        Jetzt wird jede neu eingespeiste und jede neu umgeleitete
+        Kilowattstunde den Anlagen zugeschrieben, die **in diesem Moment**
+        liefern - nach ihrer Leistung, nicht nach ihren Zählern. Die Leistung
+        ist bei jedem Lauf da; ein Ertragszähler, der nur alle halbe Minute
+        meldet, hätte in neunundzwanzig von dreißig Läufen null gezeigt und
+        seine Anlage jedes Mal leer ausgehen lassen. Bewertet wird zum Preis
+        des Augenblicks und aufaddiert. Was einmal gebucht ist, bleibt.
+
+        Der Eigenverbrauch einer Anlage ist der Rest: Erzeugt minus
+        eingespeist minus umgeleitet. Er wird nur gebucht, wenn er wächst -
+        hinkt der Ertragszähler der Leistung ein paar Sekunden hinterher, wartet
+        die Buchung, statt ins Minus zu gehen. Der Ertrag einer Anlage kann
+        damit nicht mehr sinken.
+        """
+        marke = self._marken.setdefault(PERIOD_TOTAL, {})
+        kennungen = [anlage["id"] for anlage in anlagen]
+        erzeugt = {
+            kennung: _zahl(gemessen.get(f"anlage:{kennung}")) for kennung in kennungen
+        }
+        saetze = {
+            anlage["id"]: (
+                _zahl(anlage.get("feed_in"))
+                if _zahl(anlage.get("feed_in")) is not None
+                else verguetung
+            )
+            for anlage in anlagen
+        }
+        # Eine umgeleitete Kilowattstunde ist so viel wert wie das, was sie
+        # ersetzt. Ersetzt sie nur Strom, ist es der Arbeitspreis.
+        wert_umgeleitet = umleitpreis if umleitpreis is not None else preis
+
+        if "anlagen" not in marke:
+            marke["anlagen"] = self._anlagengeld_vorbelegen(
+                kennungen, erzeugt, gemessen, preis, saetze, wert_umgeleitet
+            )
+            return True
+
+        konten: dict[str, dict[str, float]] = marke["anlagen"]
+        # Abgebaute Anlagen nicht ewig mitschleppen; neue fangen bei null an.
+        for kennung in list(konten):
+            if kennung not in kennungen:
+                del konten[kennung]
+        for kennung in kennungen:
+            konten.setdefault(kennung, _leeres_konto())
+
+        einspeisung = _zahl(schritt.get("export")) or 0.0
+        umleitung = _zahl(schritt.get("diverted")) or 0.0
+        anteile = self._anteile_jetzt(marke, kennungen, leistungen, erzeugt)
+
+        veraendert = False
+        for kennung in kennungen:
+            konto = konten[kennung]
+            anteil = anteile.get(kennung, 0.0)
+            if anteil and einspeisung:
+                menge = einspeisung * anteil
+                konto["export"] = round(konto["export"] + menge, 6)
+                if saetze[kennung] is not None:
+                    konto["revenue"] = round(
+                        konto["revenue"] + menge * saetze[kennung], 6
+                    )
+                veraendert = True
+            if anteil and umleitung:
+                menge = umleitung * anteil
+                konto["divert"] = round(konto["divert"] + menge, 6)
+                if wert_umgeleitet is not None:
+                    konto["savings"] = round(
+                        konto["savings"] + menge * wert_umgeleitet, 6
+                    )
+                veraendert = True
+            # Der gewöhnliche Eigenverbrauch - nur nach oben. Schweigt der
+            # Zähler gerade, bleibt alles, wie es ist: unbekannt ist nicht null.
+            stand = erzeugt[kennung]
+            if stand is None:
+                continue
+            ziel = max(0.0, stand - konto["export"] - konto["divert"])
+            if ziel > konto["own"] + 1e-9:
+                if preis is not None:
+                    konto["savings"] = round(
+                        konto["savings"] + (ziel - konto["own"]) * preis, 6
+                    )
+                konto["own"] = round(ziel, 6)
+                veraendert = True
+        return veraendert
+
+    @staticmethod
+    def _anlagengeld_vorbelegen(
+        kennungen: list[str],
+        erzeugt: dict[str, float | None],
+        gemessen: dict[str, Any],
+        preis: float | None,
+        saetze: dict[str, float | None],
+        wert_umgeleitet: float | None,
+    ) -> dict[str, dict[str, float]]:
+        """Beim ersten Lauf nach dem Update dort anfangen, wo die alte Rechnung stand.
+
+        Mit leeren Konten fiele jede Anlage auf null zurück, und ihre
+        Amortisation spränge um alles, was seit der Einrichtung gemessen wurde.
+        Deshalb wird einmal mit der bisherigen Aufteilung vorbelegt - nach dem
+        Anteil an der Lebenserzeugung, zum heutigen Preis - und ab dem nächsten
+        Lauf nur noch fortgeschrieben. Die Zahl in der Karte bleibt beim Update
+        stehen; sie hört nur auf zu wandern.
+
+        Bei einer frischen Einrichtung ist alles null, und es kommt dasselbe
+        heraus wie mit leeren Konten.
+        """
+        stand = {k: max(0.0, v or 0.0) for k, v in erzeugt.items()}
+        summe = sum(stand.values())
+        einspeisung = max(0.0, _zahl(gemessen.get("export")) or 0.0)
+        umleitung = min(
+            max(0.0, _zahl(gemessen.get("diverted")) or 0.0),
+            max(0.0, _zahl(gemessen.get("own")) or 0.0),
+        )
+        konten: dict[str, dict[str, float]] = {}
+        for kennung in kennungen:
+            anteil = stand[kennung] / summe if summe > 0 else 0.0
+            export = min(stand[kennung], einspeisung * anteil)
+            eigen = stand[kennung] - export
+            divert = min(eigen, umleitung * anteil)
+            own = eigen - divert
+            konto = _leeres_konto()
+            konto.update(
+                export=round(export, 6), divert=round(divert, 6), own=round(own, 6)
+            )
+            if preis is not None:
+                konto["savings"] += own * preis
+            if wert_umgeleitet is not None:
+                konto["savings"] += divert * wert_umgeleitet
+            if saetze[kennung] is not None:
+                konto["revenue"] += export * saetze[kennung]
+            konto["savings"] = round(konto["savings"], 6)
+            konto["revenue"] = round(konto["revenue"], 6)
+            konten[kennung] = konto
+        return konten
+
+    @staticmethod
+    def _anteile_jetzt(
+        marke: dict[str, Any],
+        kennungen: list[str],
+        leistungen: dict[str, float | None],
+        erzeugt: dict[str, float | None],
+    ) -> dict[str, float]:
+        """Wer liefert gerade wie viel - als Anteil.
+
+        Zuerst die Leistung: Sie ist der Augenblick, um den es geht. Liefert
+        gerade niemand - eine Kilowattstunde Einspeisung, die der Zähler nach
+        Sonnenuntergang nachreicht -, gilt die letzte Verteilung, in der
+        jemand geliefert hat. Kennt die Rechnung noch keine, bleibt der
+        Anteil an der bisherigen Erzeugung.
+        """
+        leistung = {
+            k: max(0.0, _zahl(leistungen.get(f"anlage:{k}")) or 0.0) for k in kennungen
+        }
+        summe = sum(leistung.values())
+        if summe > 0:
+            anteile = {k: leistung[k] / summe for k in kennungen}
+            marke["anteile"] = {k: round(v, 6) for k, v in anteile.items()}
+            return anteile
+        zuletzt = marke.get("anteile") or {}
+        if zuletzt and any(k in zuletzt for k in kennungen):
+            gesamt = sum(_zahl(zuletzt.get(k)) or 0.0 for k in kennungen)
+            if gesamt > 0:
+                return {k: (_zahl(zuletzt.get(k)) or 0.0) / gesamt for k in kennungen}
+        stand = {k: max(0.0, v or 0.0) for k, v in erzeugt.items()}
+        gesamt = sum(stand.values())
+        if gesamt > 0:
+            return {k: stand[k] / gesamt for k in kennungen}
+        return {}
 
     @staticmethod
     def _gesamtgeld(
@@ -832,6 +1044,8 @@ class Kostenrechner:
         preis_vorher: float | None = None,
         umleitpreis: float | None = None,
         vorher_umgeleitet: float = 0.0,
+        konten: dict[str, dict[str, float]] | None = None,
+        je_zeitraum: dict[str, dict[str, float | None]] | None = None,
     ) -> dict[str, Any]:
         """Ertrag und Amortisation je Anlage, seit ihrer Inbetriebnahme.
 
@@ -852,18 +1066,13 @@ class Kostenrechner:
             anlage["id"]: max(0.0, _zahl(mengen.get(f"anlage:{anlage['id']}")) or 0.0)
             for anlage in anlagen
         }
-        summe = sum(gemessen.values())
+        konten = konten or {}
+        je_zeitraum = je_zeitraum or {}
         # Die Vorgeschichte wird nach ihrem eigenen Maßstab aufgeteilt: Was
         # eine Anlage bis zur Einrichtung erzeugt hat, sagt nichts darüber,
         # was sie seither liefert - eine Anlage von 2026 hat davor nichts
         # beigetragen und bekommt vom umgeleiteten Teil davor auch nichts ab.
         summe_vorher = sum(_zahl(a.get("prior_yield")) or 0.0 for a in anlagen)
-        einspeisung_gemessen = max(
-            0.0,
-            (_zahl(gesamt.get("export_kwh")) or 0.0)
-            - sum(_zahl(a.get("prior_export")) or 0.0 for a in anlagen),
-        )
-        umleitung = _zahl(gesamt.get("diverted_kwh")) or 0.0
 
         ergebnis: dict[str, Any] = {}
         for anlage in anlagen:
@@ -871,10 +1080,11 @@ class Kostenrechner:
             vorher_erzeugt = _zahl(anlage.get("prior_yield")) or 0.0
             vorher_eingespeist = _zahl(anlage.get("prior_export")) or 0.0
             erzeugt = gemessen[kennung] + vorher_erzeugt
-            anteil = gemessen[kennung] / summe if summe > 0 else 0.0
-            eingespeist = min(
-                erzeugt, einspeisung_gemessen * anteil + vorher_eingespeist
-            )
+            # Was seit dem ersten Lauf eingespeist, umgeleitet und verdient
+            # wurde, steht im Konto der Anlage - Lauf für Lauf mitgeschrieben,
+            # siehe _anlagengeld. Hier wird es nur noch abgelesen.
+            konto = {**_leeres_konto(), **(konten.get(kennung) or {})}
+            eingespeist = min(erzeugt, konto["export"] + vorher_eingespeist)
             eigen = max(0.0, erzeugt - eingespeist)
             satz = _zahl(anlage.get("feed_in"))
             if satz is None:
@@ -884,37 +1094,43 @@ class Kostenrechner:
             # damals bewertet - der Rest mit dem heutigen.
             frueher = preis_vorher if preis_vorher is not None else preis
             eigen_vorher = max(0.0, vorher_erzeugt - vorher_eingespeist)
-            eigen_jetzt = max(0.0, eigen - eigen_vorher)
-            # Der Überschussverbraucher hängt am Hausanschluss, nicht an einer
-            # Anlage. Aufgeteilt wird er wie die Einspeisung: nach dem Anteil
-            # an der Erzeugung. Auch das ist eine Näherung - aber ohne sie
-            # rechnete sich jede Anlage die Heizstab-Kilowattstunden zum
-            # Strompreis gut, und das sind sie nicht wert.
-            umgeleitet = min(eigen_jetzt, umleitung * anteil)
             anteil_vorher = (
                 vorher_erzeugt / summe_vorher if summe_vorher > 0 else 0.0
             )
             umgeleitet_vorher = min(eigen_vorher, vorher_umgeleitet * anteil_vorher)
+            # Gemessen: aus dem Konto, jede Kilowattstunde zu ihrem damaligen
+            # Preis. Davor: einmal, zum Durchschnittspreis von damals.
             ersparnis = (
                 round(
-                    eigen_jetzt * preis
-                    + umgeleitet * _abstand(umleitpreis, preis)
+                    konto["savings"]
                     + eigen_vorher * (frueher or 0.0)
                     + umgeleitet_vorher * _abstand(umleitpreis, frueher),
                     2,
                 )
-                if preis is not None
+                if preis is not None or konto["savings"]
                 else None
             )
-            erloes = round(eingespeist * satz, 2) if satz is not None else None
+            # Die Einspeisung davor steht je Anlage fest und bekommt den Satz
+            # dieser Anlage; die gemessene ist schon zu ihrem Satz gebucht.
+            if satz is not None:
+                erloes = round(konto["revenue"] + vorher_eingespeist * satz, 2)
+            else:
+                erloes = round(konto["revenue"], 2) if konto["revenue"] else None
             ertrag = None
             if ersparnis is not None or erloes is not None:
                 ertrag = round((ersparnis or 0.0) + (erloes or 0.0), 2)
 
             investition = _zahl(anlage.get("investment"))
             beginn = _anlagenbeginn(anlage, gesamt.get("start"))
+            zeitraum = je_zeitraum.get(kennung) or {}
             ergebnis[kennung] = {
                 "yield_kwh": round(erzeugt, 2),
+                # Was die Anlage heute, diesen Monat, dieses Jahr erzeugt hat -
+                # am selben Zähler wie oben, also hinter dem Wechselrichter,
+                # sobald einer mit Ertragszähler eingetragen ist.
+                "yield_day_kwh": _gerundet(zeitraum.get(PERIOD_DAY), 2),
+                "yield_month_kwh": _gerundet(zeitraum.get(PERIOD_MONTH), 2),
+                "yield_year_kwh": _gerundet(zeitraum.get(PERIOD_YEAR), 2),
                 "export_kwh": round(eingespeist, 2),
                 "own_kwh": round(eigen, 2),
                 "savings": ersparnis,
@@ -1037,6 +1253,16 @@ def _fruehester_beginn(anlagen: list[dict[str, Any]], vorgabe: Any) -> Any:
 
 def _anlagenbeginn(anlage: dict[str, Any], vorgabe: Any) -> Any:
     return _als_datum(anlage.get("commissioned")) or vorgabe
+
+
+def _gerundet(wert: Any, stellen: int) -> float | None:
+    zahl = _zahl(wert)
+    return None if zahl is None else round(zahl, stellen)
+
+
+def _leeres_konto() -> dict[str, float]:
+    """Das Konto einer Anlage: Mengen in kWh, Beträge in der Währung."""
+    return {"export": 0.0, "divert": 0.0, "own": 0.0, "savings": 0.0, "revenue": 0.0}
 
 
 def _dazu(mengen: dict[str, Any], vorher: dict[str, float]) -> dict[str, Any]:
