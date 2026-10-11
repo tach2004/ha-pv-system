@@ -1986,6 +1986,71 @@ def test_ein_von_2_1_0_verlorener_monat_kommt_zurueck():
     assert r._rechner._marken["total"]["geld"]["savings"] == gesamt_vorher
 
 
+def test_jede_anlage_kennt_ihren_ertrag_je_zeitraum_in_euro():
+    """Die Anlagen ergeben zusammen den Ertrag der Kachel - heute, Monat, Jahr.
+
+    Mit Heizstab: Die umgeleitete Kilowattstunde zählt mit dem Wert des
+    Ersetzten, genau wie am Standort.
+    """
+    tag = _Tag({"price": 0.30, "feed_in": 0.08, "diverted": 0.10,
+                "currency": "EUR"})
+    for i in range(12):
+        tag.schritt(gross=1.0, klein=0.5, akku=0.2 if i % 2 else 0.0,
+                    export=0.4, divert=0.2)
+    for periode in ("day", "month", "year"):
+        standort = tag.erg["periods"][periode]["yield"]
+        anlagen = [a["periods"][periode] for a in tag.erg["plants"].values()]
+        assert abs(sum(a["yield"] for a in anlagen) - standort) <= 0.015, periode
+        for a in anlagen:
+            assert a["yield"] == round(a["savings"] + a["revenue"], 2)
+    gross = tag.erg["plants"]["gross"]["periods"]["day"]
+    assert gross["yield_kwh"] == 12.0
+    assert gross["yield"] > tag.erg["plants"]["klein"]["periods"]["day"]["yield"]
+
+
+def test_der_ertrag_einer_anlage_beginnt_um_mitternacht_neu():
+    """Das Konto von heute gehört zu heute - gesamt läuft weiter."""
+    r = _rechner(schritt=timedelta(hours=1))
+    anlagen = [{"id": "a"}]
+    preise = {"price": 0.30, "currency": "EUR"}
+    beginn = _jetzt().replace(hour=22, minute=0, second=0, microsecond=0)
+    r.rechnen({"export": 0.0, "own": 0.0, "anlage:a": 0.0}, preise,
+              {"anlage:a": 500}, anlagen, jetzt=beginn)
+    abends = r.rechnen({"export": 0.0, "own": 1.0, "anlage:a": 1.0}, preise,
+                       {"anlage:a": 500}, anlagen, jetzt=beginn + timedelta(hours=1))
+    assert abends["plants"]["a"]["periods"]["day"]["yield"] == 0.30
+    nachts = r.rechnen({"export": 0.0, "own": 1.5, "anlage:a": 1.5}, preise,
+                       {"anlage:a": 500}, anlagen, jetzt=beginn + timedelta(hours=3))
+    # Neuer Tag: verankert, noch nichts dazu. Gesamt kennt beides.
+    assert nachts["plants"]["a"]["periods"]["day"]["yield"] == 0.0
+    assert nachts["plants"]["a"]["yield"] == 0.45
+
+
+def test_ohne_preis_hat_der_zeitraum_einer_anlage_keinen_betrag():
+    """Keine 0,00 neben Kilowattstunden - das sähe aus wie eine nutzlose Anlage."""
+    tag = _Tag({"price": None, "feed_in": None, "currency": "EUR"})
+    tag.schritt(gross=1.0)
+    heute = tag.erg["plants"]["gross"]["periods"]["day"]
+    assert heute["yield_kwh"] == 1.0
+    assert heute["yield"] is None
+
+
+def test_beim_update_bekommt_jeder_zeitraum_seine_anlagenkonten():
+    """Marken ohne Konten werden einmal mit der bisherigen Aufteilung belegt."""
+    tag = _Tag({"price": 0.30, "currency": "EUR"})
+    for _ in range(4):
+        tag.schritt(gross=1.0, klein=0.5)
+    vorher = tag.erg["periods"]["day"]["yield"]
+    # So sahen Tag, Monat und Jahr bis 2.1.1 aus: ohne Konten je Anlage.
+    for periode in ("day", "month", "year"):
+        del tag.r._rechner._marken[periode]["anlagen"]
+    tag.erg = tag.r.rechnen(dict(tag.z), tag.preise, {}, tag.anlagen)
+    heute = {k: a["periods"]["day"]["yield"] for k, a in tag.erg["plants"].items()}
+    assert tag.erg["periods"]["day"]["yield"] == vorher
+    assert heute["gross"] == round(4.0 * 0.30, 2)
+    assert heute["klein"] == round(2.0 * 0.30, 2)
+
+
 def _alle_tests():
     for name, funktion in sorted(globals().items()):
         if name.startswith("test_") and callable(funktion):

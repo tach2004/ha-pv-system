@@ -376,7 +376,10 @@ class Kostenrechner:
         veraendert = veraendert or bool(frisch)
         gemessen: dict[str, Any] = {}
         geld_gesamt: dict[str, float] = {}
-        schritt: dict[str, float] = {}
+        # Je Zeitraum die gemessenen Mengen und was in diesem Lauf bewertet
+        # wurde - daraus entsteht das Konto jeder Anlage, siehe _anlagengeld.
+        gemessen_je: dict[str, dict[str, Any]] = {}
+        dazu_je: dict[str, dict[str, float]] = {}
         for periode in PERIODS:
             mengen, neu, verankert = self._mengen(
                 periode, zaehler, jetzt, frisch, letzte_staende
@@ -390,6 +393,8 @@ class Kostenrechner:
                 umleitpreis, grundpreis, jetzt,
             )
             veraendert = veraendert or neu or neu_geld
+            gemessen_je[periode] = dict(mengen)
+            dazu_je[periode] = dazu
             # Was vor dem ersten Lauf schon aufgelaufen ist, gehört allein in
             # den Gesamtzeitraum - heute und diesen Monat ist es nicht passiert.
             if periode == PERIOD_TOTAL:
@@ -398,9 +403,6 @@ class Kostenrechner:
                 # aus der Konfiguration kommt.
                 gemessen = dict(mengen)
                 geld_gesamt = geld
-                # Die Mengen dieses einen Laufs: Aus genau ihnen entsteht der
-                # Anteil jeder Anlage - siehe _anlagengeld.
-                schritt = dazu
                 mengen = _dazu(mengen, vorher)
                 # Zwei Daten, und sie sind nicht dasselbe: Der Zeitraum beginnt
                 # mit der ältesten Inbetriebnahme - daran hängt die
@@ -414,11 +416,21 @@ class Kostenrechner:
                 mengen, geld, arbeitspreis, verguetung
             )
         # Und dasselbe je Anlage - mit den Mengen genau dieses Laufs, verteilt
-        # auf die Anlagen, die in diesem Moment liefern.
-        veraendert = self._anlagengeld(
-            anlagen, schritt, leistungen, gemessen, arbeitspreis, verguetung,
-            umleitpreis,
-        ) or veraendert
+        # auf die Anlagen, die in diesem Moment liefern. Wer gerade liefert,
+        # wird einmal entschieden und gilt für alle Zeiträume: Heute, dieser
+        # Monat und gesamt bekommen dieselbe Kilowattstunde derselben Anlage.
+        kennungen = [anlage["id"] for anlage in anlagen]
+        anteile = self._anteile_jetzt(
+            self._marken[PERIOD_TOTAL],
+            kennungen,
+            leistungen,
+            {k: _zahl(gemessen.get(f"anlage:{k}")) for k in kennungen},
+        )
+        for periode in PERIODS:
+            veraendert = self._anlagengeld(
+                periode, anlagen, dazu_je[periode], anteile, gemessen_je[periode],
+                arbeitspreis, verguetung, umleitpreis,
+            ) or veraendert
 
         # Der Gesamtzeitraum bekommt dazu die Vorgeschichte - zu den Preisen,
         # die für sie festgehalten sind.
@@ -429,16 +441,19 @@ class Kostenrechner:
         if veraendert:
             self._merken()
 
-        # Was jede Anlage heute, diesen Monat und dieses Jahr erzeugt hat.
-        # Die Zählerstände laufen ohnehin durch alle Zeiträume; hier werden
-        # sie nur abgelesen.
+        # Was jede Anlage heute, diesen Monat und dieses Jahr erzeugt und
+        # eingebracht hat: die Menge aus ihrem Zähler, das Geld aus ihrem
+        # Konto in der Marke des Zeitraums.
         je_zeitraum = {
             anlage["id"]: {
-                periode: _zahl(
-                    (zeitraeume[periode].get("_mengen") or {}).get(
-                        f"anlage:{anlage['id']}"
-                    )
-                )
+                periode: {
+                    "kwh": _zahl(
+                        gemessen_je[periode].get(f"anlage:{anlage['id']}")
+                    ),
+                    "konto": (self._marken[periode].get("anlagen") or {}).get(
+                        anlage["id"]
+                    ),
+                }
                 for periode in (PERIOD_DAY, PERIOD_MONTH, PERIOD_YEAR)
             }
             for anlage in anlagen
@@ -787,9 +802,10 @@ class Kostenrechner:
 
     def _anlagengeld(
         self,
+        periode: str,
         anlagen: list[dict[str, Any]],
         schritt: dict[str, float],
-        leistungen: dict[str, float | None],
+        anteile: dict[str, float],
         gemessen: dict[str, Any],
         preis: float | None,
         verguetung: float | None,
@@ -818,8 +834,13 @@ class Kostenrechner:
         hinkt der Ertragszähler der Leistung ein paar Sekunden hinterher, wartet
         die Buchung, statt ins Minus zu gehen. Der Ertrag einer Anlage kann
         damit nicht mehr sinken.
+
+        Das läuft für jeden Zeitraum getrennt, mit seinen eigenen Mengen: Das
+        Konto von heute beginnt um Mitternacht bei null, das des Monats am
+        Ersten. Damit ergeben die Anlagen zusammen genau den Ertrag, der für
+        den ganzen Standort in der Kachel steht - nur aufgeteilt.
         """
-        marke = self._marken.setdefault(PERIOD_TOTAL, {})
+        marke = self._marken[periode]
         kennungen = [anlage["id"] for anlage in anlagen]
         erzeugt = {
             kennung: _zahl(gemessen.get(f"anlage:{kennung}")) for kennung in kennungen
@@ -845,7 +866,6 @@ class Kostenrechner:
 
         einspeisung = _zahl(schritt.get("export")) or 0.0
         umleitung = _zahl(schritt.get("diverted")) or 0.0
-        anteile = self._anteile_jetzt(marke, kennungen, leistungen, erzeugt)
 
         veraendert = False
         for kennung in kennungen:
@@ -1298,7 +1318,7 @@ class Kostenrechner:
         davor: dict[str, Any] | None = None,
         vorher_umgeleitet: float = 0.0,
         konten: dict[str, dict[str, float]] | None = None,
-        je_zeitraum: dict[str, dict[str, float | None]] | None = None,
+        je_zeitraum: dict[str, dict[str, dict[str, Any]]] | None = None,
     ) -> dict[str, Any]:
         """Ertrag und Amortisation je Anlage, seit ihrer Inbetriebnahme.
 
@@ -1383,14 +1403,23 @@ class Kostenrechner:
             investition = _zahl(anlage.get("investment"))
             beginn = _anlagenbeginn(anlage, gesamt.get("start"))
             zeitraum = je_zeitraum.get(kennung) or {}
+            perioden = {
+                periode: _anlagenzeitraum(zeitraum.get(periode) or {}, preis, satz)
+                for periode in (PERIOD_DAY, PERIOD_MONTH, PERIOD_YEAR)
+            }
             ergebnis[kennung] = {
                 "yield_kwh": round(erzeugt, 2),
                 # Was die Anlage heute, diesen Monat, dieses Jahr erzeugt hat -
                 # am selben Zähler wie oben, also hinter dem Wechselrichter,
                 # sobald einer mit Ertragszähler eingetragen ist.
-                "yield_day_kwh": _gerundet(zeitraum.get(PERIOD_DAY), 2),
-                "yield_month_kwh": _gerundet(zeitraum.get(PERIOD_MONTH), 2),
-                "yield_year_kwh": _gerundet(zeitraum.get(PERIOD_YEAR), 2),
+                "yield_day_kwh": perioden[PERIOD_DAY]["yield_kwh"],
+                "yield_month_kwh": perioden[PERIOD_MONTH]["yield_kwh"],
+                "yield_year_kwh": perioden[PERIOD_YEAR]["yield_kwh"],
+                # Und was sie in diesen Zeiträumen eingebracht hat - Ersparnis
+                # plus Vergütung, der Überschuss mit dem Wert dessen, was er
+                # ersetzt. Zusammen ergeben die Anlagen den Ertrag des
+                # Standorts im selben Zeitraum.
+                "periods": perioden,
                 "export_kwh": round(eingespeist, 2),
                 "own_kwh": round(eigen, 2),
                 "savings": ersparnis,
@@ -1515,6 +1544,38 @@ def _anlagenbeginn(anlage: dict[str, Any], vorgabe: Any) -> Any:
     return _als_datum(anlage.get("commissioned")) or vorgabe
 
 
+def _anlagenzeitraum(
+    zeitraum: dict[str, Any],
+    preis: float | None,
+    satz: float | None,
+) -> dict[str, float | None]:
+    """Menge und Geld einer Anlage in einem Zeitraum, aus ihrem Konto.
+
+    Ohne Preis steht kein Betrag da und keine Null: Ein Ertrag von 0,00 Euro
+    sähe aus wie eine Anlage, die nichts bringt.
+    """
+    konto = {**_leeres_konto(), **(zeitraum.get("konto") or {})}
+    ersparnis = (
+        round(konto["savings"], 2)
+        if preis is not None or konto["savings"]
+        else None
+    )
+    erloes = (
+        round(konto["revenue"], 2)
+        if satz is not None or konto["revenue"]
+        else None
+    )
+    ertrag = None
+    if ersparnis is not None or erloes is not None:
+        ertrag = round((ersparnis or 0.0) + (erloes or 0.0), 2)
+    return {
+        "yield_kwh": _gerundet(zeitraum.get("kwh"), 2),
+        "savings": ersparnis,
+        "revenue": erloes,
+        "yield": ertrag,
+    }
+
+
 def _gerundet(wert: Any, stellen: int) -> float | None:
     zahl = _zahl(wert)
     return None if zahl is None else round(zahl, stellen)
@@ -1546,6 +1607,8 @@ def _neue_marke(start: str) -> dict[str, Any]:
         "geld": _leeres_geld(),
         "bewertet": {},
         "fassung": FASSUNG,
+        # Die Konten der Anlagen beginnen mit dem Zeitraum bei null.
+        "anlagen": {},
     }
 
 
