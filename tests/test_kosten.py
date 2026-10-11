@@ -1940,6 +1940,52 @@ def test_ohne_preis_wird_die_ersparnis_nicht_neu_berechnet():
     assert not r.ersparnis_neu_bewerten()
 
 
+def test_ein_beim_update_schweigender_zaehler_verliert_kein_geld():
+    """Der Fall aus 2.1.0: Nach Update und Neustart meldet der Ertragszähler
+    noch nichts. Sein Monat galt dann als bewertet - mit null Euro.
+    """
+    r = _rechner()
+    preise = {"price": 0.338, "diverted": 0.112}
+    r.rechnen({"import": 100.0, "own": 50.0, "diverted": 5.0}, preise, {})
+    r.rechnen({"import": 101.0, "own": 60.0, "diverted": 8.0}, preise, {})
+    # So sah der Tag bis 2.0.1 aus: Anker, kein Geld.
+    for periode in ("day", "month", "year"):
+        marke = r._rechner._marken[periode]
+        for feld in ("geld", "bewertet", "bewertet_bis", "uebertrag", "fassung"):
+            marke.pop(feld, None)
+    r.rechnen({"import": 101.0, "own": None, "diverted": None}, preise, {})
+    tag = r.rechnen(
+        {"import": 101.0, "own": 60.0, "diverted": 8.0}, preise, {}
+    )["periods"]["day"]
+    assert tag["savings"] == round(10 * 0.338 + 3 * (0.112 - 0.338), 2)
+    assert tag["savings_diverted"] == round(3 * 0.112, 2)
+
+
+def test_ein_von_2_1_0_verlorener_monat_kommt_zurueck():
+    """Marken ohne Fassung werden einmal neu übernommen - Menge mal Preis."""
+    r = _rechner()
+    preise = {"price": 0.338, "diverted": 0.112}
+    r.rechnen({"import": 100.0, "own": 50.0, "diverted": 5.0}, preise, {})
+    r.rechnen({"import": 101.0, "own": 60.0, "diverted": 8.0}, preise, {})
+    # So hinterließ 2.1.0 die Marken: Menge bewertet, Ersparnis null.
+    for periode in ("day", "month", "year"):
+        marke = r._rechner._marken[periode]
+        marke.pop("fassung")
+        marke["geld"]["savings"] = marke["geld"]["divert"] = 0.0
+        marke["geld"]["divert_value"] = 0.0
+    gesamt_vorher = r._rechner._marken["total"]["geld"]["savings"]
+    zeitraeume = r.rechnen(
+        {"import": 101.0, "own": 60.0, "diverted": 8.0}, preise, {}
+    )["periods"]
+    for periode in ("day", "month", "year"):
+        assert zeitraeume[periode]["savings"] == round(
+            10 * 0.338 + 3 * (0.112 - 0.338), 2
+        ), periode
+        assert zeitraeume[periode]["cost"] == round(1 * 0.338, 2), periode
+    # Der Gesamtzeitraum war nicht betroffen und bleibt, wie er ist.
+    assert r._rechner._marken["total"]["geld"]["savings"] == gesamt_vorher
+
+
 def _alle_tests():
     for name, funktion in sorted(globals().items()):
         if name.startswith("test_") and callable(funktion):
