@@ -139,6 +139,13 @@ SPRUNG_TOLERANZ_KWH = 1.0
 # Prozent unter den Tisch - 0,000338 Euro sind gerundet 0,0003.
 STELLEN = 10
 
+# Die Fassung einer Periodenmarke. Marken aus 2.1.0 tragen sie nicht: Deren
+# Übernahme beim Update hat einen Zähler, der im ersten Lauf nach dem
+# Neustart noch schwieg, als "schon bewertet" mit null Euro angelegt - Tag,
+# Monat und Jahr verloren so ihre ganze Ersparnis. Sie werden deshalb einmal
+# neu übernommen, siehe _bewerten.
+FASSUNG = 2
+
 # Wie weit ein Zählerstand zurückfallen darf, ohne als Zählertausch zu gelten.
 # Null wäre zu streng: Der Eigenverbrauch ist keine Messung, sondern die
 # Differenz zweier Zähler, die zu verschiedenen Zeiten melden. Meldet der
@@ -605,8 +612,14 @@ class Kostenrechner:
         )
 
         geld = marke.get("geld")
-        if not isinstance(geld, dict) or (
-            periode == PERIOD_TOTAL and not isinstance(marke.get("bewertet"), dict)
+        if (
+            not isinstance(geld, dict)
+            or (periode == PERIOD_TOTAL and not isinstance(marke.get("bewertet"), dict))
+            # Tag, Monat und Jahr aus 2.1.0: einmal neu übernehmen, wie beim
+            # Update von 2.0.1 - Menge mal Preis von jetzt, also genau das,
+            # was 2.0.1 gezeigt hätte. Der Gesamtzeitraum war davon nicht
+            # betroffen; er übernimmt aus den rohen Ständen.
+            or (periode != PERIOD_TOTAL and marke.get("fassung") != FASSUNG)
         ):
             self._uebernehmen(
                 periode, marke, stand, neu_verankert, preis, verguetung,
@@ -635,11 +648,19 @@ class Kostenrechner:
             schon = _zahl(bewertet.get(name))
             # Ein neuer Zähler, ein getauschter, ein frisch verankerter:
             # Er bringt keine Rechnung mit, nur einen neuen Ausgangspunkt.
-            if schon is None or name in neu_verankert:
+            if name in neu_verankert:
                 if schon != menge:
                     bewertet[name] = menge
                     veraendert = True
                 continue
+            # Zum ersten Mal bewertbar, aber nicht frisch verankert: Gemessen
+            # wurde schon, nur bewertet noch nicht - typisch für einen Zähler,
+            # der im ersten Lauf nach Neustart und Update noch schwieg. Dann
+            # zählt seine Menge jetzt, zum Preis von jetzt, wie bei der
+            # Übernahme aller anderen. Bis 2.1.0 galt sie hier als bewertet,
+            # und ihr Geld war verloren.
+            if schon is None:
+                schon = 0.0
             if menge > schon:
                 dazu[name] = menge - schon
                 bewertet[name] = menge
@@ -719,12 +740,14 @@ class Kostenrechner:
             marke["geld"] = geld
             marke["bewertet"] = {k: v for k, v in stand.items() if v is not None}
             marke["bewertet_bis"] = zeit
+            marke["fassung"] = FASSUNG
             return
 
         # Der Gesamtzeitraum mit seinem alten Geldspeicher. Fehlt ihm der
         # Grundpreis, stammt er aus einer Fassung, die ihn bei jedem Lauf über
         # die ganze Messzeit hochrechnete: Er beginnt bei genau diesem Betrag.
         hatte_grundpreis = "base" in geld
+        marke["fassung"] = FASSUNG
         for feld, wert in _leeres_geld().items():
             geld.setdefault(feld, wert)
         letzte = marke.get("letzte") or {}
@@ -1517,7 +1540,13 @@ def _leeres_geld() -> dict[str, float]:
 
 def _neue_marke(start: str) -> dict[str, Any]:
     """Eine Periodenmarke, die bei null beginnt - mit Geld, das bei null beginnt."""
-    return {"start": start, "werte": {}, "geld": _leeres_geld(), "bewertet": {}}
+    return {
+        "start": start,
+        "werte": {},
+        "geld": _leeres_geld(),
+        "bewertet": {},
+        "fassung": FASSUNG,
+    }
 
 
 def _satz(anlage: dict[str, Any], verguetung: float | None) -> float | None:
