@@ -84,10 +84,12 @@ und einbringt.
   messen kann, wie viel davon aus PV und Batterie kam, trägt auch das ein: Der
   Rest ist dann ganz normaler Netzbezug. Siehe unten.
 * **Preise dürfen sich ändern.** Strom kostete 2023 anderes als heute, und eine
-  Anlage rechnet sich über zwanzig Jahre. Der Gesamtzeitraum führt deshalb
-  einen Geldspeicher: Bewertet wird immer nur, was seit der letzten Rechnung
-  dazugekommen ist, mit dem Preis, der gerade gilt. Eine Preiserhöhung wirkt ab
-  dem Tag, an dem du sie einträgst, und schreibt die Vergangenheit nicht um.
+  Anlage rechnet sich über zwanzig Jahre. Jeder Zeitraum – Tag, Monat, Jahr und
+  gesamt – führt deshalb sein eigenes Geld: Bewertet wird immer nur, was seit
+  der letzten Rechnung dazugekommen ist, mit dem Preis, der gerade gilt. Ein
+  neuer Preis zählt ab dem Moment, in dem du ihn einträgst, und rührt nichts
+  an, was davor lag – auch nicht die Vorgeschichte vor der Einrichtung. Mit
+  einem dynamischen Tarif bekommt so jede Kilowattstunde ihren Stundenpreis.
 * **Kosten je Anlage**: Investition, Inbetriebnahmedatum und – weil zwei
   Anlagen aus zwei Jahren regelmäßig zwei Sätze haben – eine eigene
   Einspeisevergütung. Jede Anlage bekommt ihre eigene Amortisation; die des
@@ -220,19 +222,22 @@ nur zufällig auf deren Höhe zu stehen.
 
 Im **Batteriekasten** sagen zwei Farben, ob alles in Ordnung ist. Der
 Füllstandsbalken wechselt wie die Balken in Home Assistant: unter 50 % orange,
-unter 20 % rot. Die Zellentemperatur steht blau unter 5 °C, grün bis 30 °C,
-orange bis 40 °C und darüber rot – und an **beiden Enden blinkt sie**, weil
+unter 20 % rot. Die Zellentemperatur steht – so die Vorgabe – blau unter
+5 °C, grün bis 30 °C, orange bis 40 °C und darüber rot – und an **beiden Enden blinkt sie**, weil
 eine Lithiumzelle dort weder geladen werden darf noch lange gesund bleibt. Wer
 Animationen abgeschaltet hat, bekommt statt des Blinkens einen Schimmer um die
 Zahl.
 
 Im **Wechselrichterkasten** steht die Temperatur unten vor der Phasenmarke, in
-denselben Farben, aber mit anderen Stufen: grün bis 50 °C, orange bis 65 °C,
-darüber rot und blinkend. Ein Wechselrichter verträgt deutlich mehr als eine
-Zelle; vierzig Grad am Kühlkörper sind an einem Sommernachmittag gewöhnlich.
-Ab etwa fünfundsechzig drosseln viele Geräte – wo genau, steht im Datenblatt,
-die Stufen hier sind bewusst vorsichtig. Kälte ist für ihn kein Thema, unten
-gibt es keine Warnung.
+denselben Farben und mit denselben Stufen wie beim Akku – auch mit der
+Kältewarnung.
+
+**Die Stufen stellst du je Gerät ein:** *Einstellungen → Geräte & Dienste → PV
+System → Konfigurieren → Anlagen → (Anlage) → Batterie* bzw. *Wechselrichter*,
+drei Felder unter dem Temperatursensor: **Kälteschwelle**, **warm ab** und
+**heiß ab**, in °C. Ohne Angabe gelten 5, 30 und 40 °C. Die drei müssen
+aufsteigen, sonst weist der Dialog darauf hin. Ein Wechselrichter verträgt meist
+mehr als eine Zelle – wo er drosselt, steht im Datenblatt.
 
 Entschieden wird bei beiden an der **angezeigten** ganzen Zahl: 29,6 °C
 erscheint als „30 °C" und ist dann auch orange, nicht grün.
@@ -433,8 +438,19 @@ bei Einrichtung + seither gemessen* entsteht und die Amortisation ihn bei jedem
 Lauf daraus neu rechnet – ein neuer Sensor warf sie sonst auf den Stand bei der
 Einrichtung zurück. Übernommen wird der **letzte Stand vor dem Tausch**, nicht
 der neue: Stand kurz die falsche Entität im Feld, wäre deren Wert sonst als
-Ertrag verbucht worden. Tag, Monat und Jahr bekommen keinen Übertrag – sie
-beginnen beim nächsten Wechsel ohnehin von vorn.
+Ertrag verbucht worden. Seit 2.1.0 gilt das auch für Tag, Monat und Jahr:
+Ihr Geld wird mitgeschrieben und bleibt nach einem Tausch stehen, also müssen
+auch die Kilowattstunden dazu stehen bleiben – sonst stünden bis Jahresende
+13 € neben 0 kWh.
+
+**Gebucht wird nur nach oben.** Der Eigenverbrauch wackelt, solange
+eingespeist wird: hoch, sobald der Ertragszähler meldet, wieder herunter mit
+jeder Sekunde Einspeisung. Bis 2.0.1 buchte der Gesamtzeitraum jeden Ausschlag
+nach oben und übersah jeden nach unten – in einer Stunde mit 5 kW Erzeugung
+und 0,5 kW Eigenverbrauch kamen so 1,46 € Ersparnis herein statt 0,15 €. Tag,
+Monat und Jahr waren davon nicht betroffen. Seit 2.1.0 wartet jede Buchung, bis
+der Stand das schon Bewertete wieder überholt hat. Wie du einen zu hohen
+Altstand einmal neu rechnen lässt, steht unter *Kostenzähler leeren*.
 
 Der anteilige Grundpreis steht in der Karte als eigene Zeile. Ohne sie stünde
 an einem Tag ohne Netzbezug ein Betrag, den niemand erklären kann.
@@ -509,13 +525,31 @@ Ertrag aber alles seit der Inbetriebnahme, fällt die Bilanz zu schön aus.
 
 **Preisänderungen verändern die Vergangenheit nicht.** Das ist der Kern der
 ganzen Rechnung: Bei jedem Lauf wird nur die *Differenz* seit dem letzten Lauf
-bewertet, mit dem Preis, der in diesem Augenblick gilt, und auf einen
-Geldspeicher addiert. Wer 2028 einen neuen Tarif einträgt, ändert damit nicht,
-was 2026 gekostet hat.
+bewertet, mit dem Preis, der in diesem Augenblick gilt, und auf das Geld des
+Zeitraums addiert. Wer 2028 einen neuen Tarif einträgt, ändert damit nicht,
+was 2026 gekostet hat – und auch nicht, was heute Vormittag gekostet hat.
 
-    bis zum ersten Lauf   → Durchschnittspreis davor
+    bis zum ersten Lauf   → Durchschnittspreis davor (leer: der Preis vom
+                            ersten Lauf, festgehalten)
     erster Lauf … heute   → jede Differenz zu ihrem damaligen Preis
     ab der Preisänderung  → jede Differenz zum neuen Preis
+
+Das gilt für **jeden Zeitraum und jeden Preis**: Arbeitspreis,
+Einspeisevergütung des Standorts und jeder Anlage, Grundpreis und den Wert des
+Überschussverbrauchers. Bis 2.0.1 rechneten Tag, Monat und Jahr bei jedem Lauf
+*Menge × heutiger Preis* – ein neuer Tarif um 14 Uhr bewertete den ganzen
+Vormittag mit, und der Monat und das Jahr gleich mit. Ebenso die
+Vorgeschichte, wenn kein Durchschnittspreis davor eingetragen war: Sie wanderte
+mit jedem neuen Arbeitspreis, mit einem dynamischen Tarif sogar stündlich.
+
+Für die Vorgeschichte gilt jetzt ohne eigenen Durchschnittspreis der Preis, den
+die Integration beim ersten Lauf kannte – beim Update auf 2.1.0 also genau der,
+mit dem sie bis dahin in der Karte stand. Er bleibt, auch wenn das Gemessene
+geleert wird. Wer ihn ändern will, trägt den **Durchschnittspreis davor** ein –
+der gewinnt immer – oder leert im Dialog die „davor"-Angaben: Mit ihnen gehen
+die festgehaltenen Preise, und beim neuen Eintragen gelten die von dann. Mit
+einem dynamischen Tarif lohnt sich der Durchschnittspreis davor besonders: Der
+erste Lauf trifft sonst irgendeine Stunde.
 
 **Das gilt seit Fassung 1.1.9 auch für den Grundpreis.** Er lief vorher
 außerhalb des Speichers: Bei jedem Lauf wurde er über die ganze Messzeit neu
@@ -805,9 +839,10 @@ Es ist bewusst **eine** Zahl und kein Feld je Anlage: Der Verbraucher hängt am
 Hausanschluss und weiß nicht, aus welcher Anlage sein Strom kam. Drei Felder
 wären drei Schätzungen statt einer.
 
-Bewertet wird mit dem **heutigen** Wert des Ersetzten – einen „Gaspreis davor"
-gibt es nicht. Wer das genauer braucht, trägt beim Durchschnittspreis davor
-entsprechend nach.
+Bewertet wird mit dem Wert des Ersetzten, den die Integration beim ersten Lauf
+kannte – festgehalten, ein späterer Gaspreis ändert ihn nicht. Einen eigenen
+„Gaspreis davor" gibt es nicht. Wer das genauer braucht, trägt beim
+Durchschnittspreis davor entsprechend nach.
 
 Bei mehreren Anlagen wird der umgeleitete Anteil nach der Erzeugung aufgeteilt –
 wie die Einspeisung auch, und mit derselben Einschränkung: Es stimmt, solange
@@ -845,7 +880,8 @@ Sonst nie.
 **Der bequemere Weg: Konfigurieren → Kostenzähler leeren.** Dort steht vorher,
 was gerade in der Bilanz steht, und ohne Haken passiert nichts.
 
-Dort gibt es **zwei Haken**, weil der Gesamtzeitraum zwei Quellen hat:
+Dort gibt es **zwei Haken**, weil der Gesamtzeitraum zwei Quellen hat, und
+einen dritten für einen Fehler älterer Fassungen:
 
 1. **Gemessen seit dem ersten Lauf** – liegt im Speicher der Integration. Das
    leert der Dienst und der erste Haken, sofort.
@@ -857,9 +893,21 @@ Dort gibt es **zwei Haken**, weil der Gesamtzeitraum zwei Quellen hat:
    diese Felder aus der Konfiguration, und er wirkt erst mit *Speichern und
    schließen*.
 
+3. **Gemessene Ersparnis neu berechnen** – leert nichts. Bis 2.0.1 wurde die
+   Ersparnis seit dem ersten Lauf zu hoch gebucht, sobald eingespeist wurde
+   (siehe *Gebucht wird nur nach oben*). Über dem Haken steht jetzt auch,
+   wie viele Kilowattstunden selbst genutzt wurden: Liegt die Ersparnis
+   deutlich über *selbst genutzt × Arbeitspreis*, ist das der Grund. Der Haken
+   rechnet sie einmal neu – selbst genutzte kWh × heutiger Arbeitspreis, der
+   Überschussanteil mit seinem eigenen Wert – und wirkt sofort. Das stimmt,
+   solange sich dein Arbeitspreis seit dem ersten Lauf nicht geändert hat.
+   Bezug, Einspeisung, Tag, Monat, Jahr und die „davor"-Angaben bleiben, wie
+   sie sind. Von selbst passiert das nie.
+
 Meistens will man den zweiten **nicht**: Diese Zahlen sind die echte
 Vorgeschichte, und ohne sie beginnt die Amortisation bei null. Sinnvoll ist er,
-wenn man sich vertippt hat oder ganz von vorn anfangen will. Investition und
+wenn man sich vertippt hat oder ganz von vorn anfangen will. Mit den Angaben
+gehen die Preise, zu denen die Vorgeschichte bewertet wird. Investition und
 Inbetriebnahme bleiben in jedem Fall stehen – das sind Tatsachen über die
 Anlage, keine Zählerstände.
 
@@ -883,7 +931,7 @@ Fünf Felder holen das nach – drei bei der Anlage, zwei am Standort:
 | **Ertrag davor** | Anlage | Was der Wechselrichter bis dahin erzeugt hat |
 | **Einspeisung davor** | Anlage | Was davon ins Netz ging – wird mit der Vergütung genau dieser Anlage verrechnet |
 | **Bezug davor** | Standort | Was der Netzzähler bis dahin gezogen hat; einer Anlage lässt sich das nicht zuordnen |
-| **Durchschnittspreis davor** | Standort | Was die Kilowattstunde damals im Schnitt kostete. Leer: Es gilt der heutige Preis |
+| **Durchschnittspreis davor** | Standort | Was die Kilowattstunde damals im Schnitt kostete. Leer: Es gilt der Arbeitspreis vom ersten Lauf, festgehalten |
 
 Für die Zeit vor dem ersten Lauf gibt es keine Differenzen, nur Summen – dafür
 genügt ein Durchschnitt. Eine Zahl, die man kennt, ist besser als eine
@@ -1054,7 +1102,7 @@ Optionsdialog kennt keine wiederholbaren Blöcke – das ist der Preis dafür.
 | **Grundpreis: Entität statt fester Zahl** | Entität | wie oben. Wird mit demselben Zeitraum gedeutet | |
 | **Währung** | Text | Einheit der Geldsensoren | EUR |
 | **Stand des Bezugszählers bei Einrichtung** | kWh | Siehe unten | Gesamtzeitraum beginnt heute |
-| **Durchschnittspreis davor** | Geld/kWh | Bewertet genau diese Zeit davor | Heutiger Preis |
+| **Durchschnittspreis davor** | Geld/kWh | Bewertet genau diese Zeit davor | Arbeitspreis vom ersten Lauf, festgehalten |
 
 ### Anlage
 
@@ -1095,7 +1143,8 @@ Optionsdialog kennt keine wiederholbaren Blöcke – das ist der Preis dafür.
 | **Leistung** | W | Direkte Batterieleistung. **Plus heißt laden** – welches Vorzeichen dein Sensor dafür nutzt, sagst du daneben | Aus Spannung × Strom |
 | **Vorzeichen** | Auswahl | Wird nicht geraten | positiv = laden |
 | **Mindestladung** | % | Untergrenze für die Restlaufzeit – eine Batterie wird nicht auf null entladen | 10 % |
-| **Spannung**, **Strom**, **Temperatur**, **Zyklen**, **Gesundheit** | | Nur Anzeige. Die Temperatur färbt sich: bis 30 °C grün, bis 40 °C orange, darüber rot | nichts |
+| **Spannung**, **Strom**, **Temperatur**, **Zyklen**, **Gesundheit** | | Nur Anzeige. Die Temperatur färbt sich nach den drei Schwellen darunter | nichts |
+| **Kälteschwelle**, **warm ab**, **heiß ab** | °C | Wann die Temperatur blau blinkt, orange wird und rot blinkt. Müssen aufsteigen | 5 / 30 / 40 °C |
 
 **Wechselrichter**
 
@@ -1108,6 +1157,7 @@ Optionsdialog kennt keine wiederholbaren Blöcke – das ist der Preis dafür.
 | **Ertragszähler** | kWh | Grundlage für Ertrag und Amortisation dieser Anlage | Der Modulertrag wird genommen |
 | **Hybrid** | an/aus | Sagt: Er kann die Batterie aus dem Netz laden. Was davon wirklich gespeichert wird, zählt dann **nicht** als Hausverbrauch – siehe unten | aus |
 | **AC-Spannung/-Strom**, **DC-Spannung**, **Frequenz**, **Temperatur**, **Betriebsart** | | Nur Anzeige. Die DC-Spannung dient ohne Laderegler als Strangspannung | nichts |
+| **Kälteschwelle**, **warm ab**, **heiß ab** | °C | Wie bei der Batterie: wann die Temperatur blau blinkt, orange wird und rot blinkt | 5 / 30 / 40 °C |
 
 **Kosten dieser Anlage**
 

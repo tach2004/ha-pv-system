@@ -255,6 +255,10 @@ FELDER: dict[str, T] = {
         "Ja, auch die „davor“-Angaben aus der Konfiguration nehmen",
         "Yes, also remove the “before” figures from the configuration",
     ),
+    "reset_savings": (
+        "Ja, die gemessene Ersparnis einmal neu berechnen",
+        "Yes, recalculate the measured savings once",
+    ),
     "system_voltage": ("Systemspannung", "System voltage"),
     "max_current": ("Maximaler Ladestrom", "Maximum charge current"),
     "input_voltage_entity": ("Eingangsspannung (PV)", "Input voltage (PV)"),
@@ -264,6 +268,9 @@ FELDER: dict[str, T] = {
     "yield_entity": ("Ertragszähler", "Yield meter"),
     "state_entity": ("Betriebszustand", "Operating state"),
     "temperature_entity": ("Temperatur", "Temperature"),
+    "temp_cold": ("Kälteschwelle", "Cold threshold"),
+    "temp_warm": ("Warm ab", "Warm from"),
+    "temp_hot": ("Heiß ab", "Hot from"),
     "capacity_kwh": ("Kapazität", "Capacity"),
     "nominal_voltage": ("Nennspannung", "Nominal voltage"),
     "chemistry": ("Zellchemie", "Cell chemistry"),
@@ -393,6 +400,25 @@ FELDER: dict[str, T] = {
 }
 
 HINWEISE: dict[str, T] = {
+    "temp_cold": (
+        "Darunter steht die Temperatur in der Karte blau und blinkt. Eine "
+        "Lithiumzelle darf unter etwa 5 °C nicht mehr geladen werden. Leer: "
+        "5 °C.",
+        "Below this the temperature on the card turns blue and blinks. A "
+        "lithium cell must not be charged below about 5 °C. Empty: 5 °C.",
+    ),
+    "temp_warm": (
+        "Ab hier orange - noch kein Problem, aber einen Blick wert. Leer: "
+        "30 °C.",
+        "From here orange - not a problem yet, but worth a look. Empty: "
+        "30 °C.",
+    ),
+    "temp_hot": (
+        "Ab hier rot und blinkend. Bei einem Wechselrichter steht im "
+        "Datenblatt, ab wann er drosselt. Leer: 40 °C.",
+        "From here red and blinking. For an inverter the data sheet says "
+        "when it starts to throttle. Empty: 40 °C.",
+    ),
     "count": (
         "So viele Module hängen an dieser Anlage.",
         "How many modules belong to this plant.",
@@ -1373,12 +1399,14 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         "prior_price": (
             "Was die Kilowattstunde im Schnitt gekostet hat, bevor die "
             "Integration zu zählen begann - Strom war vor drei Jahren nicht "
-            "so teuer wie heute. Gilt nur für die Zeit davor. Leer: Es wird "
-            "mit dem heutigen Preis gerechnet.",
+            "so teuer wie heute. Gilt nur für die Zeit davor. Leer: Es gilt "
+            "der Arbeitspreis vom ersten Lauf der Integration - einmal "
+            "festgehalten, ein späterer Tarif ändert ihn nicht.",
             "What one kilowatt hour cost on average before the integration "
             "started counting - electricity three years ago was not priced "
-            "like today. Applies to that earlier time only. Empty: today's "
-            "price is used.",
+            "like today. Applies to that earlier time only. Empty: the energy "
+            "price from the integration's first run is used - recorded once, "
+            "a later tariff does not change it.",
         ),
         "price_entity": (
             "Eine Entität, die den Arbeitspreis liefert - für dynamische "
@@ -1473,13 +1501,15 @@ LADEREGLERFELDER = [
 BATTERIEFELDER = [
     "enabled", "name", "manufacturer", "model", "capacity_kwh", "nominal_voltage",
     "chemistry", "min_soc", "power_sign", "soc_entity", "power_entity",
-    "voltage_entity", "current_entity", "temperature_entity", "health_entity",
+    "voltage_entity", "current_entity", "temperature_entity",
+    "temp_cold", "temp_warm", "temp_hot", "health_entity",
     "cycles_entity", "charged_energy_entity", "discharged_energy_entity",
 ]
 WRFELDER = [
     "enabled", "name", "manufacturer", "model", "rated_power_w", "phase", "hybrid",
     "power_entity", "ac_voltage_entity", "ac_current_entity", "dc_voltage_entity",
-    "frequency_entity", "temperature_entity", "energy_entity", "mode_entity",
+    "frequency_entity", "temperature_entity", "temp_cold", "temp_warm", "temp_hot",
+    "energy_entity", "mode_entity",
 ]
 NETZFELDER = [
     "name", "meter_model", "phases", "power_sign", "power_entity",
@@ -1883,10 +1913,31 @@ def baum(sprache) -> dict:
                             "Vorgeschichte, und ohne sie beginnt die "
                             "Amortisation bei null. Sinnvoll ist er, wenn du "
                             "dich vertippt hast oder von vorn anfangen "
-                            "willst.\n\nInvestition und Inbetriebnahme "
+                            "willst. Mit den Angaben gehen auch die Preise, "
+                            "zu denen die Vorgeschichte bewertet wird; "
+                            "trägst du sie neu ein, gelten die Preise von "
+                            "dann.\n\nInvestition und Inbetriebnahme "
                             "bleiben in jedem Fall stehen - das sind "
                             "Tatsachen über die Anlage, keine Zählerstände. "
-                            "Rückgängig machen kann man beides nicht.",
+                            "Rückgängig machen kann man beides nicht."
+                            "\n\n---\n\n**3. Gemessene Ersparnis neu "
+                            "berechnen**\n\nBis 2.0.1 wurde die Ersparnis "
+                            "seit dem ersten Lauf zu hoch gebucht, sobald "
+                            "eingespeist wurde: Der Eigenverbrauch wackelt, "
+                            "wenn Ertrags- und Einspeisezähler zu "
+                            "verschiedenen Zeiten melden, und jeder Ausschlag "
+                            "nach oben zählte als Ersparnis. Liegt die "
+                            "Ersparnis oben deutlich über „selbst genutzt × "
+                            "Arbeitspreis“, ist das der Grund.\n\nDer "
+                            "dritte Haken rechnet sie einmal neu: selbst "
+                            "genutzte kWh × heutiger Arbeitspreis, der "
+                            "Überschussanteil mit seinem eigenen Wert. Das "
+                            "stimmt, solange sich dein Arbeitspreis seit "
+                            "dem ersten Lauf nicht geändert hat. Bezug, "
+                            "Einspeisung, Tag, Monat, Jahr und die "
+                            "„davor“-Angaben bleiben, wie sie sind. Er wirkt "
+                            "sofort und nur, wenn der erste Haken nicht "
+                            "gesetzt ist.",
                             "The way out when the amounts no longer add up - "
                             "typically after a meter swap, or when the wrong "
                             "entity briefly sat in the import meter field. "
@@ -1912,12 +1963,34 @@ def baum(sprache) -> dict:
                             "it: these numbers are your real history, and "
                             "without them the payback starts at zero. It "
                             "helps if you mistyped or want to start "
-                            "over.\n\nInvestment and commissioning stay "
+                            "over. The prices at which the history is valued "
+                            "go with the figures; if you enter them again, "
+                            "the prices of that moment apply.\n\nInvestment "
+                            "and commissioning stay "
                             "either way - those are facts about the system, "
-                            "not meter readings. Neither can be undone.",
+                            "not meter readings. Neither can be undone."
+                            "\n\n---\n\n**3. Recalculate the measured "
+                            "savings**\n\nUp to 2.0.1 the savings since "
+                            "the first run were booked too high whenever "
+                            "power was exported: own consumption wobbles when "
+                            "the yield meter and the export meter report at "
+                            "different times, and every upward swing counted "
+                            "as savings. If the savings above are clearly "
+                            "higher than \u201cself-consumed \u00d7 energy "
+                            "price\u201d, this is why.\n\nThe third box "
+                            "recalculates them once: self-consumed kWh "
+                            "\u00d7 today's energy price, the surplus share "
+                            "at its own value. That is right as long as your "
+                            "energy price has not changed since the first "
+                            "run. Import, export, day, month, year and the "
+                            "\u201cbefore\u201d figures stay as they are. It "
+                            "takes effect immediately and only if the first "
+                            "box is not ticked.",
                         )
                     ),
-                    "data": _felder(["reset_confirm", "reset_prior"], s),
+                    "data": _felder(
+                        ["reset_confirm", "reset_prior", "reset_savings"], s
+                    ),
                 },
                 "display": {
                     "title": s(
@@ -1926,7 +1999,19 @@ def baum(sprache) -> dict:
                     "data": _felder(ANZEIGEFELDER, s),
                     "data_description": _hinweise(ANZEIGEFELDER, s, "display"),
                 },
-            }
+            },
+            "error": {
+                "temperature_order": s(
+                    (
+                        "Die Temperaturschwellen müssen aufsteigen: "
+                        "Kälteschwelle unter „Warm ab“, „Warm ab“ unter „Heiß "
+                        "ab“.",
+                        "The temperature thresholds must rise: cold threshold "
+                        "below \u201cwarm from\u201d, \u201cwarm from\u201d "
+                        "below \u201chot from\u201d.",
+                    )
+                ),
+            },
         },
         "selector": {
             name: {"options": {wert: s(text) for wert, text in werte.items()}}

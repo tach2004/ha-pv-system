@@ -248,6 +248,9 @@
     }
   },
   "options": {
+    "error": {
+      "temperature_order": "Die Temperaturschwellen müssen aufsteigen: Kälteschwelle unter „Warm ab“, „Warm ab“ unter „Heiß ab“."
+    },
     "step": {
       "battery": {
         "data": {
@@ -267,6 +270,9 @@
           "power_entity": "Batterieleistung (+/−)",
           "power_sign": "Vorzeichen der Leistung",
           "soc_entity": "Ladestand",
+          "temp_cold": "Kälteschwelle",
+          "temp_hot": "Heiß ab",
+          "temp_warm": "Warm ab",
           "temperature_entity": "Zelltemperatur",
           "voltage_entity": "Batteriespannung"
         },
@@ -287,6 +293,9 @@
           "power_entity": "Lade- und Entladeleistung. Fehlt sie, wird Spannung × Strom gerechnet.",
           "power_sign": "Das hier ist die direkte Batterieleistung. Welches Vorzeichen Laden bedeutet, legst du selbst fest: „+ = laden“ ist der Normalfall, manche BMS zählen umgekehrt. Falsch gewählt zeigt die Karte Laden und Entladen vertauscht.",
           "soc_entity": "Der Ladestand in Prozent, meist vom BMS. Ohne ihn bleiben Inhalt und Restlaufzeit leer.",
+          "temp_cold": "Darunter steht die Temperatur in der Karte blau und blinkt. Eine Lithiumzelle darf unter etwa 5 °C nicht mehr geladen werden. Leer: 5 °C.",
+          "temp_hot": "Ab hier rot und blinkend. Bei einem Wechselrichter steht im Datenblatt, ab wann er drosselt. Leer: 40 °C.",
+          "temp_warm": "Ab hier orange - noch kein Problem, aber einen Blick wert. Leer: 30 °C.",
           "temperature_entity": "Zelltemperatur aus dem BMS.",
           "voltage_entity": "Die Klemmenspannung der Batterie (z. B. 51,8 V bei einem 48-V-System)."
         },
@@ -352,7 +361,7 @@
           "price_entity": "Eine Entität, die den Arbeitspreis liefert - für dynamische Tarife. Sie hat Vorrang vor der festen Zahl darüber; meldet sie gerade nichts, gilt wieder die Zahl. Leer: nur die feste Zahl.",
           "price_per_kwh": "Was eine Kilowattstunde aus dem Netz kostet, z. B. 0,34. Ohne diesen Preis rechnet die Integration keine Kosten und legt auch keine Geldsensoren an.",
           "prior_import": "**Der Stand deines Bezugszählers an dem Tag, an dem du diese Integration eingerichtet hast.** Eine einmalige Zahl, die du einmal abliest und dann nie wieder anfasst - kein Sensor.\n\nBeispiel: Dein Bezugszähler steht heute bei 5000 kWh, und du richtest heute ein. Dann trägst du 5000 ein.\n\nWozu: Die Integration zählt ab heute nur noch Differenzen. Ohne diese Zahl begänne der Gesamtzeitraum bei null Bezugskosten, und die Bilanz sähe besser aus, als sie ist. Tag, Monat und Jahr rührt sie nicht an.\n\nLeer: Der Gesamtzeitraum beginnt heute. Das ist richtig, wenn du nur ab jetzt rechnen willst.",
-          "prior_price": "Was die Kilowattstunde im Schnitt gekostet hat, bevor die Integration zu zählen begann - Strom war vor drei Jahren nicht so teuer wie heute. Gilt nur für die Zeit davor. Leer: Es wird mit dem heutigen Preis gerechnet."
+          "prior_price": "Was die Kilowattstunde im Schnitt gekostet hat, bevor die Integration zu zählen begann - Strom war vor drei Jahren nicht so teuer wie heute. Gilt nur für die Zeit davor. Leer: Es gilt der Arbeitspreis vom ersten Lauf der Integration - einmal festgehalten, ein späterer Tarif ändert ihn nicht."
         },
         "description": "Gerechnet wird aus den Zählerständen, die du unter „Netz und Zähler“ eingetragen hast - nicht aus hochgerechneten Leistungen. Tag, Monat und Jahr laufen ab dem Zeitpunkt mit, an dem du hier einen Preis einträgst - für die Zeit davor sorgen die Angaben bei der jeweiligen Anlage.\n\nDen Preis darfst du jederzeit ändern: Bewertet wird immer nur, was seit der letzten Rechnung dazugekommen ist. Eine Preiserhöhung wirkt ab dem Tag, an dem du sie einträgst, und schreibt die Vergangenheit nicht um.\n\nWas eine Anlage gekostet hat und seit wann sie läuft, steht bei ihr selbst unter „Kosten dieser Anlage“. Die Investition des Standorts ist die Summe seiner Anlagen, sein Beginn die älteste Inbetriebnahme - beides muss hier niemand noch einmal eintragen.\n\n**Wo eine Entität und eine feste Zahl nebeneinander stehen, gewinnt immer die Entität.** Die Zahl ist nur der Rückfall, wenn die Entität gerade nichts Brauchbares meldet - ein hängender Tarifabruf, ein Sensor auf „nicht verfügbar“.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
         "title": "Kosten und Ertrag"
@@ -466,6 +475,9 @@
           "phase": "Phase",
           "power_entity": "Ausgangsleistung (AC)",
           "rated_power_w": "Nennleistung",
+          "temp_cold": "Kälteschwelle",
+          "temp_hot": "Heiß ab",
+          "temp_warm": "Warm ab",
           "temperature_entity": "Temperatur des Wechselrichters"
         },
         "data_description": {
@@ -483,6 +495,9 @@
           "phase": "Auf welcher Phase dieser einphasige Wechselrichter einspeist.",
           "power_entity": "Die abgegebene AC-Leistung - der interne Sensor oder ein Zwischenzähler davor. Aus dieser Zahl entsteht der Hausverbrauch.",
           "rated_power_w": "Dauerleistung laut Typenschild. Daraus entsteht der Auslastungsbalken.",
+          "temp_cold": "Darunter steht die Temperatur in der Karte blau und blinkt. Eine Lithiumzelle darf unter etwa 5 °C nicht mehr geladen werden. Leer: 5 °C.",
+          "temp_hot": "Ab hier rot und blinkend. Bei einem Wechselrichter steht im Datenblatt, ab wann er drosselt. Leer: 40 °C.",
+          "temp_warm": "Ab hier orange - noch kein Problem, aber einen Blick wert. Leer: 30 °C.",
           "temperature_entity": "Temperatur des Wechselrichters selbst."
         },
         "description": "Ausgelegt für einphasige Wechselrichter im Netzparallelbetrieb.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
@@ -580,9 +595,10 @@
       "reset": {
         "data": {
           "reset_confirm": "Ja, die gemessenen Kostenzahlen verwerfen",
-          "reset_prior": "Ja, auch die „davor“-Angaben aus der Konfiguration nehmen"
+          "reset_prior": "Ja, auch die „davor“-Angaben aus der Konfiguration nehmen",
+          "reset_savings": "Ja, die gemessene Ersparnis einmal neu berechnen"
         },
-        "description": "Der Ausweg, wenn die Beträge einmal nicht mehr stimmen - typischerweise nach einem Zählertausch oder wenn im Bezugszählerfeld kurz die falsche Entität stand. Tag, Monat und Jahr heilen sich beim nächsten Wechsel von selbst; der Gesamtzeitraum trägt den Fehler weiter, bis jemand ihn leert.\n\nDer Gesamtzeitraum hat **zwei Quellen**, und deshalb gibt es zwei Haken. Sie überschneiden sich nicht - zusammen ergeben sie das, was in der Bilanz steht.\n\n---\n\n**1. Gemessen seit dem ersten Lauf**\n\n{stand}\n\nDas liegt im Speicher der Integration. Der erste Haken wirft es weg und verankert alle Zähler bei ihrem heutigen Stand neu - sofort, nicht erst beim Speichern.\n\n---\n\n**2. Aus der Konfiguration: die „davor“-Angaben**\n\n{vorher}\n\nDaher kommen Beträge, die neben null gemessenen Kilowattstunden stehen und trotzdem stimmen. Der zweite Haken nimmt diese Felder aus der Konfiguration - er wirkt erst mit „Speichern und schließen“.\n\nMeistens will man ihn **nicht**: Diese Zahlen sind deine echte Vorgeschichte, und ohne sie beginnt die Amortisation bei null. Sinnvoll ist er, wenn du dich vertippt hast oder von vorn anfangen willst.\n\nInvestition und Inbetriebnahme bleiben in jedem Fall stehen - das sind Tatsachen über die Anlage, keine Zählerstände. Rückgängig machen kann man beides nicht.",
+        "description": "Der Ausweg, wenn die Beträge einmal nicht mehr stimmen - typischerweise nach einem Zählertausch oder wenn im Bezugszählerfeld kurz die falsche Entität stand. Tag, Monat und Jahr heilen sich beim nächsten Wechsel von selbst; der Gesamtzeitraum trägt den Fehler weiter, bis jemand ihn leert.\n\nDer Gesamtzeitraum hat **zwei Quellen**, und deshalb gibt es zwei Haken. Sie überschneiden sich nicht - zusammen ergeben sie das, was in der Bilanz steht.\n\n---\n\n**1. Gemessen seit dem ersten Lauf**\n\n{stand}\n\nDas liegt im Speicher der Integration. Der erste Haken wirft es weg und verankert alle Zähler bei ihrem heutigen Stand neu - sofort, nicht erst beim Speichern.\n\n---\n\n**2. Aus der Konfiguration: die „davor“-Angaben**\n\n{vorher}\n\nDaher kommen Beträge, die neben null gemessenen Kilowattstunden stehen und trotzdem stimmen. Der zweite Haken nimmt diese Felder aus der Konfiguration - er wirkt erst mit „Speichern und schließen“.\n\nMeistens will man ihn **nicht**: Diese Zahlen sind deine echte Vorgeschichte, und ohne sie beginnt die Amortisation bei null. Sinnvoll ist er, wenn du dich vertippt hast oder von vorn anfangen willst. Mit den Angaben gehen auch die Preise, zu denen die Vorgeschichte bewertet wird; trägst du sie neu ein, gelten die Preise von dann.\n\nInvestition und Inbetriebnahme bleiben in jedem Fall stehen - das sind Tatsachen über die Anlage, keine Zählerstände. Rückgängig machen kann man beides nicht.\n\n---\n\n**3. Gemessene Ersparnis neu berechnen**\n\nBis 2.0.1 wurde die Ersparnis seit dem ersten Lauf zu hoch gebucht, sobald eingespeist wurde: Der Eigenverbrauch wackelt, wenn Ertrags- und Einspeisezähler zu verschiedenen Zeiten melden, und jeder Ausschlag nach oben zählte als Ersparnis. Liegt die Ersparnis oben deutlich über „selbst genutzt × Arbeitspreis“, ist das der Grund.\n\nDer dritte Haken rechnet sie einmal neu: selbst genutzte kWh × heutiger Arbeitspreis, der Überschussanteil mit seinem eigenen Wert. Das stimmt, solange sich dein Arbeitspreis seit dem ersten Lauf nicht geändert hat. Bezug, Einspeisung, Tag, Monat, Jahr und die „davor“-Angaben bleiben, wie sie sind. Er wirkt sofort und nur, wenn der erste Haken nicht gesetzt ist.",
         "title": "Kostenzähler leeren"
       },
       "surplus": {

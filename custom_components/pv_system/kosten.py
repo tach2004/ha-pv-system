@@ -35,19 +35,18 @@ Beginn die älteste Inbetriebnahme. Beides zusätzlich eintragen zu können wär
 nur eine Gelegenheit, sich zu widersprechen.
 
 **Preise ändern sich.** Strom kostete 2023 anderes als heute, und eine Anlage
-amortisiert sich über zwanzig Jahre. Den ganzen Zeitraum mit dem heutigen Preis
-zu bewerten wäre falsch. Deshalb führt der Gesamtzeitraum einen *Geldspeicher*:
-Bei jeder Rechnung wird nur die Differenz zur letzten Rechnung bewertet, mit
-dem Preis, der gerade gilt. Eine Preisänderung wirkt ab dem Tag der Änderung
-und schreibt die Vergangenheit nicht um.
+amortisiert sich über zwanzig Jahre. Deshalb wird keine Menge mit dem heutigen
+Preis malgenommen, in keinem Zeitraum. Jede Marke führt ihr eigenes Geld: Bei
+jeder Rechnung wird nur bewertet, was seit der letzten dazugekommen ist - mit
+dem Preis, der in diesem Augenblick gilt. Ein neuer Preis zählt ab dem Moment,
+in dem er eingetragen ist, und rührt nichts an, was davor lag. Das gilt für
+Tag, Monat und Jahr genauso wie für den Gesamtzeitraum, und mit einem
+dynamischen Tarif bekommt so jede Kilowattstunde ihren Stundenpreis.
 
 Für die Zeit vor dem ersten Lauf gibt es keine Differenzen, nur Summen. Dafür
 genügt ein Durchschnittspreis - eine Zahl, die man kennt, statt einer Historie,
-die niemand pflegt.
-
-Tag, Monat und Jahr rechnen weiterhin mit dem aktuellen Preis. Über so kurze
-Strecken ändert er sich praktisch nie, und wenn doch, ist die Abweichung
-kleiner als der Aufwand, sie zu vermeiden.
+die niemand pflegt. Fehlt er, gilt der erste Preis, den die Rechnung kennt,
+und dabei bleibt es (siehe _davor_preise).
 
 **Nicht jede selbst genutzte Kilowattstunde ist gleich viel wert.** Wer den
 Überschuss in einen Heizstab schickt, statt ihn ins Netz zu geben, spart damit
@@ -133,6 +132,13 @@ MAX_LEISTUNG_KW = 100.0
 # Start und dafür, dass zwei Zählerstände nie exakt gleichzeitig eintreffen.
 SPRUNG_TOLERANZ_KWH = 1.0
 
+# Auf so viele Stellen werden fortgeschriebene Beträge und Mengen gerundet.
+# Bewusst weit hinter dem Komma: Gebucht wird bei jedem Lauf, also bis zu
+# einmal je Sekunde, und jede Rundung bleibt im Speicher stehen. Mit vier
+# Stellen fielen bei 0,001 kWh je Lauf und 33,8 Cent je Kilowattstunde elf
+# Prozent unter den Tisch - 0,000338 Euro sind gerundet 0,0003.
+STELLEN = 10
+
 # Wie weit ein Zählerstand zurückfallen darf, ohne als Zählertausch zu gelten.
 # Null wäre zu streng: Der Eigenverbrauch ist keine Messung, sondern die
 # Differenz zweier Zähler, die zu verschiedenen Zeiten melden. Meldet der
@@ -160,6 +166,13 @@ class Kostenrechner:
         # Gesamtzeitraum darf erst entstehen, wenn _mengen sie anlegt - sonst
         # fehlt ihr der Periodenanfang.
         self._staende: dict[str, dict[str, Any]] = {}
+        # Die Preise, mit denen die Zeit vor dem ersten Lauf bewertet wird -
+        # einmal festgehalten, siehe _davor_preise. Bewusst neben den Marken:
+        # Wer das Gemessene leert, hat an der Vorgeschichte nichts geändert.
+        self._davor: dict[str, Any] = {}
+        # Die Preise des letzten Laufs - nur für ersparnis_neu_bewerten, das
+        # aus dem Dialog kommt und selbst keinen Preis kennt.
+        self._preise_jetzt: dict[str, float | None] = {}
 
     async def async_laden(self) -> None:
         """Marken aus dem Speicher holen. Fehlt die Datei, wird neu begonnen."""
@@ -189,6 +202,9 @@ class Kostenrechner:
                 self._staende = {
                     name: {"wert": wert} for name, wert in letzte.items()
                 }
+        davor = gespeichert.get("davor")
+        if isinstance(davor, dict):
+            self._davor = dict(davor)
 
     async def async_speichern(self) -> None:
         """Sofort schreiben - beim Abbau des Eintrags."""
@@ -203,15 +219,63 @@ class Kostenrechner:
         Sein Geldspeicher trägt den Fehler weiter, bis jemand ihn leert.
 
         Was in der Konfiguration steht - Ertrag davor, Bezug davor, die
-        Inbetriebnahme jeder Anlage -, bleibt davon unberührt. Verloren geht
-        nur das, was seit dem ersten Lauf gemessen wurde.
+        Inbetriebnahme jeder Anlage -, bleibt davon unberührt, und mit ihm die
+        Preise, zu denen es bewertet wird. Verloren geht nur das, was seit dem
+        ersten Lauf gemessen wurde.
         """
         self._marken = {}
         self._staende = {}
         self._merken()
 
+    def davor_vergessen(self) -> None:
+        """Die festgehaltenen Preise für die Zeit davor verwerfen.
+
+        Gehört zum zweiten Haken im Dialog: Wer die „davor"-Angaben leert, will
+        sie meist neu eintragen, weil etwas nicht stimmte - und dann auch zu
+        den Preisen, die jetzt eingetragen sind. Ohne diesen Weg bliebe ein
+        einmal vertippter Preis für die Vorgeschichte für immer stehen.
+        """
+        self._davor = {}
+        self._merken()
+
+    def ersparnis_neu_bewerten(self) -> bool:
+        """Die gemessene Ersparnis des Gesamtzeitraums einmal neu rechnen.
+
+        Für Stände aus Fassungen bis 2.0.1. Deren Geldspeicher buchte jeden
+        Anstieg des Eigenverbrauchs und übersah jeden Rückgang - und der
+        Eigenverbrauch wackelt, solange eingespeist wird, weil Ertrags- und
+        Einspeisezähler zu verschiedenen Zeiten melden. Die Ersparnis lag
+        damit zu hoch, umso mehr, je mehr eingespeist wurde. Den Korrekturposten
+        des Überschussverbrauchers verlor er dagegen, sobald die beiden Zähler
+        verschieden schnell meldeten.
+
+        Was gebucht wurde, lässt sich nicht mehr auseinandernehmen; die
+        gemessenen Kilowattstunden dagegen stimmen. Neu gerechnet wird
+        deshalb aus ihnen, mit dem Preis des letzten Laufs - richtig, solange
+        der Arbeitspreis seit Messbeginn derselbe war. Deshalb nur auf
+        ausdrücklichen Wunsch aus dem Dialog und nie von selbst. Bezug,
+        Einspeisung, Tag, Monat, Jahr und die Vorgeschichte bleiben, wie sie
+        sind.
+        """
+        marke = self._marken.get(PERIOD_TOTAL) or {}
+        geld = marke.get("geld")
+        bewertet = marke.get("bewertet")
+        preis = _zahl(self._preise_jetzt.get("price"))
+        if not isinstance(geld, dict) or not isinstance(bewertet, dict) or preis is None:
+            return False
+        umleitpreis = _zahl(self._preise_jetzt.get("diverted"))
+        eigen = max(0.0, _zahl(bewertet.get("own")) or 0.0)
+        umgeleitet = min(max(0.0, _zahl(bewertet.get("diverted")) or 0.0), eigen)
+        geld["savings"] = round(eigen * preis, STELLEN)
+        geld["divert"] = round(umgeleitet * _abstand(umleitpreis, preis), STELLEN)
+        geld["divert_value"] = round(
+            umgeleitet * (umleitpreis if umleitpreis is not None else preis), STELLEN
+        )
+        self._merken()
+        return True
+
     def _zustand(self) -> dict[str, Any]:
-        return {"marken": self._marken, "staende": self._staende}
+        return {"marken": self._marken, "staende": self._staende, "davor": self._davor}
 
     def _merken(self) -> None:
         self._store.async_delay_save(self._zustand, SPEICHER_VERZUG)
@@ -278,6 +342,13 @@ class Kostenrechner:
         verguetung = _zahl(preise.get("feed_in"))
         grundpreis = _zahl(preise.get("base")) or 0.0
         umleitpreis = _zahl(preise.get("diverted"))
+        self._preise_jetzt = {"price": arbeitspreis, "diverted": umleitpreis}
+        veraendert = self._davor_preise(
+            arbeitspreis,
+            verguetung,
+            umleitpreis,
+            {anlage["id"]: _satz(anlage, verguetung) for anlage in anlagen},
+        )
 
         vorher = self._vorher(preise, anlagen)
         # Was von der Vorgeschichte in den Überschussverbraucher ging. Ohne
@@ -295,13 +366,23 @@ class Kostenrechner:
         frisch, letzte_staende = self._pruefen(zaehler, jetzt)
 
         zeitraeume: dict[str, Any] = {}
-        veraendert = bool(frisch)
+        veraendert = veraendert or bool(frisch)
         gemessen: dict[str, Any] = {}
+        geld_gesamt: dict[str, float] = {}
+        schritt: dict[str, float] = {}
         for periode in PERIODS:
-            mengen, neu = self._mengen(
+            mengen, neu, verankert = self._mengen(
                 periode, zaehler, jetzt, frisch, letzte_staende
             )
-            veraendert = veraendert or neu
+            # Jede Kilowattstunde wird genau einmal bewertet: wenn sie
+            # dazukommt, zum Preis dieses Augenblicks. Was gebucht ist, bleibt
+            # gebucht - ein neuer Preis gilt für alles danach und für nichts
+            # davor.
+            geld, dazu, neu_geld = self._bewerten(
+                periode, mengen, verankert, zaehler, arbeitspreis, verguetung,
+                umleitpreis, grundpreis, jetzt,
+            )
+            veraendert = veraendert or neu or neu_geld
             # Was vor dem ersten Lauf schon aufgelaufen ist, gehört allein in
             # den Gesamtzeitraum - heute und diesen Monat ist es nicht passiert.
             if periode == PERIOD_TOTAL:
@@ -309,6 +390,10 @@ class Kostenrechner:
                 # welche Hälfte des Gesamtzeitraums gemessen wurde und welche
                 # aus der Konfiguration kommt.
                 gemessen = dict(mengen)
+                geld_gesamt = geld
+                # Die Mengen dieses einen Laufs: Aus genau ihnen entsteht der
+                # Anteil jeder Anlage - siehe _anlagengeld.
+                schritt = dazu
                 mengen = _dazu(mengen, vorher)
                 # Zwei Daten, und sie sind nicht dasselbe: Der Zeitraum beginnt
                 # mit der ältesten Inbetriebnahme - daran hängt die
@@ -319,16 +404,8 @@ class Kostenrechner:
                 mengen["measured_since"] = mengen.get("start")
                 mengen["start"] = _fruehester_beginn(anlagen, mengen.get("start"))
             zeitraeume[periode] = self._geld(
-                mengen, arbeitspreis, verguetung, grundpreis, jetzt, umleitpreis
+                mengen, geld, arbeitspreis, verguetung
             )
-        # Erst jetzt der Geldspeicher: Er hängt sich an dieselbe Marke wie der
-        # Gesamtzeitraum, und die muss vorher angelegt sein - sonst stünde dort
-        # kein Periodenanfang, und die Amortisation rechnete ab 1970.
-        gespeichert, neu_geld, schritt = self._geldspeicher(
-            zaehler, arbeitspreis, verguetung, jetzt, frisch, umleitpreis,
-            grundpreis,
-        )
-        veraendert = veraendert or neu_geld
         # Und dasselbe je Anlage - mit den Mengen genau dieses Laufs, verteilt
         # auf die Anlagen, die in diesem Moment liefern.
         veraendert = self._anlagengeld(
@@ -336,11 +413,11 @@ class Kostenrechner:
             umleitpreis,
         ) or veraendert
 
-        # Der Gesamtzeitraum bekommt die mitgeführten Beträge statt der
-        # Hochrechnung mit dem heutigen Preis.
+        # Der Gesamtzeitraum bekommt dazu die Vorgeschichte - zu den Preisen,
+        # die für sie festgehalten sind.
         zeitraeume[PERIOD_TOTAL] = self._gesamtgeld(
-            zeitraeume[PERIOD_TOTAL], gespeichert, vorher, preise, arbeitspreis,
-            grundpreis, jetzt, gemessen, vorher_umgeleitet,
+            zeitraeume[PERIOD_TOTAL], geld_gesamt, vorher, preise, arbeitspreis,
+            self._davor, gemessen, vorher_umgeleitet,
         )
         if veraendert:
             self._merken()
@@ -366,7 +443,7 @@ class Kostenrechner:
             verguetung,
             jetzt,
             _zahl(preise.get("prior_price")),
-            umleitpreis,
+            self._davor,
             vorher_umgeleitet,
             self._marken.get(PERIOD_TOTAL, {}).get("anlagen") or {},
             je_zeitraum,
@@ -418,113 +495,272 @@ class Kostenrechner:
             "own": max(0.0, erzeugt - einspeisung),
         }
 
-    def _geldspeicher(
+    def _davor_preise(
         self,
+        preis: float | None,
+        verguetung: float | None,
+        umleitpreis: float | None,
+        saetze: dict[str, float | None],
+    ) -> bool:
+        """Die Preise für die Zeit vor dem ersten Lauf - einmal festgehalten.
+
+        Für die Vorgeschichte gibt es keine Differenzen, nur Summen. Ohne
+        eigenen Durchschnittspreis wurde sie bisher mit dem Preis bewertet,
+        der gerade galt - und damit schrieb jeder neue Tarif Jahre um, die mit
+        ihm nichts zu tun hatten. Mit einem dynamischen Tarif sogar stündlich.
+
+        Jetzt gilt der erste Preis, den die Rechnung kennt, und dabei bleibt
+        es: für den Arbeitspreis, die Einspeisevergütung des Standorts und
+        jeder Anlage und den Wertansatz des Überschussverbrauchers. Beim
+        Update ist das genau der Preis, mit dem die Vorgeschichte bis dahin in
+        der Karte stand - die Zahl springt nicht, sie hört nur auf zu wandern.
+
+        Wer einen anderen Preis für die Zeit davor will, trägt den
+        Durchschnittspreis davor ein; der ist dafür da und gewinnt immer.
+        """
+        veraendert = False
+        for name, wert in (
+            ("price", preis),
+            ("feed_in", verguetung),
+            ("diverted", umleitpreis),
+        ):
+            if _zahl(self._davor.get(name)) is None and wert is not None:
+                self._davor[name] = wert
+                veraendert = True
+        anlagen = self._davor.setdefault("plants", {})
+        for kennung, satz in saetze.items():
+            if _zahl(anlagen.get(kennung)) is None and satz is not None:
+                anlagen[kennung] = satz
+                veraendert = True
+        return veraendert
+
+    def _bewerten(
+        self,
+        periode: str,
+        mengen: dict[str, Any],
+        verankert: set[str],
         zaehler: dict[str, float | None],
         preis: float | None,
         verguetung: float | None,
+        umleitpreis: float | None,
+        grundpreis: float,
         jetzt: datetime,
-        frisch: set[str] | None = None,
-        umleitpreis: float | None = None,
-        grundpreis: float = 0.0,
-    ) -> tuple[dict[str, float], bool, dict[str, float]]:
-        """Den seit dem ersten Lauf angefallenen Betrag fortschreiben.
+    ) -> tuple[dict[str, float], dict[str, float], bool]:
+        """Das Geld eines Zeitraums fortschreiben - nur mit dem, was neu ist.
 
-        Bewertet wird immer nur die Differenz zur letzten Rechnung - mit dem
-        Preis, der in diesem Augenblick gilt. Wer morgen einen neuen Tarif
-        einträgt, verändert damit nicht, was gestern gekostet hat.
+        Jede Marke merkt sich, wie viele Kilowattstunden sie schon bewertet
+        hat. Bei jeder Rechnung kommt nur der Teil darüber hinaus dazu, mit dem
+        Preis, der in diesem Augenblick gilt. Damit ändert ein neuer Preis
+        nichts an dem, was vorher lag - nicht am Gesamtzeitraum und, anders
+        als bis 2.1, auch nicht an Tag, Monat und Jahr. Die wurden bis dahin
+        bei jedem Lauf als Menge mal *heutigem* Preis neu gerechnet.
 
-        Ohne Preis wird nichts fortgeschrieben, aber der Zählerstand gemerkt:
-        Sonst käme beim späteren Eintragen eines Preises die ganze Zeit ohne
-        Preis auf einen Schlag dazu.
+        Bewertet wird nur nach oben. Der Eigenverbrauch ist keine Messung,
+        sondern die Differenz zweier Zähler, die zu verschiedenen Zeiten
+        melden: Speist die Anlage ein, wächst er mit jedem Schritt des
+        Ertragszählers und fällt mit jedem des Einspeisezählers wieder. Der
+        alte Geldspeicher buchte jeden Anstieg und übersah jeden Rückgang - in
+        einer Stunde Einspeisung kam so fast die ganze Erzeugung als Ersparnis
+        herein statt des Eigenverbrauchs. Jetzt wartet die Buchung, bis der
+        Stand das schon Bewertete wieder überholt hat.
+
+        Der Überschussverbraucher wird auf den Eigenverbrauch des Zeitraums
+        gedeckelt, nicht auf den eines einzelnen Laufs. Je Lauf gedeckelt ging
+        er verloren, sobald die beiden Zähler verschieden schnell melden - in
+        vier von fünf Läufen stand ein Zuwachs beim einen und eine Null beim
+        anderen.
+
+        Zurück kommen das Geld, die in diesem Lauf bewerteten Mengen und ob
+        sich etwas geändert hat.
         """
-        marke = self._marken.setdefault(PERIOD_TOTAL, {})
-        geld: dict[str, float] = marke.setdefault(
-            "geld", {"cost": 0.0, "revenue": 0.0, "savings": 0.0}
-        )
-        # Der Korrekturposten für den Überschussverbraucher. Nachträglich
-        # angelegt, damit ältere Speicherstände weiterlaufen.
-        geld.setdefault("divert", 0.0)
-        letzte: dict[str, Any] = marke.setdefault("letzte", {})
-
-        # Der Grundpreis läuft wie jeder andere Posten mit: bei jeder Rechnung
-        # die verstrichene Zeit mal dem Satz, der gerade gilt. Vorher wurde er
-        # bei jedem Lauf über die ganze Messzeit neu hochgerechnet - wer 2028
-        # einen neuen Zählerpreis eintrug, änderte damit rückwirkend, was 2026
-        # gekostet hat.
-        #
-        # Beim ersten Lauf nach dem Update steht der Speicher noch leer. Er
-        # beginnt dann bei genau dem Betrag, den die alte Rechnung ergab -
-        # sonst fiele die Gesamtsumme um den ganzen bisherigen Grundpreis.
-        if "base" not in geld:
-            geld["base"] = round(
-                grundpreis * _tage_seit(marke.get("start"), jetzt) / TAGE_JE_MONAT, 4
-            )
-            veraendert_grund = True
-        else:
-            veraendert_grund = False
-        seit = letzte.get("zeit")
-        letzte["zeit"] = dt_util.as_local(jetzt).isoformat()
-        if seit and grundpreis:
-            monate = _tage_seit(seit, jetzt) / TAGE_JE_MONAT
-            neu = round(geld["base"] + grundpreis * max(0.0, monate), 4)
-            if neu != geld["base"]:
-                geld["base"] = neu
-                veraendert_grund = True
+        marke = self._marken[periode]
+        zeit = dt_util.as_local(jetzt).isoformat()
+        eigen = _zahl(mengen.get("own"))
+        umgeleitet = _zahl(mengen.get("diverted"))
+        stand: dict[str, float | None] = {
+            "import": _zahl(mengen.get("import")),
+            "export": _zahl(mengen.get("export")),
+            "own": eigen,
+            # Umgeleitet werden kann nur, was auch selbst genutzt wurde. Läuft
+            # der Verbraucher am Netz, ist das gewöhnlicher Bezug - und keine
+            # Ersparnis, die sich umbewerten ließe.
+            "diverted": (
+                min(umgeleitet, eigen)
+                if umgeleitet is not None and eigen is not None
+                else None
+            ),
+        }
+        neu_verankert = set(verankert)
+        if "own" in neu_verankert:
+            neu_verankert.add("diverted")
 
         # Der Korrektursatz: Was eine umgeleitete Kilowattstunde *mehr oder
-        # weniger* wert ist als eine gewöhnlich selbst genutzte. Damit genügt
-        # ein einziger zusätzlicher Posten statt einer zweiten Rechnung.
+        # weniger* wert ist als eine gewöhnlich selbst genutzte. Dazu ihr
+        # voller Wert, für die getrennte Zeile in der Karte.
         korrektur = _abstand(umleitpreis, preis) if preis is not None else None
+        wert_umgeleitet = (
+            (umleitpreis if umleitpreis is not None else preis)
+            if preis is not None
+            else None
+        )
 
-        veraendert = veraendert_grund
-        mengen: dict[str, float] = {}
-        for name in ("import", "export", "own", "diverted"):
-            stand = _zahl(zaehler.get(name))
-            if stand is None:
-                continue
-            vorher = _zahl(letzte.get(name))
-            letzte[name] = stand
-            # Ein anderer Zähler bringt keine Rechnung mit, nur einen neuen
-            # Ausgangspunkt.
-            if vorher is None or name in (frisch or ()):
+        geld = marke.get("geld")
+        if not isinstance(geld, dict) or (
+            periode == PERIOD_TOTAL and not isinstance(marke.get("bewertet"), dict)
+        ):
+            self._uebernehmen(
+                periode, marke, stand, neu_verankert, preis, verguetung,
+                korrektur, wert_umgeleitet, grundpreis, jetzt,
+            )
+            geld = marke["geld"]
+            if periode != PERIOD_TOTAL:
+                return geld, {}, True
+        bewertet: dict[str, float] = marke["bewertet"]
+
+        # Der Grundpreis läuft wie jeder andere Posten mit: die verstrichene
+        # Zeit mal dem Satz, der gerade gilt.
+        seit = marke.get("bewertet_bis") or marke.get("start")
+        marke["bewertet_bis"] = zeit
+        veraendert = False
+        if grundpreis:
+            monate = _tage_seit(seit, jetzt) / TAGE_JE_MONAT
+            if monate > 0:
+                geld["base"] = round(geld["base"] + grundpreis * monate, STELLEN)
                 veraendert = True
+
+        dazu: dict[str, float] = {}
+        for name, menge in stand.items():
+            if menge is None:
                 continue
-            # Ein zurückgefallener Zähler bringt keine negative Rechnung.
-            menge = max(0.0, stand - vorher)
-            if menge:
+            schon = _zahl(bewertet.get(name))
+            # Ein neuer Zähler, ein getauschter, ein frisch verankerter:
+            # Er bringt keine Rechnung mit, nur einen neuen Ausgangspunkt.
+            if schon is None or name in neu_verankert:
+                if schon != menge:
+                    bewertet[name] = menge
+                    veraendert = True
+                continue
+            if menge > schon:
+                dazu[name] = menge - schon
+                bewertet[name] = menge
                 veraendert = True
-                mengen[name] = menge
 
-        # Umgeleitet werden kann nur, was auch selbst genutzt wurde. Läuft der
-        # Verbraucher am Netz, ist das gewöhnlicher Bezug - und keine
-        # Ersparnis, die sich umbewerten ließe.
-        #
-        # Gedeckelt wird auf die Menge dieses Laufs und nicht auf die eines
-        # ganzen Zeitraums. Beides war schon falsch herum: Je Messschritt
-        # gehen Kilowattstunden verloren, sobald die beiden Zähler
-        # unterschiedlich schnell melden - der Zwischenzähler am Verbraucher
-        # jede Sekunde, der Ertragszähler des Wechselrichters alle halbe
-        # Minute. Dann steht in vier von fünf Läufen ein Zuwachs beim einen
-        # und eine Null beim anderen, und das Minimum wirft ihn weg. Hier
-        # gleicht sich das über den Lauf aus, weil beide Mengen aus denselben
-        # Marken kommen.
-        if "diverted" in mengen:
-            mengen["diverted"] = min(mengen["diverted"], mengen.get("own", 0.0))
-
+        # Ohne Preis wird nichts gebucht, aber weitergezählt: Sonst käme beim
+        # späteren Eintragen eines Preises die ganze Zeit ohne Preis auf einen
+        # Schlag dazu.
         for name, satz, feld in (
             ("import", preis, "cost"),
             ("export", verguetung, "revenue"),
             ("own", preis, "savings"),
             ("diverted", korrektur, "divert"),
+            ("diverted", wert_umgeleitet, "divert_value"),
         ):
-            menge = mengen.get(name)
-            if not menge or satz is None:
-                continue
-            geld[feld] = round(geld[feld] + menge * satz, 4)
-        # Die Mengen dieses einen Laufs gehen mit hinaus: Aus genau ihnen
-        # entsteht der Anteil jeder Anlage - siehe _anlagengeld.
-        return geld, veraendert, mengen
+            menge = dazu.get(name)
+            if menge and satz is not None:
+                geld[feld] = round(geld[feld] + menge * satz, STELLEN)
+
+        if periode == PERIOD_TOTAL:
+            # Für den Weg zurück: Eine ältere Fassung rechnet ab den rohen
+            # Ständen in "letzte" weiter. Stünden dort noch die vom Update,
+            # buchte sie alles seither ein zweites Mal.
+            letzte = marke.setdefault("letzte", {})
+            for name in ("import", "export", "own", "diverted"):
+                roh = _zahl(zaehler.get(name))
+                if roh is not None:
+                    letzte[name] = roh
+            letzte["zeit"] = zeit
+        return geld, dazu, veraendert
+
+    def _uebernehmen(
+        self,
+        periode: str,
+        marke: dict[str, Any],
+        stand: dict[str, float | None],
+        neu_verankert: set[str],
+        preis: float | None,
+        verguetung: float | None,
+        korrektur: float | None,
+        wert_umgeleitet: float | None,
+        grundpreis: float,
+        jetzt: datetime,
+    ) -> None:
+        """Eine Marke aus einer älteren Fassung weiterführen, ohne Sprung.
+
+        Tag, Monat und Jahr hatten kein eigenes Geld; ihre Beträge entstanden
+        bei jedem Lauf als Menge mal Preis. Sie beginnen genau bei der Zahl,
+        die zuletzt in der Karte stand, und werden ab dann nur noch
+        fortgeschrieben.
+
+        Der Gesamtzeitraum hatte schon einen Geldspeicher, der aber von Lauf
+        zu Lauf an den rohen Zählerständen rechnete. Er behält sein Geld; als
+        schon bewertet gilt, was seine letzten Stände ergeben. So kommt auch
+        der Verbrauch zwischen dem letzten Lauf vor dem Update und dem ersten
+        danach noch herein - einmal.
+        """
+        start = marke.get("start")
+        zeit = dt_util.as_local(jetzt).isoformat()
+        geld = marke.get("geld")
+        if periode != PERIOD_TOTAL or not isinstance(geld, dict):
+            geld = _leeres_geld()
+            geld["base"] = round(
+                grundpreis * _tage_seit(start, jetzt) / TAGE_JE_MONAT, STELLEN
+            )
+            if periode != PERIOD_TOTAL:
+                for name, satz, feld in (
+                    ("import", preis, "cost"),
+                    ("export", verguetung, "revenue"),
+                    ("own", preis, "savings"),
+                    ("diverted", korrektur, "divert"),
+                    ("diverted", wert_umgeleitet, "divert_value"),
+                ):
+                    menge = stand.get(name)
+                    if menge and satz is not None:
+                        geld[feld] = round(geld[feld] + menge * satz, STELLEN)
+            marke["geld"] = geld
+            marke["bewertet"] = {k: v for k, v in stand.items() if v is not None}
+            marke["bewertet_bis"] = zeit
+            return
+
+        # Der Gesamtzeitraum mit seinem alten Geldspeicher. Fehlt ihm der
+        # Grundpreis, stammt er aus einer Fassung, die ihn bei jedem Lauf über
+        # die ganze Messzeit hochrechnete: Er beginnt bei genau diesem Betrag.
+        hatte_grundpreis = "base" in geld
+        for feld, wert in _leeres_geld().items():
+            geld.setdefault(feld, wert)
+        letzte = marke.get("letzte") or {}
+        if not hatte_grundpreis:
+            geld["base"] = round(
+                grundpreis * _tage_seit(start, jetzt) / TAGE_JE_MONAT, STELLEN
+            )
+            marke["bewertet_bis"] = zeit
+        else:
+            marke["bewertet_bis"] = letzte.get("zeit") or zeit
+        werte = marke.get("werte") or {}
+        uebertrag = marke.get("uebertrag") or {}
+
+        def _damals(name: str) -> float | None:
+            roh = _zahl(letzte.get(name))
+            anker = _zahl(werte.get(name))
+            if roh is None or anker is None or name in neu_verankert:
+                return None
+            return round(
+                (_zahl(uebertrag.get(name)) or 0.0) + max(0.0, roh - anker), 3
+            )
+
+        bewertet: dict[str, float] = {}
+        for name in ("import", "export", "own"):
+            wert = _damals(name)
+            if wert is not None:
+                bewertet[name] = wert
+        umgeleitet = _damals("diverted")
+        if umgeleitet is not None and "own" in bewertet:
+            bewertet["diverted"] = min(umgeleitet, bewertet["own"])
+        # Was sich so nicht zurückrechnen lässt, gilt als bewertet: Der alte
+        # Speicher hat es entweder schon gebucht oder nie gekannt.
+        for name, menge in stand.items():
+            if menge is not None and name not in bewertet:
+                bewertet[name] = menge
+        marke["bewertet"] = bewertet
 
     def _anlagengeld(
         self,
@@ -565,14 +801,7 @@ class Kostenrechner:
         erzeugt = {
             kennung: _zahl(gemessen.get(f"anlage:{kennung}")) for kennung in kennungen
         }
-        saetze = {
-            anlage["id"]: (
-                _zahl(anlage.get("feed_in"))
-                if _zahl(anlage.get("feed_in")) is not None
-                else verguetung
-            )
-            for anlage in anlagen
-        }
+        saetze = {anlage["id"]: _satz(anlage, verguetung) for anlage in anlagen}
         # Eine umgeleitete Kilowattstunde ist so viel wert wie das, was sie
         # ersetzt. Ersetzt sie nur Strom, ist es der Arbeitspreis.
         wert_umgeleitet = umleitpreis if umleitpreis is not None else preis
@@ -601,18 +830,18 @@ class Kostenrechner:
             anteil = anteile.get(kennung, 0.0)
             if anteil and einspeisung:
                 menge = einspeisung * anteil
-                konto["export"] = round(konto["export"] + menge, 6)
+                konto["export"] = round(konto["export"] + menge, STELLEN)
                 if saetze[kennung] is not None:
                     konto["revenue"] = round(
-                        konto["revenue"] + menge * saetze[kennung], 6
+                        konto["revenue"] + menge * saetze[kennung], STELLEN
                     )
                 veraendert = True
             if anteil and umleitung:
                 menge = umleitung * anteil
-                konto["divert"] = round(konto["divert"] + menge, 6)
+                konto["divert"] = round(konto["divert"] + menge, STELLEN)
                 if wert_umgeleitet is not None:
                     konto["savings"] = round(
-                        konto["savings"] + menge * wert_umgeleitet, 6
+                        konto["savings"] + menge * wert_umgeleitet, STELLEN
                     )
                 veraendert = True
             # Der gewöhnliche Eigenverbrauch - nur nach oben. Schweigt der
@@ -624,7 +853,7 @@ class Kostenrechner:
             if ziel > konto["own"] + 1e-9:
                 if preis is not None:
                     konto["savings"] = round(
-                        konto["savings"] + (ziel - konto["own"]) * preis, 6
+                        konto["savings"] + (ziel - konto["own"]) * preis, STELLEN
                     )
                 konto["own"] = round(ziel, 6)
                 veraendert = True
@@ -721,21 +950,23 @@ class Kostenrechner:
         vorher: dict[str, float],
         preise: dict[str, Any],
         preis: float | None,
-        grundpreis: float,
-        jetzt: datetime,
+        davor: dict[str, Any],
         gemessen: dict[str, Any],
         vorher_umgeleitet: float = 0.0,
     ) -> dict[str, Any]:
-        """Den Gesamtzeitraum aus Geldspeicher und Vorher-Werten bauen.
+        """Den Gesamtzeitraum aus Gemessenem und Vorher-Werten bauen.
 
         Der Durchschnittspreis für die Zeit davor darf abweichen - Strom war
-        vor drei Jahren teurer. Fehlt er, gilt der heutige Preis; das ist die
-        gleiche Näherung wie bisher, aber jetzt eine bewusste.
+        vor drei Jahren teurer. Fehlt er, gilt der Preis, der für die
+        Vorgeschichte festgehalten ist, und nicht der von heute - siehe
+        _davor_preise.
         """
         frueher = _zahl(preise.get("prior_price"))
         if frueher is None:
-            frueher = preis
-        satz_vorher = _zahl(preise.get("prior_feed_in")) or _zahl(preise.get("feed_in"))
+            frueher = _zahl(davor.get("price"))
+        satz_vorher = _zahl(preise.get("prior_feed_in"))
+        if satz_vorher is None:
+            satz_vorher = _zahl(davor.get("feed_in"))
 
         grundkosten = round(gespeichert.get("base", 0.0), 2)
         kosten = None
@@ -767,7 +998,7 @@ class Kostenrechner:
                 gespeichert["savings"]
                 + gespeichert.get("divert", 0.0)
                 + vorher.get("own", 0.0) * (frueher or 0.0)
-                + vorher_umgeleitet * _abstand(_zahl(preise.get("diverted")), frueher),
+                + vorher_umgeleitet * _abstand(_zahl(davor.get("diverted")), frueher),
                 2,
             )
 
@@ -803,15 +1034,11 @@ class Kostenrechner:
             "revenue": erloes,
             "savings": ersparnis,
             # Die Aufteilung in Haushalt und Überschuss gibt es hier bewusst
-            # nicht. Der Gesamtzeitraum kommt nicht aus einer Rechnung mit
-            # heutigen Preisen, sondern aus dem Geldspeicher - und der führt
-            # für den Überschuss nur den *Korrekturposten* mit, also die
-            # Differenz zum Arbeitspreis. Aus ihm lässt sich der Bruttowert
-            # nicht zurückrechnen, ohne zu raten.
-            #
-            # Die Beträge aus _geld stünden sonst hier drin: mit den heutigen
-            # Preisen über den ganzen Zeitraum hochgerechnet, und damit in
-            # einer Zeile neben einer Summe, die es besser weiß. Lieber
+            # nicht. Der Geldspeicher des Gesamtzeitraums führte für den
+            # Überschuss lange nur den *Korrekturposten* mit, also die
+            # Differenz zum Arbeitspreis. Gemessen ließe sich der Bruttowert
+            # inzwischen führen, für die Zeit davor aber nicht mehr
+            # nachholen - und für die Vorgeschichte gab es ihn nie. Lieber
             # nichts als eine Zahl, die nicht zur Nachbarzeile passt.
             "savings_base": None,
             "savings_diverted": None,
@@ -831,8 +1058,12 @@ class Kostenrechner:
         jetzt: datetime,
         frisch: set[str] | None = None,
         letzte: dict[str, float] | None = None,
-    ) -> tuple[dict[str, Any], bool]:
-        """Verbrauchte, eingespeiste und erzeugte kWh dieses Zeitraums."""
+    ) -> tuple[dict[str, Any], bool, set[str]]:
+        """Verbrauchte, eingespeiste und erzeugte kWh dieses Zeitraums.
+
+        Dazu die Namen der Zähler, die in diesem Lauf neu verankert wurden -
+        für sie gibt es nichts zu bewerten, siehe _bewerten.
+        """
         beginn = _periodenbeginn(jetzt, periode)
         marke = self._marken.get(periode)
         veraendert = False
@@ -843,34 +1074,32 @@ class Kostenrechner:
             # weiter zurückreicht als seine Daten, führt in die Irre - der
             # anteilige Grundpreis stünde sonst für ein ganzes Jahr da, in dem
             # eine einzige Kilowattstunde erfasst wurde.
-            marke = {"start": dt_util.as_local(jetzt).isoformat(), "werte": {}}
+            marke = _neue_marke(dt_util.as_local(jetzt).isoformat())
             self._marken[periode] = marke
             veraendert = True
         elif periode != PERIOD_TOTAL and _als_zeit(marke.get("start")) < beginn:
             # Neuer Tag, neuer Monat, neues Jahr: Jetzt stimmt der
             # Periodenanfang, denn gemessen wurde durchgehend.
-            marke = {"start": beginn.isoformat(), "werte": {}}
+            marke = _neue_marke(beginn.isoformat())
             self._marken[periode] = marke
             veraendert = True
 
         werte: dict[str, Any] = marke.setdefault("werte", {})
-        # Nur im Gesamtzeitraum: Was ein Zähler bis zu seinem Tausch schon
-        # gemessen hat, wird beim Verankern hierher gerettet.
+        # Was ein Zähler bis zu seinem Tausch schon gemessen hat, wird beim
+        # Verankern in den Übertrag gerettet.
         #
         # Ohne das verlor jeder Zählertausch die ganze Messzeit - und zwar
         # dort, wo es am meisten weh tut: Der Ertrag einer Anlage entsteht aus
         # "Stand bei Einrichtung + seither gemessen", und die Amortisation
         # rechnet bei jedem Lauf neu daraus. Nach einem neuen Sensor fiel sie
-        # auf den Stand bei der Einrichtung zurück. Das Geld war nie betroffen,
-        # das wird ohnehin laufend mitgeschrieben.
+        # auf den Stand bei der Einrichtung zurück.
         #
-        # Tag, Monat und Jahr bekommen keinen Übertrag: Sie beginnen beim
-        # nächsten Wechsel ohnehin von vorn, und ein Tag, der die Lücke
-        # überspringt, ist richtiger als einer, der sie füllt.
-        traegt_weiter = periode == PERIOD_TOTAL
-        uebertrag: dict[str, Any] = (
-            marke.setdefault("uebertrag", {}) if traegt_weiter else {}
-        )
+        # Seit jeder Zeitraum sein Geld selbst mitschreibt, gilt das für Tag,
+        # Monat und Jahr genauso. Was vor dem Tausch gebucht wurde, bleibt
+        # gebucht - und dann müssen auch die Kilowattstunden dazu stehen
+        # bleiben. Sonst stünden bis zum Jahresende 13 Euro neben 0 kWh.
+        uebertrag: dict[str, Any] = marke.setdefault("uebertrag", {})
+        verankert_neu: set[str] = set()
         mengen: dict[str, Any] = {"start": marke.get("start")}
         for name, stand_roh in zaehler.items():
             stand = _zahl(stand_roh)
@@ -898,7 +1127,7 @@ class Kostenrechner:
                 # Stand kurz die falsche Entität im Feld, wäre deren Wert
                 # sonst als Ertrag verbucht worden.
                 zuletzt = _zahl((letzte or {}).get(name))
-                if traegt_weiter and verankert is not None and zuletzt is not None:
+                if verankert is not None and zuletzt is not None:
                     uebertrag[name] = round(
                         (_zahl(uebertrag.get(name)) or 0.0)
                         + max(0.0, zuletzt - verankert),
@@ -906,31 +1135,34 @@ class Kostenrechner:
                     )
                 werte[name] = stand
                 verankert = stand
+                verankert_neu.add(name)
                 veraendert = True
             mengen[name] = round(
                 (_zahl(uebertrag.get(name)) or 0.0) + max(0.0, stand - verankert), 3
             )
-        return mengen, veraendert
+        return mengen, veraendert, verankert_neu
 
     @staticmethod
     def _geld(
         mengen: dict[str, Any],
+        geld: dict[str, float],
         preis: float | None,
         verguetung: float | None,
-        grundpreis: float,
-        jetzt: datetime,
-        umleitpreis: float | None = None,
     ) -> dict[str, Any]:
-        """Aus kWh werden Euro.
+        """Die Mengen und das Geld eines Zeitraums für die Ausgabe.
 
         * Bezugskosten   = bezogene kWh × Arbeitspreis + anteiliger Grundpreis
         * Einspeiseerlös = eingespeiste kWh × Vergütung
         * Ersparnis      = selbst genutzte kWh × Arbeitspreis
         * Ertrag         = Ersparnis + Einspeiseerlös
 
-        Der Grundpreis ist eine monatliche Pauschale. Er wird nach der bisher
-        verstrichenen Zeit verteilt, sonst stünde am Ersten des Monats ein
-        voller Monatsbeitrag in der Tagesansicht.
+        Gerechnet ist das schon: in _bewerten, jede Kilowattstunde zum Preis
+        des Augenblicks, in dem sie dazukam. Hier wird nur noch abgelesen -
+        mit dem heutigen Preis wird an dieser Stelle nichts mehr malgenommen.
+
+        Der Grundpreis ist eine monatliche Pauschale. Er läuft mit der
+        verstrichenen Zeit auf, sonst stünde am Ersten des Monats ein voller
+        Monatsbeitrag in der Tagesansicht.
 
         Dazu die beiden Verbrauchsmengen. Sie gehen in keinen Betrag ein und
         stehen trotzdem hier: Ohne sie ist "Ersparnis heute: 2,80 €" eine
@@ -954,13 +1186,13 @@ class Kostenrechner:
 
         kosten = None
         grundkosten = None
-        if preis is not None and bezug is not None:
-            anteil = _tage_seit(mengen.get("start"), jetzt) / TAGE_JE_MONAT
-            grundkosten = round(grundpreis * anteil, 2)
-            kosten = round(bezug * preis + grundkosten, 2)
+        if bezug is not None and (preis is not None or geld["cost"]):
+            grundkosten = round(geld["base"], 2)
+            kosten = round(geld["cost"] + grundkosten, 2)
         erloes = (
-            round(einspeisung * verguetung, 2)
-            if verguetung is not None and einspeisung is not None
+            round(geld["revenue"], 2)
+            if einspeisung is not None
+            and (verguetung is not None or geld["revenue"])
             else None
         )
         # Der umgeleitete Teil des Eigenverbrauchs zählt mit seinem eigenen
@@ -985,13 +1217,11 @@ class Kostenrechner:
         # als Strom. Das sieht nach einem Fehler aus, solange nur eine Zahl
         # dasteht.
         ersparnis = grundersparnis = umleitersparnis = None
-        if preis is not None and eigen is not None:
-            grundersparnis = round((eigen - umgeleitet) * preis, 2)
-            umleitersparnis = round(umgeleitet * (umleitpreis if umleitpreis
-                                                  is not None else preis), 2)
-            ersparnis = round(
-                eigen * preis + umgeleitet * _abstand(umleitpreis, preis), 2
-            )
+        if eigen is not None and (preis is not None or geld["savings"]):
+            gesamt = geld["savings"] + geld["divert"]
+            ersparnis = round(gesamt, 2)
+            umleitersparnis = round(geld["divert_value"], 2)
+            grundersparnis = round(gesamt - geld["divert_value"], 2)
         ertrag = None
         if ersparnis is not None or erloes is not None:
             ertrag = round((ersparnis or 0.0) + (erloes or 0.0), 2)
@@ -1042,7 +1272,7 @@ class Kostenrechner:
         verguetung: float | None,
         jetzt: datetime,
         preis_vorher: float | None = None,
-        umleitpreis: float | None = None,
+        davor: dict[str, Any] | None = None,
         vorher_umgeleitet: float = 0.0,
         konten: dict[str, dict[str, float]] | None = None,
         je_zeitraum: dict[str, dict[str, float | None]] | None = None,
@@ -1068,6 +1298,14 @@ class Kostenrechner:
         }
         konten = konten or {}
         je_zeitraum = je_zeitraum or {}
+        davor = davor or {}
+        # Die Vorgeschichte zu den Preisen, die für sie festgehalten sind -
+        # nicht zu den heutigen. Ein eigener Durchschnittspreis gewinnt.
+        frueher = (
+            preis_vorher if preis_vorher is not None else _zahl(davor.get("price"))
+        )
+        wert_davor = _zahl(davor.get("diverted"))
+        saetze_davor = davor.get("plants") or {}
         # Die Vorgeschichte wird nach ihrem eigenen Maßstab aufgeteilt: Was
         # eine Anlage bis zur Einrichtung erzeugt hat, sagt nichts darüber,
         # was sie seither liefert - eine Anlage von 2026 hat davor nichts
@@ -1086,13 +1324,11 @@ class Kostenrechner:
             konto = {**_leeres_konto(), **(konten.get(kennung) or {})}
             eingespeist = min(erzeugt, konto["export"] + vorher_eingespeist)
             eigen = max(0.0, erzeugt - eingespeist)
-            satz = _zahl(anlage.get("feed_in"))
-            if satz is None:
-                satz = verguetung
+            satz = _satz(anlage, verguetung)
+            satz_davor = _zahl(saetze_davor.get(kennung))
 
-            # Was vor dem ersten Lauf lag, wird mit dem Durchschnittspreis von
-            # damals bewertet - der Rest mit dem heutigen.
-            frueher = preis_vorher if preis_vorher is not None else preis
+            # Was vor dem ersten Lauf lag, wird mit dem Preis von damals
+            # bewertet - gemessen wurde jede Kilowattstunde zu ihrem eigenen.
             eigen_vorher = max(0.0, vorher_erzeugt - vorher_eingespeist)
             anteil_vorher = (
                 vorher_erzeugt / summe_vorher if summe_vorher > 0 else 0.0
@@ -1104,16 +1340,17 @@ class Kostenrechner:
                 round(
                     konto["savings"]
                     + eigen_vorher * (frueher or 0.0)
-                    + umgeleitet_vorher * _abstand(umleitpreis, frueher),
+                    + umgeleitet_vorher * _abstand(wert_davor, frueher),
                     2,
                 )
                 if preis is not None or konto["savings"]
                 else None
             )
-            # Die Einspeisung davor steht je Anlage fest und bekommt den Satz
-            # dieser Anlage; die gemessene ist schon zu ihrem Satz gebucht.
-            if satz is not None:
-                erloes = round(konto["revenue"] + vorher_eingespeist * satz, 2)
+            # Die Einspeisung davor steht je Anlage fest und bekommt den Satz,
+            # der für diese Anlage festgehalten ist; die gemessene ist schon zu
+            # ihrem Satz gebucht.
+            if satz_davor is not None:
+                erloes = round(konto["revenue"] + vorher_eingespeist * satz_davor, 2)
             else:
                 erloes = round(konto["revenue"], 2) if konto["revenue"] else None
             ertrag = None
@@ -1258,6 +1495,35 @@ def _anlagenbeginn(anlage: dict[str, Any], vorgabe: Any) -> Any:
 def _gerundet(wert: Any, stellen: int) -> float | None:
     zahl = _zahl(wert)
     return None if zahl is None else round(zahl, stellen)
+
+
+def _leeres_geld() -> dict[str, float]:
+    """Das Geld eines Zeitraums, Posten für Posten.
+
+    ``divert`` ist der Korrekturposten des Überschussverbrauchers - um so viel
+    ist eine umgeleitete Kilowattstunde mehr oder weniger wert als eine
+    gewöhnlich selbst genutzte. ``divert_value`` ist ihr voller Wert, für die
+    getrennte Zeile in der Karte.
+    """
+    return {
+        "cost": 0.0,
+        "revenue": 0.0,
+        "savings": 0.0,
+        "divert": 0.0,
+        "divert_value": 0.0,
+        "base": 0.0,
+    }
+
+
+def _neue_marke(start: str) -> dict[str, Any]:
+    """Eine Periodenmarke, die bei null beginnt - mit Geld, das bei null beginnt."""
+    return {"start": start, "werte": {}, "geld": _leeres_geld(), "bewertet": {}}
+
+
+def _satz(anlage: dict[str, Any], verguetung: float | None) -> float | None:
+    """Die Einspeisevergütung einer Anlage - ihre eigene, sonst die des Standorts."""
+    satz = _zahl(anlage.get("feed_in"))
+    return satz if satz is not None else verguetung
 
 
 def _leeres_konto() -> dict[str, float]:

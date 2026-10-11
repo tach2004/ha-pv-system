@@ -148,9 +148,15 @@ from .const import (
     CONF_SHOW_STRINGS,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
+    CONF_TEMP_COLD,
+    CONF_TEMP_HOT,
+    CONF_TEMP_WARM,
     CONF_TILT,
     DEFAULT_NAME,
     DEFAULT_PLANT_NAME,
+    DEFAULT_TEMP_COLD,
+    DEFAULT_TEMP_HOT,
+    DEFAULT_TEMP_WARM,
     DIVERTER_FUELS,
     DIVERTER_ICONS,
     DIVERTER_PRICE_UNITS,
@@ -320,6 +326,35 @@ def _felder_laderegler() -> dict[Any, Any]:
     }
 
 
+def _felder_temperatur() -> dict[Any, Any]:
+    """Die drei Schwellen, ab denen die Karte bei der Temperatur warnt.
+
+    Gleich für Batterie und Wechselrichter, aber je Gerät eingestellt: Eine
+    Lithiumzelle will es anders als ein Wechselrichter im Heizungskeller.
+    """
+    return {
+        vol.Optional(CONF_TEMP_COLD): _zahl(-40, 120, 1, "°C"),
+        vol.Optional(CONF_TEMP_WARM): _zahl(-40, 120, 1, "°C"),
+        vol.Optional(CONF_TEMP_HOT): _zahl(-40, 120, 1, "°C"),
+    }
+
+
+def _grenzen_pruefen(eingabe: dict[str, Any]) -> dict[str, str]:
+    """Kälte, warm, heiß müssen aufsteigen - sonst wird eine Farbe nie erreicht."""
+    # Ein leeres Feld steht für seine Vorgabe - so wie es nachher auch gilt.
+    kalt, warm, heiss = (
+        vorgabe if eingabe.get(feld) in (None, "") else float(eingabe[feld])
+        for feld, vorgabe in (
+            (CONF_TEMP_COLD, DEFAULT_TEMP_COLD),
+            (CONF_TEMP_WARM, DEFAULT_TEMP_WARM),
+            (CONF_TEMP_HOT, DEFAULT_TEMP_HOT),
+        )
+    )
+    if not kalt < warm < heiss:
+        return {"base": "temperature_order"}
+    return {}
+
+
 def _felder_batterie() -> dict[Any, Any]:
     return {
         vol.Optional(CONF_ENABLED): bool,
@@ -338,6 +373,7 @@ def _felder_batterie() -> dict[Any, Any]:
         vol.Optional(CONF_BATTERY_VOLTAGE): _sensor("voltage"),
         vol.Optional(CONF_BATTERY_CURRENT): _sensor("current"),
         vol.Optional(CONF_BATTERY_TEMPERATURE): _sensor("temperature"),
+        **_felder_temperatur(),
         vol.Optional(CONF_BATTERY_HEALTH): _sensor(),
         vol.Optional(CONF_BATTERY_CYCLES): _sensor(),
         vol.Optional(CONF_BATTERY_CHARGED): _sensor("energy"),
@@ -360,6 +396,7 @@ def _felder_wechselrichter() -> dict[Any, Any]:
         vol.Optional(CONF_INVERTER_DC_VOLTAGE): _sensor("voltage"),
         vol.Optional(CONF_INVERTER_FREQUENCY): _sensor("frequency"),
         vol.Optional(CONF_INVERTER_TEMPERATURE): _sensor("temperature"),
+        **_felder_temperatur(),
         vol.Optional(CONF_INVERTER_ENERGY): _sensor("energy"),
         vol.Optional(CONF_INVERTER_MODE): _beliebig(),
     }
@@ -606,6 +643,9 @@ class PvSystemOptionsFlow(OptionsFlow):
         self._entry = entry
         self._daten = normalisieren(dict(entry.options))
         self._anlage_index: int | None = None
+        # Ob mit dem Speichern auch die Preise der Vorgeschichte gehen - siehe
+        # async_step_reset.
+        self._davor_vergessen = False
 
     # ----------------------------------------------------------- Hauptmenü
 
@@ -624,6 +664,9 @@ class PvSystemOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Alles übernehmen und den Dialog schließen."""
+        koordinator = getattr(self._entry, "runtime_data", None)
+        if self._davor_vergessen and koordinator is not None:
+            koordinator.kosten.davor_vergessen()
         return self.async_create_entry(title="", data=self._daten)
 
     # ----------------------------------------------------------- Anlagen
@@ -778,14 +821,20 @@ class PvSystemOptionsFlow(OptionsFlow):
     async def async_step_battery(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        fehler: dict[str, str] = {}
         if user_input is not None:
-            self._anlage[CONF_BATTERY] = batterie_normalisieren(user_input)
-            return await self.async_step_plant_menu()
+            fehler = _grenzen_pruefen(user_input)
+            if not fehler:
+                self._anlage[CONF_BATTERY] = batterie_normalisieren(user_input)
+                return await self.async_step_plant_menu()
 
         felder = _felder_batterie()
         return self.async_show_form(
             step_id="battery",
-            data_schema=_mit_vorschlag(felder, self._anlage[CONF_BATTERY]),
+            data_schema=_mit_vorschlag(
+                felder, user_input if fehler else self._anlage[CONF_BATTERY]
+            ),
+            errors=fehler,
             description_placeholders={"plant": self._anlage[CONF_NAME]},
         )
 
@@ -809,14 +858,20 @@ class PvSystemOptionsFlow(OptionsFlow):
     async def async_step_inverter(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        fehler: dict[str, str] = {}
         if user_input is not None:
-            self._anlage[CONF_INVERTER] = wechselrichter_normalisieren(user_input)
-            return await self.async_step_plant_menu()
+            fehler = _grenzen_pruefen(user_input)
+            if not fehler:
+                self._anlage[CONF_INVERTER] = wechselrichter_normalisieren(user_input)
+                return await self.async_step_plant_menu()
 
         felder = _felder_wechselrichter()
         return self.async_show_form(
             step_id="inverter",
-            data_schema=_mit_vorschlag(felder, self._anlage[CONF_INVERTER]),
+            data_schema=_mit_vorschlag(
+                felder, user_input if fehler else self._anlage[CONF_INVERTER]
+            ),
+            errors=fehler,
             description_placeholders={"plant": self._anlage[CONF_NAME]},
         )
 
@@ -982,16 +1037,30 @@ class PvSystemOptionsFlow(OptionsFlow):
         der Integration, die „davor"-Angaben stehen in der Konfiguration. Wer
         nur das Erste leert, behält einen Gesamtzeitraum, der mit den alten
         Zahlen weiterrechnet - und genau das ist meistens gewollt.
+
+        Der dritte Haken leert nichts, er rechnet die gemessene Ersparnis
+        einmal neu - für Stände, die eine ältere Fassung zu hoch gebucht hat.
+        Wer das Gemessene ohnehin verwirft, braucht ihn nicht.
         """
         koordinator = getattr(self._entry, "runtime_data", None)
 
         if user_input is not None:
-            if user_input.get("reset_confirm") and koordinator is not None:
-                koordinator.kosten.zuruecksetzen()
+            if koordinator is not None:
+                if user_input.get("reset_confirm"):
+                    koordinator.kosten.zuruecksetzen()
+                elif user_input.get("reset_savings"):
+                    koordinator.kosten.ersparnis_neu_bewerten()
             if user_input.get("reset_prior"):
                 self._vorher_leeren()
+                # Mit der Vorgeschichte gehen die Preise, zu denen sie
+                # bewertet wurde - wer sie neu einträgt, bekommt die von
+                # jetzt. Aber erst beim Speichern, wie die Felder selbst: Wer
+                # den Dialog ohne Speichern schließt, hat nichts geändert.
+                self._davor_vergessen = True
             if koordinator is not None and (
-                user_input.get("reset_confirm") or user_input.get("reset_prior")
+                user_input.get("reset_confirm")
+                or user_input.get("reset_prior")
+                or user_input.get("reset_savings")
             ):
                 await koordinator.async_refresh()
             return await self.async_step_init()
@@ -1002,6 +1071,7 @@ class PvSystemOptionsFlow(OptionsFlow):
                 {
                     vol.Optional("reset_confirm", default=False): bool,
                     vol.Optional("reset_prior", default=False): bool,
+                    vol.Optional("reset_savings", default=False): bool,
                 }
             ),
             description_placeholders={
@@ -1063,7 +1133,8 @@ def _kostenstand(koordinator: Any) -> str:
 
     return (
         f"- Bezogen {_menge(messung.get('import_kwh'))}, "
-        f"eingespeist {_menge(messung.get('export_kwh'))}\n"
+        f"eingespeist {_menge(messung.get('export_kwh'))}, "
+        f"selbst genutzt {_menge(messung.get('own_kwh'))}\n"
         f"- Kosten {_geld(messung.get('cost'))}, "
         f"Vergütung {_geld(messung.get('revenue'))}, "
         f"Ersparnis {_geld(messung.get('savings'))}\n"

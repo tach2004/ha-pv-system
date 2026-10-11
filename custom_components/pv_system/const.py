@@ -98,6 +98,14 @@ CONF_INVERTER_ENERGY: Final = "energy_entity"
 CONF_INVERTER_MODE: Final = "mode_entity"
 CONF_INVERTER_HYBRID: Final = "hybrid"
 
+# ----------------------------------------------------------------- Temperatur
+# Ab wann die Karte bei der Temperatur warnt - je Batterie und je
+# Wechselrichter einstellbar, in °C. Unter der Kälteschwelle blau und
+# blinkend, ab "warm" orange, ab "heiß" rot und blinkend, dazwischen grün.
+CONF_TEMP_COLD: Final = "temp_cold"
+CONF_TEMP_WARM: Final = "temp_warm"
+CONF_TEMP_HOT: Final = "temp_hot"
+
 # ----------------------------------------------------------------- Netz
 CONF_GRID_NAME: Final = "name"
 CONF_METER_MODEL: Final = "meter_model"
@@ -347,6 +355,12 @@ DEFAULT_SYSTEM_VOLTAGE: Final = "48"
 DEFAULT_RATED_POWER: Final = 3000.0
 DEFAULT_PHASES: Final = 3
 DEFAULT_MIN_SOC: Final = 10.0
+# Die Stufen einer Lithiumzelle: Unter fünf Grad darf sie nicht mehr geladen
+# werden, über vierzig altert sie schneller. Für den Wechselrichter gelten
+# dieselben Vorgaben - wer es anders will, stellt es je Gerät ein.
+DEFAULT_TEMP_COLD: Final = 5.0
+DEFAULT_TEMP_WARM: Final = 30.0
+DEFAULT_TEMP_HOT: Final = 40.0
 
 # Ohne Messwerte bleibt die Karte nicht leer: Sie zeigt die Auslegung.
 UNKNOWN: Final = None

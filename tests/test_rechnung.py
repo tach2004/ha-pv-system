@@ -375,6 +375,21 @@ def test_temperatur_in_fahrenheit():
     assert k._berechnen()["plants"][0]["battery"]["temperature"] == 20.0
 
 
+def test_die_temperaturschwellen_gehen_je_geraet_an_die_karte():
+    """Die Karte färbt nach dem, was beim Gerät eingestellt ist."""
+    optionen = _aufbau()
+    optionen["plants"][0]["inverter"].update(temp_cold=0, temp_warm=50, temp_hot=65)
+    k, _ = _koordinator(optionen)
+    anlage = k._berechnen()["plants"][0]
+    assert anlage["inverter"]["temperature_limits"] == {
+        "cold": 0.0, "warm": 50.0, "hot": 65.0,
+    }
+    # Ohne Angabe die Stufen einer Zelle.
+    assert anlage["battery"]["temperature_limits"] == {
+        "cold": 5.0, "warm": 30.0, "hot": 40.0,
+    }
+
+
 def test_unbrauchbare_zustaende_werden_ignoriert():
     k, hass = _koordinator()
     hass.states.setzen("sensor.pv1", "unavailable")

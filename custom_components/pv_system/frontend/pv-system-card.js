@@ -145,40 +145,24 @@ function wattVz(wert, sprache) {
 /**
  * Wie warm ist zu warm?
  *
- * Die Grenzen sind bewusst grob: Es geht darum, ob jemand hinsehen sollte,
- * nicht um ein Grad hin oder her.
+ * Dieselben Farben für Batterie und Wechselrichter: unter der Kälteschwelle
+ * blau, bis "warm" grün, bis "heiß" orange, darüber rot. Die beiden Ränder
+ * blinken - oben droht Alterung oder Drosselung, unten darf eine
+ * Lithiumzelle nicht mehr geladen werden.
+ *
+ * Die Schwellen stellt man je Gerät in der Integration ein; ohne Angabe
+ * gelten 5, 30 und 40 Grad, die Stufen einer Lithiumzelle.
  */
-function _waerme(grad) {
+function _waerme(grad, grenzen) {
   // Entschieden wird an der Zahl, die dasteht: 29,6 Grad zeigt die Karte als
   // "30 °C" - und die darf dann nicht grün sein, während 30,0 orange ist.
   const n = zahl(grad) === null ? null : Math.round(zahl(grad));
   if (n === null) return "";
-  // Über vierzig und unter fünf Grad wird es für eine Lithiumzelle kritisch:
-  // oben droht Alterung, unten darf sie nicht mehr geladen werden. Beides
-  // bekommt deshalb nicht nur eine Farbe, sondern auch einen Blinker.
-  if (n >= 40) return "heiss warnen";
-  if (n >= 30) return "warm";
-  if (n < 5) return "kalt warnen";
-  return "kuehl";
-}
-
-/**
- * Die Temperatur eines Wechselrichters - dieselben Farben wie beim Akku,
- * aber andere Stufen.
- *
- * Ein Wechselrichter verträgt deutlich mehr Wärme als eine Lithiumzelle;
- * vierzig Grad am Kühlkörper sind an einem Sommernachmittag unter Last ganz
- * gewöhnlich. Ab fünfzig wird es warm, ab fünfundsechzig drosseln viele Geräte
- * ihre Leistung - wo genau, steht im Datenblatt, die Stufen hier sind bewusst
- * vorsichtig. Kälte ist für ihn kein Thema, deshalb gibt es unten keine
- * Warnung.
- */
-function _wrWaerme(grad) {
-  // Wie beim Akku: entschieden wird an der angezeigten, ganzen Zahl.
-  const n = zahl(grad) === null ? null : Math.round(zahl(grad));
-  if (n === null) return "";
-  if (n >= 65) return "heiss warnen";
-  if (n >= 50) return "warm";
+  const g = grenzen || {};
+  const schwelle = (wert, vorgabe) => (zahl(wert) === null ? vorgabe : zahl(wert));
+  if (n >= schwelle(g.hot, 40)) return "heiss warnen";
+  if (n >= schwelle(g.warm, 30)) return "warm";
+  if (n < schwelle(g.cold, 5)) return "kalt warnen";
   return "kuehl";
 }
 
@@ -2272,7 +2256,7 @@ class PvSystemCard extends HTMLElement {
         this._attr(
           `${id}:battery:temp`,
           "class",
-          `mini rechts ${_waerme(b.temperature)}`
+          `mini rechts ${_waerme(b.temperature, b.temperature_limits)}`
         );
         const anteil = Math.max(0, Math.min(100, zahl(b.soc) || 0));
         this._attr(
@@ -2326,7 +2310,7 @@ class PvSystemCard extends HTMLElement {
         this._attr(
           `${id}:inverter:temp`,
           "class",
-          `mini rechts ${_wrWaerme(w.temperature)}`
+          `mini rechts ${_waerme(w.temperature, w.temperature_limits)}`
         );
         // Das Vorzeichen entscheidet über Richtung und Farbe. Minus heißt,
         // der Wechselrichter nimmt von der Phase statt abzugeben - im
@@ -3036,9 +3020,11 @@ class PvSystemCard extends HTMLElement {
    * Die Kostenübersicht als Tabelle.
    *
    * Gerechnet wird aus den Zählerständen: Der Stand zu Beginn des Tages, des
-   * Monats und des Jahres ist gemerkt, die Differenz mal Preis ergibt den
-   * Betrag. Deshalb stehen hier am ersten Tag kleine Zahlen - rückwirkend
-   * lässt sich nichts ausrechnen, was vorher niemand gezählt hat.
+   * Monats und des Jahres ist gemerkt, die Differenz ergibt die Menge. Den
+   * Betrag schreibt die Integration Lauf für Lauf mit, jede Kilowattstunde zum
+   * Preis ihres Augenblicks - hier wird nichts mit einem Preis malgenommen.
+   * Deshalb stehen am ersten Tag kleine Zahlen - rückwirkend lässt sich
+   * nichts ausrechnen, was vorher niemand gezählt hat.
    */
   _kostenZeilen(l) {
     const k = this._daten.costs || {};

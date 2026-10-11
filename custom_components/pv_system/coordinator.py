@@ -132,6 +132,9 @@ from .const import (
     CONF_RATED_POWER,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
+    CONF_TEMP_COLD,
+    CONF_TEMP_HOT,
+    CONF_TEMP_WARM,
     CONF_TILT,
     DEFAULT_DIVERTER_EFFICIENCY,
     FUEL_ELECTRICITY,
@@ -704,6 +707,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "temperature": units.rund(
                 units.celsius(self.hass, conf[CONF_BATTERY_TEMPERATURE])
             ),
+            "temperature_limits": _temperaturgrenzen(conf),
             "health": units.rund(units.percent(self.hass, conf[CONF_BATTERY_HEALTH])),
             "cycles": units.raw(self.hass, conf[CONF_BATTERY_CYCLES]),
             "charged_energy": units.rund(
@@ -819,6 +823,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "temperature": units.rund(
                 units.celsius(self.hass, conf[CONF_INVERTER_TEMPERATURE])
             ),
+            "temperature_limits": _temperaturgrenzen(conf),
             "energy": units.rund(units.kwh(self.hass, conf[CONF_INVERTER_ENERGY]), 2),
             "mode": units.text(self.hass, conf[CONF_INVERTER_MODE]),
             "entities": {
@@ -1577,3 +1582,12 @@ def _abrechnungsertrag(anlagen: list[dict[str, Any]]) -> float | None:
     if len(gezaehlt) != len(staende):
         return None
     return round(sum(gezaehlt), 3)
+
+
+def _temperaturgrenzen(conf: dict[str, Any]) -> dict[str, float]:
+    """Die Schwellen, ab denen die Karte bei der Temperatur warnt - in °C."""
+    return {
+        "cold": conf[CONF_TEMP_COLD],
+        "warm": conf[CONF_TEMP_WARM],
+        "hot": conf[CONF_TEMP_HOT],
+    }
