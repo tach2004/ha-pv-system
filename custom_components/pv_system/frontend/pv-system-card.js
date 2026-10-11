@@ -216,6 +216,20 @@ function kwh(wert, sprache) {
 }
 
 /** Ein Geldbetrag in der eingestellten Währung. */
+/**
+ * Der Ertrag einer Anlage in einem Zeitraum: Menge und Geld in einer Zeile,
+ * wie in der Kostenübersicht ("2,26 kWh · 0,76 EUR"). Ohne Preis steht nur
+ * die Menge da - eine 0,00 sähe aus wie eine Anlage, die nichts bringt.
+ */
+function ertragZeile(zeitraum, quelle, waehrung, sprache) {
+  const z = zeitraum || {};
+  if (zahl(z.yield_kwh) === null) return "–";
+  const menge = `${einheit(z.yield_kwh, "kWh", 2, sprache)}${quelle || ""}`;
+  return zahl(z.yield) === null
+    ? menge
+    : `${menge} · ${geld(z.yield, waehrung, sprache)}`;
+}
+
 function geld(wert, waehrung, sprache) {
   const n = zahl(wert);
   if (n === null) return "–";
@@ -2808,18 +2822,13 @@ class PvSystemCard extends HTMLElement {
         ["DC-Spannung", einheit(w.dc_voltage, "V", 2, l), w.entities.dc_voltage],
         ["Frequenz", einheit(w.frequency, "Hz", 2, l), w.entities.frequency],
         ["Temperatur", einheit(w.temperature, "°C", 1, l), w.entities.temperature],
-        ["Ertrag", einheit(w.energy, "kWh", 2, l), w.entities.energy],
-        // Was heute hinter dem Wechselrichter angekommen ist - der Wert, mit
-        // dem sich die Anlagen vergleichen lassen. Nur wenn wirklich dieser
-        // Zähler die Anlage zählt; sonst stammte die Zahl von den Modulen,
+        ["Ertragszähler", einheit(w.energy, "kWh", 2, l), w.entities.energy],
+        // Was hinter dem Wechselrichter angekommen ist und was es eingebracht
+        // hat - heute, diesen Monat, dieses Jahr. Nur wenn wirklich dieser
+        // Zähler die Anlage zählt; sonst stammte die Menge von den Modulen,
         // also von vor dem Wechselrichter.
         ...(w.entities.energy
-          ? [
-              [
-                "Ertrag heute",
-                einheit((anlage.costs || {}).yield_day_kwh, "kWh", 2, l),
-              ],
-            ]
+          ? this._ertragZeilen(anlage, "", l)
           : []),
         ["Betriebsart", w.mode || "–", w.entities.mode],
         ["Gerät", [w.manufacturer, w.model || w.name].filter(Boolean).join(" ") || "–"],
@@ -3164,6 +3173,25 @@ class PvSystemCard extends HTMLElement {
    * deshalb nach dem Anteil an der Gesamterzeugung aufgeteilt. Das steht auch
    * so in der Tabelle, damit die Zahl nicht genauer wirkt, als sie ist.
    */
+  /**
+   * Ertrag einer Anlage heute, diesen Monat, dieses Jahr - Menge und Geld.
+   *
+   * Das Geld ist dasselbe wie in der Kachel "Ertrag heute", nur je Anlage:
+   * Ersparnis plus Vergütung, der Überschuss mit dem Wert dessen, was er
+   * ersetzt. Zusammen ergeben die Anlagen die Zahl der Kachel.
+   */
+  _ertragZeilen(anlage, quelle, l) {
+    const k = anlage.costs || {};
+    const p = k.periods || {};
+    if (zahl((p.day || {}).yield_kwh) === null) return [];
+    const w = (this._daten.costs || {}).currency;
+    return [
+      ["Ertrag heute", ertragZeile(p.day, quelle, w, l)],
+      ["Ertrag diesen Monat", ertragZeile(p.month, quelle, w, l)],
+      ["Ertrag dieses Jahr", ertragZeile(p.year, quelle, w, l)],
+    ];
+  }
+
   _anlagenZeilen(anlage, l) {
     const k = anlage.costs || {};
     const w = (this._daten.costs || {}).currency;
@@ -3174,19 +3202,11 @@ class PvSystemCard extends HTMLElement {
     // dann auch dranstehen.
     const quelle =
       anlage.inverter.enabled && anlage.inverter.entities.energy ? "" : " (Module)";
-    const erzeugt = (wert) =>
-      wert === null || wert === undefined ? "–" : `${einheit(wert, "kWh", 2, l)}${quelle}`;
     const zeilen = [
       ["Leistung jetzt", watt(m.power, l), m.entities.power],
-      // Zum Vergleich der Anlagen untereinander - unabhängig davon, ob
-      // Preise eingetragen sind. Kilowattstunden sind keine Kosten.
-      ...(k.yield_day_kwh !== null && k.yield_day_kwh !== undefined
-        ? [
-            ["Erzeugt heute", erzeugt(k.yield_day_kwh)],
-            ["Erzeugt diesen Monat", erzeugt(k.yield_month_kwh)],
-            ["Erzeugt dieses Jahr", erzeugt(k.yield_year_kwh)],
-          ]
-        : []),
+      // Zum Vergleich der Anlagen untereinander: die Menge immer, das Geld,
+      // sobald ein Preis eingetragen ist.
+      ...this._ertragZeilen(anlage, quelle, l),
       ["Installiert", m.peak_total ? watt(m.peak_total, l) : "–"],
       [
         "Wechselrichter",

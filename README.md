@@ -607,12 +607,25 @@ Beim Update auf 2.1 wird jede Anlage einmal mit dem Stand vorbelegt, den sie
 bis dahin zeigte. Die Zahl in der Karte springt nicht; sie hört nur auf zu
 wandern.
 
-**Was jede Anlage heute erzeugt hat** steht in ihrer Kostenansicht (Tipp auf
-den Ertrag über den Modulen) für heute, den Monat und das Jahr, und im
-Wechselrichter unter *Ertrag heute*. Gezählt wird hinter dem Wechselrichter,
-sobald einer mit Ertragszähler eingetragen ist – also nach den Verlusten in
-Laderegler, Leitung und Wechselrichter. Fehlt der, kommt die Zahl von den
-Modulen und trägt den Zusatz „(Module)".
+**Was jede Anlage heute, diesen Monat und dieses Jahr gebracht hat** steht in
+ihrer Kostenansicht (Tipp auf den Ertrag über den Modulen) und im
+Wechselrichter, jeweils als Menge und Geld: `Ertrag heute  3,47 kWh · 1,17 €`.
+
+* **Die Menge** wird hinter dem Wechselrichter gezählt, sobald einer mit
+  Ertragszähler eingetragen ist – also nach den Verlusten in Laderegler,
+  Leitung und Wechselrichter. Fehlt der, kommt sie von den Modulen und trägt
+  den Zusatz „(Module)"; im Wechselrichter steht sie dann nicht.
+* **Das Geld** ist der *Ertrag*, wie in der Kachel: Ersparnis plus
+  Einspeisevergütung, die Kilowattstunde im Überschussverbraucher mit dem
+  Wert dessen, was sie ersetzt. Es wird genauso Lauf für Lauf gebucht wie der
+  Gesamtertrag der Anlage, nur in einem Konto je Zeitraum, das um Mitternacht,
+  am Monatsersten und am 1. Januar bei null beginnt. Alle Anlagen zusammen
+  ergeben deshalb die Zahl der Kachel – bis auf Rundung je Anlage.
+* Ohne Arbeitspreis steht nur die Menge da, keine 0,00 €.
+
+Beim Update auf 2.2 werden die Konten von heute, diesem Monat und diesem Jahr
+einmal mit der Aufteilung nach der Erzeugung im Zeitraum belegt; die Kachel
+ändert sich dadurch nicht.
 
 ### Überschussverbraucher
 
