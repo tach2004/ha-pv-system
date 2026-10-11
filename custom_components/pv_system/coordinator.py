@@ -132,6 +132,9 @@ from .const import (
     CONF_RATED_POWER,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
+    CONF_TEMP_COLD,
+    CONF_TEMP_HOT,
+    CONF_TEMP_WARM,
     CONF_TILT,
     DEFAULT_DIVERTER_EFFICIENCY,
     FUEL_ELECTRICITY,
@@ -389,6 +392,14 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for anlage in anlagen:
             zaehler[f"anlage:{anlage[CONF_ID]}"] = _anlagenzaehler(anlage)
 
+        # Und was jede Anlage in diesem Augenblick liefert. Daran entscheidet
+        # sich, wem die Kilowattstunde gehört, die gerade ins Netz oder in den
+        # Heizstab geht - an der Leistung und nicht am Zähler, weil ein Zähler,
+        # der nur alle halbe Minute meldet, dazwischen null zeigt.
+        leistungen_je_anlage = {
+            f"anlage:{anlage[CONF_ID]}": _anlagenleistung(anlage) for anlage in anlagen
+        }
+
         return self.kosten.rechnen(
             zaehler,
             {
@@ -426,6 +437,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "import": netz["import_power"],
                 "export": netz["export_power"],
                 "own": eigen_jetzt,
+                **leistungen_je_anlage,
             },
             [self._anlagenkosten(anlage) for anlage in anlagen],
         )
@@ -695,6 +707,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "temperature": units.rund(
                 units.celsius(self.hass, conf[CONF_BATTERY_TEMPERATURE])
             ),
+            "temperature_limits": _temperaturgrenzen(conf),
             "health": units.rund(units.percent(self.hass, conf[CONF_BATTERY_HEALTH])),
             "cycles": units.raw(self.hass, conf[CONF_BATTERY_CYCLES]),
             "charged_energy": units.rund(
@@ -810,6 +823,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "temperature": units.rund(
                 units.celsius(self.hass, conf[CONF_INVERTER_TEMPERATURE])
             ),
+            "temperature_limits": _temperaturgrenzen(conf),
             "energy": units.rund(units.kwh(self.hass, conf[CONF_INVERTER_ENERGY]), 2),
             "mode": units.text(self.hass, conf[CONF_INVERTER_MODE]),
             "entities": {
@@ -1521,6 +1535,20 @@ def _anlagenzaehler(anlage: dict[str, Any]) -> float | None:
     return anlage["modules"]["energy"]
 
 
+def _anlagenleistung(anlage: dict[str, Any]) -> float | None:
+    """Was die Anlage gerade abgibt - hinter dem Wechselrichter, wenn es einen gibt.
+
+    Dieselbe Reihenfolge wie beim Ertragszähler: Der Wechselrichter misst,
+    was wirklich im Haus ankommt; die Module davor wissen nichts von den
+    Verlusten dazwischen. Zieht ein Hybrid gerade aus dem Netz, ist das keine
+    Abgabe - die Rechnung macht daraus null.
+    """
+    wr = anlage["inverter"]
+    if wr["enabled"] and wr.get("power") is not None:
+        return wr["power"]
+    return anlage["modules"].get("power")
+
+
 def _ertragszaehler_entitaet(anlage: dict[str, Any]) -> str | None:
     """Welche Entität den Ertrag dieser Anlage zählt - oder keine.
 
@@ -1554,3 +1582,12 @@ def _abrechnungsertrag(anlagen: list[dict[str, Any]]) -> float | None:
     if len(gezaehlt) != len(staende):
         return None
     return round(sum(gezaehlt), 3)
+
+
+def _temperaturgrenzen(conf: dict[str, Any]) -> dict[str, float]:
+    """Die Schwellen, ab denen die Karte bei der Temperatur warnt - in °C."""
+    return {
+        "cold": conf[CONF_TEMP_COLD],
+        "warm": conf[CONF_TEMP_WARM],
+        "hot": conf[CONF_TEMP_HOT],
+    }

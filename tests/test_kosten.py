@@ -123,18 +123,24 @@ def test_differenz_zum_periodenbeginn():
 
 
 def test_zaehlerwechsel_erzeugt_keinen_negativen_betrag():
-    """Fällt ein Zähler auf null zurück, wird neu verankert."""
+    """Fällt ein Zähler auf null zurück, wird neu verankert.
+
+    Was der alte Zähler heute schon gezählt hat, bleibt stehen - als Menge und
+    als Betrag. Bis 2.1 fiel der Tag auf null; seit jeder Zeitraum sein Geld
+    selbst mitschreibt, stünden sonst 13,60 Euro neben 0 kWh.
+    """
     r = _rechner()
     r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, PREISE, {})
     r.rechnen({"import": 140.0, "export": 0.0, "own": 0.0}, PREISE, {})
     # Neuer Zähler, er beginnt wieder bei null.
     ergebnis = r.rechnen({"import": 3.0, "export": 0.0, "own": 0.0}, PREISE, {})
-    assert ergebnis["periods"]["day"]["import_kwh"] == 0
-    assert ergebnis["periods"]["day"]["cost"] == 0.0
+    assert ergebnis["periods"]["day"]["import_kwh"] == 40.0
+    assert ergebnis["periods"]["day"]["cost"] == round(40 * 0.34, 2)
 
-    # Ab da wird wieder normal weitergezählt.
+    # Ab da wird wieder normal weitergezählt - nichts negativ, nichts doppelt.
     ergebnis = r.rechnen({"import": 5.5, "export": 0.0, "own": 0.0}, PREISE, {})
-    assert ergebnis["periods"]["day"]["import_kwh"] == 2.5
+    assert ergebnis["periods"]["day"]["import_kwh"] == 42.5
+    assert ergebnis["periods"]["day"]["cost"] == round(42.5 * 0.34, 2)
 
 
 def test_neuer_tag_setzt_nur_den_tag_zurueck():
@@ -297,11 +303,13 @@ def test_eine_andere_entitaet_wird_nicht_als_verbrauch_gerechnet():
     # Jetzt der Tausch.
     ergebnis = r.rechnen({"import": 48000.0, "export": 0.0, "own": 0.0}, PREISE, {})
     assert ergebnis["periods"]["total"]["cost"] == round(10 * 0.34, 2)
-    assert ergebnis["periods"]["day"]["import_kwh"] == 0.0
+    assert ergebnis["periods"]["day"]["import_kwh"] == 10.0
+    assert ergebnis["periods"]["day"]["cost"] == round(10 * 0.34, 2)
 
     # Und ab da läuft es normal weiter.
     ergebnis = r.rechnen({"import": 48005.0, "export": 0.0, "own": 0.0}, PREISE, {})
-    assert ergebnis["periods"]["day"]["import_kwh"] == 5.0
+    assert ergebnis["periods"]["day"]["import_kwh"] == 15.0
+    assert ergebnis["periods"]["day"]["cost"] == round(15 * 0.34, 2)
 
 
 def test_ein_echter_sprung_nach_langer_pause_bleibt_erhalten():
@@ -674,7 +682,7 @@ def test_nach_dem_tageswechsel_stimmt_der_periodenanfang():
 
 
 def test_preisaenderung_schreibt_die_vergangenheit_nicht_um():
-    """Der Geldspeicher bewertet jede Differenz mit dem Preis von damals."""
+    """Jeder Zeitraum bewertet jede Differenz mit dem Preis von damals."""
     r = _rechner(schritt=timedelta(hours=2))
     billig = dict(PREISE, price=0.20)
     r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0}, billig, {})
@@ -687,9 +695,10 @@ def test_preisaenderung_schreibt_die_vergangenheit_nicht_um():
     ergebnis = r.rechnen({"import": 150.0, "export": 0.0, "own": 0.0}, teuer, {})
     assert ergebnis["periods"]["total"]["cost"] == 20.0 + 50 * 0.40
 
-    # Tag, Monat und Jahr rechnen weiter mit dem aktuellen Preis - über so
-    # kurze Strecken ist das richtig genug.
-    assert ergebnis["periods"]["day"]["cost"] == round(150 * 0.40, 2)
+    # Tag, Monat und Jahr genauso. Bis 2.1 rechneten sie mit dem heutigen
+    # Preis, und aus 40 Euro wurden mit dem neuen Tarif rückwirkend 60.
+    for periode in ("day", "month", "year"):
+        assert ergebnis["periods"][periode]["cost"] == 20.0 + 50 * 0.40, periode
 
 
 def test_ohne_preis_laeuft_der_speicher_nicht_los():
@@ -877,10 +886,11 @@ def test_ein_zitternder_eigenverbrauch_wirft_den_tag_nicht_weg():
     assert tag["savings"] == 0.70
 
     # Jetzt das Zittern: Der Stand fällt um dreißig Wattstunden zurück. Der
-    # Anker bleibt stehen - die Ersparnis gibt genau diese dreißig
-    # Wattstunden ab und nicht den ganzen Tag.
+    # Anker bleibt stehen, und was gebucht ist, bleibt gebucht - die
+    # Ersparnis wartet, bis der Stand sie wieder überholt.
     tag = rechner.rechnen({"own": 101.97}, preise, {})["periods"]["day"]
-    assert tag["savings"] == 0.69, "der Tag darf nicht von vorn beginnen"
+    assert tag["savings"] == 0.70, "der Tag darf nicht von vorn beginnen"
+    assert tag["own_kwh"] == 1.97
 
     # Und läuft danach weiter, ohne die Lücke doppelt zu zählen.
     tag = rechner.rechnen({"own": 103.0}, preise, {})["periods"]["day"]
@@ -894,12 +904,15 @@ def test_ein_echter_zaehlertausch_faellt_weiter_auf():
     rechner.rechnen({"own": 100.0}, preise, {})
     rechner.rechnen({"own": 102.0}, preise, {})
     # Ein neuer Zähler beginnt bei null - das sind hundert Kilowattstunden
-    # Rückfall, nicht dreißig Wattstunden.
+    # Rückfall, nicht dreißig Wattstunden. Neu verankert wird trotzdem, und
+    # die zwei Kilowattstunden des alten Zählers bleiben stehen.
     tag = rechner.rechnen({"own": 0.0}, preise, {})["periods"]["day"]
-    assert tag["savings"] == 0.0
-    # Und ab jetzt zählt der neue Zähler.
+    assert tag["own_kwh"] == 2.0
+    assert tag["savings"] == 0.70
+    # Und ab jetzt zählt der neue Zähler dazu - nicht hundert Kilowattstunden.
     tag = rechner.rechnen({"own": 1.0}, preise, {})["periods"]["day"]
-    assert tag["savings"] == 0.35
+    assert tag["own_kwh"] == 3.0
+    assert tag["savings"] == 1.05
 
 
 def test_ein_fehlender_zaehler_haelt_an_statt_zu_verankern():
@@ -1265,15 +1278,22 @@ def test_der_uebertrag_rettet_nur_den_letzten_echten_stand():
     assert ergebnis["plants"]["a1"]["yield_kwh"] == 9020.0
 
 
-def test_der_tag_fuellt_die_luecke_eines_tauschs_nicht():
-    """Nur der Gesamtzeitraum trägt weiter - Tag und Monat heilen von selbst."""
+def test_jeder_zeitraum_behaelt_was_vor_dem_tausch_gemessen_wurde():
+    """Menge und Betrag gehören zusammen - auch über einen Zählertausch.
+
+    Bis 2.1 trug nur der Gesamtzeitraum weiter, Tag, Monat und Jahr fingen
+    nach einem Tausch bei null an. Das ging, solange ihr Betrag bei jedem
+    Lauf neu aus der Menge entstand. Seit er mitgeschrieben wird, bleibt das
+    Geld stehen - und dann müssen auch die Kilowattstunden stehen bleiben.
+    """
     r = _rechner()
     r.rechnen({"import": 100.0, "export": 0.0, "own": 0.0}, PREISE, {})
     r.rechnen({"import": 140.0, "export": 0.0, "own": 0.0}, PREISE, {})
     ergebnis = r.rechnen({"import": 3.0, "export": 0.0, "own": 0.0}, PREISE, {})
-    assert ergebnis["periods"]["day"]["import_kwh"] == 0.0
-    # Der Gesamtzeitraum dagegen kennt die vierzig noch.
-    assert ergebnis["periods"]["total"]["import_kwh"] == 40.0
+    for periode in ("day", "month", "year", "total"):
+        zeitraum = ergebnis["periods"][periode]
+        assert zeitraum["import_kwh"] == 40.0, periode
+        assert zeitraum["cost"] == round(40 * 0.34, 2), periode
 
 
 def test_der_uebertrag_uebersteht_einen_neustart():
@@ -1465,6 +1485,459 @@ def test_umgeleitet_davor_ruehrt_das_gemessene_nicht_an():
     assert tag["savings"] == round(6 * 0.35 + 4 * 0.10, 2)
     assert tag["diverted_kwh"] == 4.0
 
+
+
+# ------------------------------------------- Ertrag je Anlage, Lauf für Lauf
+#
+# Bis 2.0 entstand der Ertrag einer Anlage bei jedem Lauf neu, und die ganze
+# bisherige Einspeisung wurde nach dem Anteil an der Lebenserzeugung verteilt.
+# Speiste mittags die große Anlage ein, wanderte ein Teil davon rückwirkend
+# zur kleinen - deren Ertrag sank, obwohl sie gar nichts tat.
+
+_DREI = [{"id": "gross", "investment": 4000.0, "prior_yield": 0.0},
+         {"id": "akku", "investment": 1000.0, "prior_yield": 0.0},
+         {"id": "klein", "investment": 800.0, "prior_yield": 0.0}]
+
+
+class _Tag:
+    """Ein Tag in halben Stunden, mit Zählern und Leistung je Anlage."""
+
+    def __init__(self, preise, anlagen=_DREI, zaehlertakt=1):
+        self.r = _rechner(schritt=timedelta(minutes=30))
+        self.preise, self.anlagen, self.takt = preise, anlagen, zaehlertakt
+        self.z = {"import": 0.0, "export": 0.0, "own": 0.0, "diverted": 0.0,
+                  **{f"anlage:{a['id']}": 0.0 for a in anlagen}}
+        self.wahr = {a["id"]: 0.0 for a in anlagen}
+        self.lauf = 0
+        self.erg = self.r.rechnen(dict(self.z), preise, {}, anlagen)
+
+    def schritt(self, export=0.0, divert=0.0, **kwh):
+        """``kwh`` je Anlage in dieser halben Stunde."""
+        self.lauf += 1
+        for kennung, menge in kwh.items():
+            self.wahr[kennung] += menge
+        erzeugt = sum(kwh.values())
+        self.z["export"] += export
+        self.z["own"] += erzeugt - export
+        self.z["diverted"] += divert
+        # Ein träger Ertragszähler meldet nur jeden n-ten Lauf - dazwischen
+        # steht er still. Die Leistung dagegen ist immer da.
+        if self.lauf % self.takt == 0:
+            for kennung, stand in self.wahr.items():
+                self.z[f"anlage:{kennung}"] = stand
+        leistung = {f"anlage:{k}": kwh.get(k, 0.0) * 2000 for k in self.wahr}
+        self.erg = self.r.rechnen(dict(self.z), self.preise, leistung, self.anlagen)
+        return {k: self.erg["plants"][k]["yield"] for k in self.wahr}
+
+
+def test_eine_anlage_verliert_nichts_wenn_eine_andere_einspeist():
+    """Der gemeldete Fall: nachts Akku, mittags speist die große ein."""
+    tag = _Tag({"price": 0.3376, "feed_in": None, "currency": "EUR"})
+    tag.schritt(akku=0.1)
+    nach_der_nacht = tag.schritt(akku=0.1)["akku"]
+    # Mittags liefert allein die große Anlage und speist dabei ein.
+    for _ in range(4):
+        assert tag.schritt(gross=1.5, export=1.0)["akku"] == nach_der_nacht
+
+
+def test_der_ertrag_einer_anlage_sinkt_nie():
+    """Über einen ganzen gemischten Tag, mit Heizstab und Einspeisung."""
+    tag = _Tag({"price": 0.3376, "feed_in": 0.08, "diverted": 0.112,
+                "currency": "EUR"})
+    vorher = None
+    for i in range(48):
+        if i < 12 or i > 40:
+            werte = tag.schritt(akku=0.08)
+        elif i % 3:
+            werte = tag.schritt(gross=1.2, klein=0.3, export=0.7,
+                                divert=0.3 if i % 2 else 0.0)
+        else:
+            werte = tag.schritt(gross=0.4, klein=0.1, akku=0.1)
+        if vorher:
+            for kennung, wert in werte.items():
+                assert wert >= vorher[kennung], (i, kennung, vorher[kennung], wert)
+        vorher = werte
+
+
+def test_ein_traeger_ertragszaehler_kostet_keine_kilowattstunde():
+    """Meldet der Zähler nur jede fünfte Runde, kommt am Ende dasselbe heraus."""
+    preise = {"price": 0.3376, "feed_in": 0.08, "currency": "EUR"}
+    flink, traege = _Tag(preise), _Tag(preise, zaehlertakt=5)
+    vorher = None
+    for _ in range(20):
+        flink.schritt(gross=1.0, klein=0.5, export=0.6)
+        werte = traege.schritt(gross=1.0, klein=0.5, export=0.6)
+        # Unterwegs nie ins Minus: Die Einspeisung wird jede Runde gebucht,
+        # der Zähler holt erst jede fünfte auf - dazwischen wartet die
+        # Buchung des Eigenverbrauchs, statt abzuziehen.
+        if vorher:
+            for kennung, wert in werte.items():
+                assert wert >= vorher[kennung], (kennung, vorher[kennung], wert)
+        vorher = werte
+    # Und am Ende steht dasselbe da wie mit einem flinken Zähler.
+    assert flink.erg["plants"] == traege.erg["plants"]
+
+
+def test_die_anlagen_ergeben_zusammen_den_standort():
+    """Jede Kilowattstunde landet genau einmal bei genau einer Anlage."""
+    tag = _Tag({"price": 0.30, "feed_in": 0.08, "diverted": 0.10,
+                "currency": "EUR"})
+    for i in range(20):
+        tag.schritt(gross=1.0, klein=0.5, akku=0.2 if i % 2 else 0.0,
+                    export=0.4, divert=0.2)
+    gesamt = tag.erg["periods"]["total"]
+    anlagen = tag.erg["plants"].values()
+    # Je Anlage auf den Cent gerundet - drei Rundungen, also höchstens
+    # anderthalb Cent Abstand.
+    assert abs(sum(a["savings"] for a in anlagen) - gesamt["savings"]) <= 0.015
+    assert abs(sum(a["revenue"] for a in anlagen) - gesamt["revenue"]) <= 0.015
+
+
+def test_ein_neuer_preis_bewertet_die_anlage_nicht_rueckwirkend():
+    """Wie am Standort: Was gebucht ist, bleibt zu seinem damaligen Preis."""
+    tag = _Tag({"price": 0.30, "currency": "EUR"})
+    for _ in range(4):
+        tag.schritt(gross=1.0)
+    vorher = tag.erg["plants"]["gross"]["savings"]
+    tag.preise = {"price": 0.50, "currency": "EUR"}
+    tag.schritt()  # nichts erzeugt, nur der Preis ist anders
+    assert tag.erg["plants"]["gross"]["savings"] == vorher
+
+
+def test_ein_speicher_von_vorher_wird_ohne_sprung_uebernommen():
+    """Beim Update hat der Speicher noch keine Konten - die Zahl muss stehen bleiben.
+
+    Vorbelegt wird mit der Aufteilung, die bis 2.0 galt: nach dem Anteil an
+    der Erzeugung seit dem ersten Lauf, zum heutigen Preis.
+    """
+    preise = {"price": 0.30, "feed_in": 0.08, "currency": "EUR"}
+    r = _rechner(schritt=timedelta(minutes=30))
+    anlagen = [{"id": "a", "investment": 1000.0}, {"id": "b", "investment": 1000.0}]
+    r.rechnen({"export": 0.0, "own": 0.0, "anlage:a": 0.0, "anlage:b": 0.0},
+              preise, {}, anlagen)
+    r.rechnen({"export": 4.0, "own": 16.0, "anlage:a": 15.0, "anlage:b": 5.0},
+              preise, {}, anlagen)
+    # So sah der Speicher vor dieser Fassung aus: ohne Konten je Anlage.
+    del r._rechner._marken["total"]["anlagen"]
+    erg = r.rechnen({"export": 4.0, "own": 16.0, "anlage:a": 15.0, "anlage:b": 5.0},
+                    preise, {}, anlagen)
+    # a hat drei Viertel erzeugt: 3 der 4 kWh Einspeisung, 12 selbst genutzt.
+    assert erg["plants"]["a"]["yield"] == round(12 * 0.30 + 3 * 0.08, 2)
+    assert erg["plants"]["b"]["yield"] == round(4 * 0.30 + 1 * 0.08, 2)
+
+
+def test_jede_anlage_kennt_ihren_ertrag_von_heute_in_kwh():
+    """Zum Vergleich der Anlagen untereinander - nicht nur in Euro."""
+    tag = _Tag({"price": 0.30, "currency": "EUR"})
+    for _ in range(3):
+        tag.schritt(gross=1.0, klein=0.25)
+    anlage = tag.erg["plants"]["gross"]
+    assert anlage["yield_day_kwh"] == 3.0
+    assert anlage["yield_month_kwh"] == 3.0
+    assert anlage["yield_year_kwh"] == 3.0
+    assert tag.erg["plants"]["klein"]["yield_day_kwh"] == 0.75
+    assert tag.erg["plants"]["akku"]["yield_day_kwh"] == 0.0
+
+
+# ------------------------------------------- Ein neuer Preis zählt ab jetzt
+#
+# Die Regel, ohne Ausnahme: Ein neuer Preis gilt ab dem Moment, in dem er
+# eingetragen ist. Nichts, was davor lag, wird neu bewertet - nicht heute,
+# nicht diesen Monat, nicht dieses Jahr, nicht gesamt, nicht je Anlage und
+# nicht die Vorgeschichte von vor der Einrichtung.
+#
+# Geprüft wird das nicht Feld für Feld, sondern am ganzen Ergebnis: Ändert
+# sich nur ein Preis und sonst nichts, darf sich außer den Feldern, die den
+# Preis von *jetzt* zeigen, keine einzige Zahl bewegen.
+
+# Was den Preis von jetzt zeigt - und sich deshalb mit ihm ändern muss. Dazu
+# "configured": ob gerade ein Preis eingetragen ist.
+_JETZT = {
+    "price", "feed_in", "base_price", "diverted_price", "cost_rate", "yield_rate",
+    "configured",
+}
+
+_ALLES = {
+    "price": 0.32,
+    "feed_in": 0.08,
+    "base": 12.0,
+    "diverted": 0.11,
+    "currency": "EUR",
+    # Vorgeschichte ohne eigenen Durchschnittspreis - genau der Fall, der
+    # bis 2.1 mit jedem neuen Tarif rückwirkend umgerechnet wurde.
+    "prior_import": 4000.0,
+    "prior_diverted": 200.0,
+}
+
+
+def _flach(wert, pfad=""):
+    """Das Ergebnis als eine Ebene, ohne die Felder von jetzt."""
+    if isinstance(wert, dict):
+        ergebnis = {}
+        for name, inhalt in wert.items():
+            if name not in _JETZT:
+                ergebnis.update(_flach(inhalt, f"{pfad}.{name}"))
+        return ergebnis
+    return {pfad: wert}
+
+
+def _tag_mit_allem():
+    """Zwei Anlagen mit Vorgeschichte, Heizstab, Grundpreis - über Mitternacht."""
+    anlagen = [
+        {"id": "dach", "investment": 9000.0, "commissioned": "2022-05-01",
+         "prior_yield": 8000.0, "prior_export": 5000.0, "feed_in": 0.12},
+        {"id": "balkon", "investment": 800.0, "prior_yield": 600.0,
+         "prior_export": 0.0},
+    ]
+    r = _rechner(schritt=timedelta(hours=1))
+    z = {"import": 100.0, "export": 50.0, "own": 20.0, "diverted": 5.0,
+         "house": 300.0, "base": 290.0, "anlage:dach": 70.0, "anlage:balkon": 0.0}
+    leistung = {"anlage:dach": 1500.0, "anlage:balkon": 200.0}
+    for _ in range(30):
+        for name, dazu in (("import", 0.4), ("export", 1.0), ("own", 0.7),
+                           ("diverted", 0.3), ("house", 1.1), ("base", 0.8),
+                           ("anlage:dach", 1.5), ("anlage:balkon", 0.2)):
+            z[name] = round(z[name] + dazu, 3)
+        r.rechnen(dict(z), _ALLES, leistung, anlagen)
+    return r, z, anlagen, leistung
+
+
+def test_ein_neuer_preis_aendert_keinen_betrag_der_vergangenheit():
+    """Jeder Preis für sich, und alle auf einmal: Die Vergangenheit steht."""
+    faelle = {
+        "Arbeitspreis": ({"price": 0.45}, None),
+        "Einspeisevergütung": ({"feed_in": 0.02}, None),
+        "Grundpreis": ({"base": 30.0}, None),
+        "Wert des Überschusses": ({"diverted": 0.25}, None),
+        "Vergütung einer Anlage": ({}, {"dach": 0.05}),
+        "Preis fehlt kurz": ({"price": None, "feed_in": None}, None),
+        "alles auf einmal": (
+            {"price": 0.21, "feed_in": 0.0, "base": 0.0, "diverted": 0.30},
+            {"dach": 0.0},
+        ),
+    }
+    for name, (preise, saetze) in faelle.items():
+        r, z, anlagen, leistung = _tag_mit_allem()
+        vorher = _flach(r.rechnen(dict(z), _ALLES, leistung, anlagen, jetzt=r._uhr))
+        if saetze:
+            anlagen = [dict(a, feed_in=saetze.get(a["id"], a.get("feed_in")))
+                       for a in anlagen]
+        nachher = _flach(r.rechnen(
+            dict(z), {**_ALLES, **preise}, leistung, anlagen, jetzt=r._uhr
+        ))
+        anders = {k: (v, nachher.get(k)) for k, v in vorher.items()
+                  if nachher.get(k) != v}
+        assert not anders, (name, anders)
+
+
+def test_was_danach_kommt_zaehlt_zum_neuen_preis():
+    """Und nur das: Die neue Stunde kostet den neuen Preis, die alten den alten."""
+    r, z, anlagen, leistung = _tag_mit_allem()
+    vorher = r.rechnen(dict(z), _ALLES, leistung, anlagen, jetzt=r._uhr)["periods"]
+    neu = {**_ALLES, "price": 0.50, "feed_in": 0.03, "base": 0.0}
+    z["import"] = round(z["import"] + 2.0, 3)
+    z["export"] = round(z["export"] + 1.0, 3)
+    nachher = r.rechnen(dict(z), neu, leistung, anlagen)["periods"]
+    for periode in ("day", "month", "year", "total"):
+        assert nachher[periode]["cost"] == round(
+            vorher[periode]["cost"] + 2.0 * 0.50, 2
+        ), periode
+        assert nachher[periode]["revenue"] == round(
+            vorher[periode]["revenue"] + 1.0 * 0.03, 2
+        ), periode
+
+
+def test_ein_dynamischer_tarif_bewertet_jede_stunde_mit_ihrem_preis():
+    """Stündlich ein anderer Preis - die Summe ist die Summe der Stunden."""
+    r = _rechner(schritt=timedelta(hours=1))
+    stand = 1000.0
+    r.rechnen({"import": stand}, {"price": 0.30}, {})
+    erwartet = 0.0
+    for stunde, preis in enumerate((0.12, 0.45, 0.31, -0.02, 0.27, 0.38)):
+        menge = 0.5 + stunde * 0.25
+        stand += menge
+        erwartet += menge * preis
+        tag = r.rechnen({"import": stand}, {"price": preis}, {})["periods"]["day"]
+    # Bis 2.1 stand hier die ganze Menge mal dem Preis der letzten Stunde.
+    assert tag["cost"] == round(erwartet, 2)
+
+
+def test_die_vorgeschichte_behaelt_ihren_preis():
+    """4000 kWh Bezug davor kosten, was sie bei der Einrichtung kosteten.
+
+    Ohne eigenen Durchschnittspreis galt bis 2.1 der heutige - und jeder neue
+    Tarif schrieb Jahre um, die mit ihm nichts zu tun hatten.
+    """
+    r = _rechner()
+    preise = {"price": 0.30, "prior_import": 4000.0}
+    gesamt = r.rechnen({"import": 0.0}, preise, {})["periods"]["total"]
+    assert gesamt["cost"] == 1200.0
+    gesamt = r.rechnen({"import": 0.0}, {**preise, "price": 0.50}, {})["periods"]["total"]
+    assert gesamt["cost"] == 1200.0
+    assert gesamt["prior_price"] == 0.30
+
+
+def test_ein_eigener_durchschnittspreis_davor_gewinnt_weiter():
+    """Er ist der Weg, die Vorgeschichte bewusst anders zu bewerten."""
+    r = _rechner()
+    preise = {"price": 0.30, "prior_import": 4000.0}
+    r.rechnen({"import": 0.0}, preise, {})
+    gesamt = r.rechnen(
+        {"import": 0.0}, {**preise, "prior_price": 0.25}, {}
+    )["periods"]["total"]
+    assert gesamt["cost"] == 1000.0
+
+
+def test_davor_leeren_haelt_den_preis_neu_fest():
+    """Wer die Vorgeschichte neu einträgt, bekommt die Preise von jetzt.
+
+    Sonst bliebe ein einmal vertippter Preis für immer an ihr hängen.
+    """
+    r = _rechner()
+    r.rechnen({"import": 0.0}, {"price": 3.0, "prior_import": 4000.0}, {})
+    r.davor_vergessen()
+    gesamt = r.rechnen(
+        {"import": 0.0}, {"price": 0.30, "prior_import": 4000.0}, {}
+    )["periods"]["total"]
+    assert gesamt["cost"] == 1200.0
+
+
+def test_der_preis_davor_uebersteht_neustart_und_zuruecksetzen():
+    """Das Gemessene zu leeren ändert nichts an der Zeit davor."""
+    hass = ha_stubs.HomeAssistant()
+    r = _MitUhr(hass)
+    preise = {"price": 0.30, "prior_import": 4000.0}
+    r.rechnen({"import": 0.0}, preise, {})
+    r.zuruecksetzen()
+    asyncio.run(r.async_speichern())
+    zweiter = _MitUhr(hass)
+    zweiter._rechner._store = r._store
+    asyncio.run(zweiter.async_laden())
+    gesamt = zweiter.rechnen(
+        {"import": 0.0}, {**preise, "price": 0.50}, {}
+    )["periods"]["total"]
+    assert gesamt["cost"] == 1200.0
+
+
+def test_ein_zitternder_eigenverbrauch_bringt_keine_ersparnis_zu_viel():
+    """Ertragszähler alle halbe Minute, Einspeisezähler jede Sekunde.
+
+    Der Eigenverbrauch ist erzeugt minus eingespeist und wackelt damit bei
+    jedem Schritt: hoch, sobald der Ertragszähler meldet, wieder herunter mit
+    jeder Sekunde Einspeisung. Der alte Geldspeicher buchte jedes Hoch und
+    übersah jedes Runter - in einer Stunde mit 5 kW Erzeugung und 0,5 kW
+    Eigenverbrauch kamen 1,46 Euro Ersparnis herein statt 0,15.
+    """
+    r = kosten.Kostenrechner(ha_stubs.HomeAssistant(), "zittern")
+    beginn = _jetzt().replace(hour=10, minute=0, second=0, microsecond=0)
+    preise = {"price": 0.30, "feed_in": 0.10}
+    anlagen = [{"id": "a1", "prior_yield": 0.0}]
+    erzeugt, eingespeist = 1000.0, 500.0
+    gemeldet = erzeugt
+    for sekunde in range(1801):
+        erzeugt += 5.0 / 3600
+        eingespeist += 4.5 / 3600
+        if sekunde % 30 == 0:
+            gemeldet = round(erzeugt, 3)
+        export = round(eingespeist, 3)
+        ergebnis = r.rechnen(
+            {"import": 100.0, "export": export,
+             "own": round(max(0.0, gemeldet - export), 3), "anlage:a1": gemeldet},
+            preise, {"anlage:a1": 5000.0}, anlagen,
+            jetzt=beginn + timedelta(seconds=sekunde),
+        )
+    # Eine halbe Stunde, 0,25 kWh selbst genutzt.
+    for periode in ("day", "total"):
+        assert abs(ergebnis["periods"][periode]["savings"] - 0.25 * 0.30) <= 0.01
+    assert abs(ergebnis["periods"]["total"]["measured"]["savings"] - 0.075) <= 0.01
+    assert abs(ergebnis["plants"]["a1"]["savings"] - 0.075) <= 0.01
+
+
+def test_die_umleitung_geht_auch_gesamt_nicht_verloren():
+    """Derselbe Taktunterschied wie am Tag - jetzt im Gesamtzeitraum.
+
+    Der alte Geldspeicher deckelte je Lauf: In vier von fünf Läufen stand ein
+    Zuwachs beim Heizstab und eine Null beim Ertragszähler, und der
+    Korrekturposten fiel weg. Der Gesamtzeitraum wies dann mehr Ersparnis aus
+    als Tag, Monat und Jahr.
+    """
+    preise = {"price": 0.338, "diverted": 0.11}
+    r = _rechner(schritt=timedelta(seconds=30))
+    own, div = 100.0, 20.0
+    r.rechnen({"own": own, "diverted": div}, preise, {})
+    for schritt in range(1, 61):
+        div += 0.05
+        if schritt % 5 == 0:
+            own += 0.50
+        zeitraeume = r.rechnen(
+            {"own": round(own, 3), "diverted": round(div, 3)}, preise, {}
+        )["periods"]
+    erwartet = round(3.0 * 0.338 + 3.0 * 0.11, 2)
+    for periode in ("day", "month", "year", "total"):
+        assert zeitraeume[periode]["savings"] == erwartet, periode
+
+
+def test_ein_tag_aus_der_alten_fassung_springt_nicht():
+    """Beim Update hat der Tag noch kein eigenes Geld - die Zahl bleibt stehen."""
+    r = _rechner()
+    preise = {"price": 0.30, "base": 0.0}
+    r.rechnen({"import": 100.0}, preise, {})
+    r.rechnen({"import": 110.0}, preise, {})
+    # So sah eine Tagesmarke bis 2.1 aus: Anker, kein Geld.
+    for periode in ("day", "month", "year"):
+        marke = r._rechner._marken[periode]
+        for feld in ("geld", "bewertet", "bewertet_bis", "uebertrag"):
+            marke.pop(feld, None)
+    tag = r.rechnen({"import": 110.0}, preise, {})["periods"]["day"]
+    assert tag["cost"] == 3.0
+    tag = r.rechnen({"import": 112.0}, {"price": 0.50, "base": 0.0}, {})["periods"]["day"]
+    assert tag["cost"] == 4.0
+
+
+def test_eine_aeltere_fassung_rechnet_nach_einem_rueckschritt_nichts_doppelt():
+    """Für den Weg zurück stehen die rohen Stände weiter im Geldspeicher."""
+    r = _rechner()
+    for stand in (100.0, 110.0, 125.5):
+        r.rechnen({"import": stand, "export": 3.0, "own": 7.0}, PREISE, {})
+    letzte = r._rechner._marken["total"]["letzte"]
+    assert letzte["import"] == 125.5
+    assert letzte["export"] == 3.0
+    assert letzte["own"] == 7.0
+
+
+def test_die_gemessene_ersparnis_laesst_sich_einmal_neu_berechnen():
+    """Für Stände, die der alte Geldspeicher zu hoch gebucht hat.
+
+    Nur auf Wunsch aus dem Dialog. Neu gerechnet wird aus den gemessenen
+    Kilowattstunden mit dem Preis des letzten Laufs - der Überschussanteil mit
+    seinem eigenen Wert. Bezug, Einspeisung und die Zeiträume bleiben stehen.
+    """
+    r = _rechner()
+    preise = {"price": 0.30, "feed_in": 0.08, "diverted": 0.10}
+    r.rechnen({"import": 0.0, "export": 0.0, "own": 0.0, "diverted": 0.0}, preise, {})
+    r.rechnen({"import": 5.0, "export": 4.0, "own": 10.0, "diverted": 2.0}, preise, {})
+    # So stand es nach einem Tag mit dem alten Speicher: viel zu viel.
+    r._rechner._marken["total"]["geld"]["savings"] = 99.0
+    vorher = r.rechnen(
+        {"import": 5.0, "export": 4.0, "own": 10.0, "diverted": 2.0}, preise, {}
+    )["periods"]
+    assert vorher["total"]["savings"] == round(99.0 + 2.0 * (0.10 - 0.30), 2)
+
+    assert r.ersparnis_neu_bewerten()
+    nachher = r.rechnen(
+        {"import": 5.0, "export": 4.0, "own": 10.0, "diverted": 2.0}, preise, {}
+    )["periods"]
+    assert nachher["total"]["savings"] == round(8.0 * 0.30 + 2.0 * 0.10, 2)
+    assert nachher["total"]["measured"]["savings"] == nachher["total"]["savings"]
+    assert nachher["total"]["cost"] == vorher["total"]["cost"]
+    assert nachher["total"]["revenue"] == vorher["total"]["revenue"]
+    assert nachher["day"] == vorher["day"]
+
+
+def test_ohne_preis_wird_die_ersparnis_nicht_neu_berechnet():
+    r = _rechner()
+    r.rechnen({"own": 0.0}, {"price": None}, {})
+    assert not r.ersparnis_neu_bewerten()
 
 
 def _alle_tests():

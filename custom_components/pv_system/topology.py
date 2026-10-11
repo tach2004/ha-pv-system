@@ -135,6 +135,9 @@ from .const import (
     CONF_SHOW_STRINGS,
     CONF_STRINGS_PARALLEL,
     CONF_SYSTEM_VOLTAGE,
+    CONF_TEMP_COLD,
+    CONF_TEMP_HOT,
+    CONF_TEMP_WARM,
     CONF_TILT,
     DEFAULT_BASE_PRICE_UNIT,
     DEFAULT_CAPACITY,
@@ -152,6 +155,9 @@ from .const import (
     DEFAULT_RATED_POWER,
     DEFAULT_SENSOR_INTERVAL,
     DEFAULT_SYSTEM_VOLTAGE,
+    DEFAULT_TEMP_COLD,
+    DEFAULT_TEMP_HOT,
+    DEFAULT_TEMP_WARM,
     DIVERTER_FUELS,
     DIVERTER_ICON_BOILER,
     DIVERTER_ICONS,
@@ -345,6 +351,23 @@ def laderegler_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
     return daten
 
 
+def temperaturgrenzen(roh: dict[str, Any]) -> dict[str, float]:
+    """Die drei Temperaturschwellen eines Geräts, aufsteigend.
+
+    Stehen sie durcheinander, werden sie sortiert: Eine Stufe, die nie
+    erreicht wird, wäre schlimmer als eine vertauschte. Der Dialog weist
+    darauf schon vorher hin - siehe config_flow._grenzen_pruefen.
+    """
+    kalt, warm, heiss = sorted(
+        (
+            _zahl(roh.get(CONF_TEMP_COLD), DEFAULT_TEMP_COLD),
+            _zahl(roh.get(CONF_TEMP_WARM), DEFAULT_TEMP_WARM),
+            _zahl(roh.get(CONF_TEMP_HOT), DEFAULT_TEMP_HOT),
+        )
+    )
+    return {CONF_TEMP_COLD: kalt, CONF_TEMP_WARM: warm, CONF_TEMP_HOT: heiss}
+
+
 def batterie_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
     roh = dict(roh or {})
     daten: dict[str, Any] = {
@@ -361,6 +384,7 @@ def batterie_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         CONF_POWER_SIGN: _auswahl(
             roh.get(CONF_POWER_SIGN), BATTERY_SIGNS, SIGN_POSITIVE_CHARGE
         ),
+        **temperaturgrenzen(roh),
     }
     for feld in BATTERY_ENTITIES:
         daten[feld] = _entity(roh.get(feld))
@@ -377,6 +401,7 @@ def wechselrichter_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         CONF_RATED_POWER: _zahl(roh.get(CONF_RATED_POWER), DEFAULT_RATED_POWER),
         CONF_PHASE: _auswahl(roh.get(CONF_PHASE), PHASES, PHASE_L1),
         CONF_INVERTER_HYBRID: bool(roh.get(CONF_INVERTER_HYBRID, False)),
+        **temperaturgrenzen(roh),
     }
     for feld in INVERTER_ENTITIES:
         daten[feld] = _entity(roh.get(feld))

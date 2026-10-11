@@ -228,6 +228,36 @@ def test_neuer_preis_gewinnt_gegen_den_alten_ort():
     assert daten["costs"]["price_per_kwh"] == 0.41
 
 
+def test_temperaturschwellen_haben_die_stufen_einer_zelle_als_vorgabe():
+    """5, 30, 40 Grad - für Batterie und Wechselrichter gleich."""
+    for geraet in (
+        topology.batterie_normalisieren({}),
+        topology.wechselrichter_normalisieren({}),
+    ):
+        assert (geraet["temp_cold"], geraet["temp_warm"], geraet["temp_hot"]) == (
+            5.0, 30.0, 40.0,
+        )
+
+
+def test_temperaturschwellen_lassen_sich_je_geraet_einstellen():
+    wr = topology.wechselrichter_normalisieren(
+        {"temp_cold": "-10", "temp_warm": 50, "temp_hot": 65}
+    )
+    assert (wr["temp_cold"], wr["temp_warm"], wr["temp_hot"]) == (-10.0, 50.0, 65.0)
+    # Die Batterie derselben Anlage bleibt davon unberührt.
+    anlage = topology.anlage_normalisieren({"inverter": {"temp_hot": 65}})
+    assert anlage["battery"]["temp_hot"] == 40.0
+    assert anlage["inverter"]["temp_hot"] == 65.0
+
+
+def test_vertauschte_temperaturschwellen_werden_sortiert():
+    """Eine Stufe, die nie erreicht wird, wäre schlimmer als eine vertauschte."""
+    akku = topology.batterie_normalisieren(
+        {"temp_cold": 5, "temp_warm": 45, "temp_hot": 35}
+    )
+    assert (akku["temp_cold"], akku["temp_warm"], akku["temp_hot"]) == (5.0, 35.0, 45.0)
+
+
 if __name__ == "__main__":
     _alle_tests()
     print("alle Struktur-Tests bestanden")

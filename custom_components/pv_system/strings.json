@@ -248,6 +248,9 @@
     }
   },
   "options": {
+    "error": {
+      "temperature_order": "The temperature thresholds must rise: cold threshold below “warm from”, “warm from” below “hot from”."
+    },
     "step": {
       "battery": {
         "data": {
@@ -267,6 +270,9 @@
           "power_entity": "Battery power (+/−)",
           "power_sign": "Power sign",
           "soc_entity": "State of charge",
+          "temp_cold": "Cold threshold",
+          "temp_hot": "Hot from",
+          "temp_warm": "Warm from",
           "temperature_entity": "Cell temperature",
           "voltage_entity": "Battery voltage"
         },
@@ -287,6 +293,9 @@
           "power_entity": "Charge and discharge power. If absent, voltage × current is used.",
           "power_sign": "This is the direct battery power. You decide which sign means charging: “+ = charging” is the usual case, some BMS count the other way round. Chosen wrongly the card swaps charging and discharging.",
           "soc_entity": "State of charge in percent, usually from the BMS. Without it stored energy and runtime stay empty.",
+          "temp_cold": "Below this the temperature on the card turns blue and blinks. A lithium cell must not be charged below about 5 °C. Empty: 5 °C.",
+          "temp_hot": "From here red and blinking. For an inverter the data sheet says when it starts to throttle. Empty: 40 °C.",
+          "temp_warm": "From here orange - not a problem yet, but worth a look. Empty: 30 °C.",
           "temperature_entity": "Cell temperature from the BMS.",
           "voltage_entity": "Terminal voltage of the battery (e.g. 51.8 V on a 48 V system)."
         },
@@ -352,7 +361,7 @@
           "price_entity": "An entity providing the energy price - for dynamic tariffs. It takes precedence over the fixed number above; if it reports nothing usable, the number applies again. Empty: the fixed number only.",
           "price_per_kwh": "What one kilowatt hour from the grid costs, e.g. 0.34. Without this price no costs are calculated and no money sensors are created.",
           "prior_import": "**Your import meter's reading on the day you set this integration up.** A one-off number you read once and never touch again - not a sensor.\n\nExample: your import meter reads 5000 kWh today and you set up today. Then you enter 5000.\n\nWhat for: from today the integration only counts differences. Without this number the total period would start at zero grid cost and the balance would look better than it is. Day, month and year are untouched.\n\nEmpty: the total period starts today. That is right if you only want to count from now on.",
-          "prior_price": "What one kilowatt hour cost on average before the integration started counting - electricity three years ago was not priced like today. Applies to that earlier time only. Empty: today's price is used."
+          "prior_price": "What one kilowatt hour cost on average before the integration started counting - electricity three years ago was not priced like today. Applies to that earlier time only. Empty: the energy price from the integration's first run is used - recorded once, a later tariff does not change it."
         },
         "description": "Everything is derived from the meter readings you entered under “Grid and meter” - not from extrapolated power. Day, month and year start counting the moment you enter a price here - the time before is covered by the figures at each plant.\n\nYou may change the price at any time: only what has accrued since the last calculation is valued. A price increase applies from the day you enter it and does not rewrite the past.\n\nWhat a plant cost and since when it runs belongs to that plant under “Costs of this plant”. The site's investment is the sum of its plants, its start the earliest commissioning - nobody needs to enter either again here.\n\n**Wherever an entity and a fixed number sit side by side, the entity always wins.** The number is only the fallback for when the entity reports nothing usable - a stalled tariff fetch, a sensor gone unavailable.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Costs and yield"
@@ -466,6 +475,9 @@
           "phase": "Phase",
           "power_entity": "Output power (AC)",
           "rated_power_w": "Rated power",
+          "temp_cold": "Cold threshold",
+          "temp_hot": "Hot from",
+          "temp_warm": "Warm from",
           "temperature_entity": "Inverter temperature"
         },
         "data_description": {
@@ -483,6 +495,9 @@
           "phase": "Which phase this single-phase inverter feeds into.",
           "power_entity": "AC output power - the built-in sensor or an inline meter such as a inline meter. House consumption is derived from this figure.",
           "rated_power_w": "Continuous rating from the label. The load bar is based on it.",
+          "temp_cold": "Below this the temperature on the card turns blue and blinks. A lithium cell must not be charged below about 5 °C. Empty: 5 °C.",
+          "temp_hot": "From here red and blinking. For an inverter the data sheet says when it starts to throttle. Empty: 40 °C.",
+          "temp_warm": "From here orange - not a problem yet, but worth a look. Empty: 30 °C.",
           "temperature_entity": "Temperature of the inverter itself."
         },
         "description": "Designed for single-phase inverters running in parallel with the grid.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
@@ -580,9 +595,10 @@
       "reset": {
         "data": {
           "reset_confirm": "Yes, discard the measured cost figures",
-          "reset_prior": "Yes, also remove the “before” figures from the configuration"
+          "reset_prior": "Yes, also remove the “before” figures from the configuration",
+          "reset_savings": "Yes, recalculate the measured savings once"
         },
-        "description": "The way out when the amounts no longer add up - typically after a meter swap, or when the wrong entity briefly sat in the import meter field. Day, month and year heal themselves at the next rollover; the total period carries the error until somebody clears it.\n\nThe total period has **two sources**, which is why there are two checkboxes. They do not overlap - together they make up what the balance shows.\n\n---\n\n**1. Measured since the first run**\n\n{stand}\n\nThis lives in the integration's own store. The first box throws it away and re-anchors every counter at today's reading - immediately, not on save.\n\n---\n\n**2. From the configuration: the “before” figures**\n\n{vorher}\n\nThat is where amounts come from that stand next to zero measured kilowatt hours and are still correct. The second box removes those fields from the configuration - it only takes effect with “Save and close”.\n\nUsually you do **not** want it: these numbers are your real history, and without them the payback starts at zero. It helps if you mistyped or want to start over.\n\nInvestment and commissioning stay either way - those are facts about the system, not meter readings. Neither can be undone.",
+        "description": "The way out when the amounts no longer add up - typically after a meter swap, or when the wrong entity briefly sat in the import meter field. Day, month and year heal themselves at the next rollover; the total period carries the error until somebody clears it.\n\nThe total period has **two sources**, which is why there are two checkboxes. They do not overlap - together they make up what the balance shows.\n\n---\n\n**1. Measured since the first run**\n\n{stand}\n\nThis lives in the integration's own store. The first box throws it away and re-anchors every counter at today's reading - immediately, not on save.\n\n---\n\n**2. From the configuration: the “before” figures**\n\n{vorher}\n\nThat is where amounts come from that stand next to zero measured kilowatt hours and are still correct. The second box removes those fields from the configuration - it only takes effect with “Save and close”.\n\nUsually you do **not** want it: these numbers are your real history, and without them the payback starts at zero. It helps if you mistyped or want to start over. The prices at which the history is valued go with the figures; if you enter them again, the prices of that moment apply.\n\nInvestment and commissioning stay either way - those are facts about the system, not meter readings. Neither can be undone.\n\n---\n\n**3. Recalculate the measured savings**\n\nUp to 2.0.1 the savings since the first run were booked too high whenever power was exported: own consumption wobbles when the yield meter and the export meter report at different times, and every upward swing counted as savings. If the savings above are clearly higher than “self-consumed × energy price”, this is why.\n\nThe third box recalculates them once: self-consumed kWh × today's energy price, the surplus share at its own value. That is right as long as your energy price has not changed since the first run. Import, export, day, month, year and the “before” figures stay as they are. It takes effect immediately and only if the first box is not ticked.",
         "title": "Clear cost counters"
       },
       "surplus": {
