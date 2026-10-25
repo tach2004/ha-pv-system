@@ -249,6 +249,7 @@
   },
   "options": {
     "error": {
+      "series_taken": "Zwischen Zähler und Haus sitzt schon der Wechselrichter einer anderen Anlage. Dort zuerst ausschalten.",
       "temperature_order": "Die Temperaturschwellen müssen aufsteigen: Kälteschwelle unter „Warm ab“, „Warm ab“ unter „Heiß ab“."
     },
     "step": {
@@ -462,12 +463,14 @@
       "inverter": {
         "data": {
           "ac_current_entity": "Ausgangsstrom (AC)",
+          "ac_input_power_entity": "Eingangsleistung vom Netz (AC)",
           "ac_voltage_entity": "Ausgangsspannung (AC)",
           "dc_voltage_entity": "Eingangsspannung (DC)",
           "enabled": "Vorhanden",
           "energy_entity": "Ertragszähler (AC)",
           "frequency_entity": "Frequenz",
           "hybrid": "Hybrid-Wechselrichter",
+          "in_series": "In Reihe zwischen Zähler und Haus",
           "manufacturer": "Hersteller",
           "mode_entity": "Betriebsart",
           "model": "Modell",
@@ -482,25 +485,27 @@
         },
         "data_description": {
           "ac_current_entity": "Der abgegebene Strom auf der Netzseite in A.",
+          "ac_input_power_entity": "Nur in Reihe: was das Gerät gerade aus dem Netz zieht. Leer heißt: Es ist das, was der Zähler auf seinen Phasen misst - dreiphasig die Gesamtleistung, einphasig die Leistung seiner Phase. Nötig, wenn nur ein Teil des Hauses hinter dem Gerät hängt.",
           "ac_voltage_entity": "Netzspannung am Ausgang, üblicherweise um 230 V.",
           "dc_voltage_entity": "Die Gleichspannung am Eingang - bei einem Batteriewechselrichter die Batteriespannung.",
           "enabled": "Aus, wenn diese Anlage keinen eigenen Wechselrichter hat.",
-          "energy_entity": "Zählerstand in kWh für das, was dieses Gerät insgesamt abgegeben hat. Die Kostenrechnung nimmt ihn als Erzeugung - nur was der Wechselrichter abgibt, kann ins Netz gehen.",
+          "energy_entity": "Zählerstand in kWh für das, was dieses Gerät insgesamt abgegeben hat. Die Kostenrechnung nimmt ihn als Erzeugung - nur was der Wechselrichter abgibt, kann ins Netz gehen. In Reihe geschaltet zählt er auch den durchgereichten Netzstrom; als Ertrag gilt dann der Ertragszähler der Module.",
           "frequency_entity": "Die Netzfrequenz, die dieses Gerät misst - um 50 Hz.",
           "hybrid": "An, wenn das Gerät die Batterie auch aus dem Netz laden kann. Dann gilt eine negative Leistung nicht mehr einfach als Eigenverbrauch: Was davon laut Batteriesensor wirklich gespeichert wird, ist Ladung und kein Hausverbrauch - der Rest bleibt Verbrauch. Ohne den Haken ist eine negative Leistung immer Standby.",
+          "in_series": "An, wenn das Gerät nicht neben dem Netz einspeist, sondern das Netz an seinem Eingang hängt und das Haus an seinem Ausgang - ein Inselwechselrichter mit Netzvorrang oder ein Gerät im USV-Betrieb. Die Karte setzt ihn direkt neben den Zähler; weitere Anlagen hängen dahinter. Gerechnet wird mit Ausgang minus Eingang. Nur ein Wechselrichter kann so sitzen - bei den übrigen ist der Schalter dann ausgegraut.",
           "manufacturer": "Nur zur Anzeige - die Karte schreibt Hersteller und Modell untereinander.",
           "mode_entity": "Die Betriebsart als Text, z. B. „Netzparallel“ oder „Inselbetrieb“.",
           "model": "Nur zur Anzeige, z. B. die Typenbezeichnung vom Aufkleber.",
           "name": "Name dieses Wechselrichters, z. B. „GTN1000 L3“.",
-          "phase": "Auf welcher Phase dieser einphasige Wechselrichter einspeist.",
-          "power_entity": "Die abgegebene AC-Leistung - der interne Sensor oder ein Zwischenzähler davor. Aus dieser Zahl entsteht der Hausverbrauch.",
+          "phase": "Auf welcher Phase dieser Wechselrichter einspeist - oder auf allen dreien, wenn er dreiphasig ist. Die Karte zeichnet dann hinter dem Kasten drei Leitungen und teilt die Leistung gleichmäßig auf.",
+          "power_entity": "Die abgegebene AC-Leistung - der interne Sensor oder ein Zwischenzähler davor. Aus dieser Zahl entsteht der Hausverbrauch. Dreiphasig: die Summe aller drei Phasen. In Reihe: was am Ausgang zum Haus hinausgeht.",
           "rated_power_w": "Dauerleistung laut Typenschild. Daraus entsteht der Auslastungsbalken.",
           "temp_cold": "Darunter steht die Temperatur in der Karte blau und blinkt. Eine Lithiumzelle darf unter etwa 5 °C nicht mehr geladen werden. Leer: 5 °C.",
           "temp_hot": "Ab hier rot und blinkend. Bei einem Wechselrichter steht im Datenblatt, ab wann er drosselt. Leer: 40 °C.",
           "temp_warm": "Ab hier orange - noch kein Problem, aber einen Blick wert. Leer: 30 °C.",
           "temperature_entity": "Temperatur des Wechselrichters selbst."
         },
-        "description": "Ausgelegt für einphasige Wechselrichter im Netzparallelbetrieb.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
+        "description": "Einphasig auf L1, L2 oder L3 - oder dreiphasig auf allen dreien. Netzparallel oder in Reihe zwischen Zähler und Haus. In Reihe kann nur ein Wechselrichter sitzen, derzeit: {series_plant}.\n\nFast alles darf leer bleiben. Was du nicht angibst, wird in der Karte einfach nicht angezeigt - nur die mit * markierten Felder sind nötig.",
         "title": "Wechselrichter – {plant}"
       },
       "modules": {
@@ -718,6 +723,7 @@
     "phase": {
       "options": {
         "l1": "L1",
+        "l123": "L1 + L2 + L3 (dreiphasig)",
         "l2": "L2",
         "l3": "L3"
       }
@@ -817,7 +823,7 @@
           "name": "Vorhanden"
         },
         "phase": {
-          "description": "Auf welcher Phase dieser einphasige Wechselrichter einspeist.",
+          "description": "Auf welcher Phase dieser Wechselrichter einspeist - oder auf allen dreien, wenn er dreiphasig ist. Die Karte zeichnet dann hinter dem Kasten drei Leitungen und teilt die Leistung gleichmäßig auf.",
           "name": "Phase"
         },
         "plant": {

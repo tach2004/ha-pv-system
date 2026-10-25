@@ -53,7 +53,8 @@ Es öffnet sich ein Menü:
   * **Module** – Anzahl, Leistung je Modul, Verschaltung, PV-Sensoren
   * **Laderegler** – optional; Systemspannung, Eingangs- und Ausgangsspannung
   * **Batterie** – optional; Kapazität, Ladestand, Temperatur, Vorzeichen
-  * **Wechselrichter** – Nennleistung, **Phase**, Leistungssensor
+  * **Wechselrichter** – Nennleistung, **Phase** (L1, L2, L3 oder dreiphasig),
+    netzparallel oder **in Reihe** zwischen Zähler und Haus, Leistungssensor
 * **Netz und Zähler** – Gesamtleistung und die Werte je Phase
 * **Haus und Verbrauch** – gemessen oder gerechnet
 * **Darstellung** – Animation, Verschaltung zeichnen, Preise

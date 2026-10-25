@@ -258,6 +258,71 @@ def test_vertauschte_temperaturschwellen_werden_sortiert():
     assert (akku["temp_cold"], akku["temp_warm"], akku["temp_hot"]) == (5.0, 35.0, 45.0)
 
 
+# ------------------------------------------------- Dreiphasig und in Reihe
+
+
+def test_bisherige_phase_bleibt_und_dreiphasig_ist_neu():
+    """Gespeichertes "l2" bleibt "l2"; "l123" heißt alle drei."""
+    assert topology.wechselrichter_normalisieren({"phase": "l2"})["phase"] == "l2"
+    assert topology.wechselrichter_normalisieren({"phase": "l123"})["phase"] == "l123"
+    assert topology.wechselrichter_normalisieren({"phase": "l4"})["phase"] == "l1"
+
+
+def test_netzparallel_ist_die_vorgabe():
+    """Ältere Einträge kennen das Feld nicht - sie bleiben netzparallel."""
+    wr = topology.wechselrichter_normalisieren({})
+    assert wr["in_series"] is False
+    assert wr["ac_input_power_entity"] is None
+
+
+def test_nur_ein_wechselrichter_sitzt_in_reihe():
+    """Kommen zwei an, behält ihn die Anlage, die vorn steht."""
+    daten = topology.normalisieren(
+        {
+            "plants": [
+                {"id": "b", "name": "Hinten", "order": 2, "inverter": {"in_series": True}},
+                {"id": "a", "name": "Vorn", "order": 1, "inverter": {"in_series": True}},
+                {"id": "c", "name": "Ohne", "order": 3},
+            ]
+        }
+    )
+    reihe = {a["id"]: a["inverter"]["in_series"] for a in daten["plants"]}
+    assert reihe == {"a": True, "b": False, "c": False}
+
+
+def test_wer_in_reihe_sitzt_steht_fest():
+    """Für die bearbeitete Anlage selbst ist der Platz nicht belegt."""
+    daten = topology.normalisieren(
+        {
+            "plants": [
+                {"id": "a", "name": "A", "inverter": {"in_series": True}},
+                {"id": "b", "name": "B"},
+            ]
+        }
+    )
+    assert topology.reihe_anlage(daten)["id"] == "a"
+    assert topology.reihe_anlage(daten, ausser="b")["id"] == "a"
+    assert topology.reihe_anlage(daten, ausser="a") is None
+
+
+def test_eingangssensor_wird_beobachtet():
+    """Ändert sich, was das Gerät aus dem Netz zieht, wird neu gerechnet."""
+    daten = topology.normalisieren(
+        {
+            "plants": [
+                {
+                    "id": "a",
+                    "inverter": {
+                        "in_series": True,
+                        "ac_input_power_entity": "sensor.wr_ein",
+                    },
+                }
+            ]
+        }
+    )
+    assert "sensor.wr_ein" in topology.quellen(daten)
+
+
 if __name__ == "__main__":
     _alle_tests()
     print("alle Struktur-Tests bestanden")

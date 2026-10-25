@@ -64,7 +64,7 @@ from .const import (
     DATA_VERSION,
     DEFAULT_PLANT_NAME,
     DOMAIN,
-    PHASES,
+    INVERTER_PHASES,
     SERVICE_ADD_PLANT,
     SERVICE_REMOVE_PLANT,
     SERVICE_RESET_COSTS,
@@ -332,7 +332,9 @@ WECHSELRICHTER_FELDER = {
     vol.Optional(CONF_RATED_POWER): vol.All(
         vol.Coerce(float), vol.Range(min=50, max=100000)
     ),
-    vol.Optional(CONF_PHASE): vol.In(PHASES),
+    # Auch dreiphasig. In Reihe schalten geht bewusst nur im Dialog: Dort
+    # steht, ob der Platz schon vergeben ist.
+    vol.Optional(CONF_PHASE): vol.In(INVERTER_PHASES),
 }
 
 ANLAGE_FELDER = {vol.Optional(ATTR_NAME): cv.string}

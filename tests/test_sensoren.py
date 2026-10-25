@@ -168,6 +168,29 @@ def test_erzeugung_je_phase_nur_bei_mehreren_wechselrichtern():
     assert _an(s, "phase_l3_pv_power")
 
 
+def test_dreiphasig_bekommt_jede_phase_einen_erzeugungssensor():
+    """Ein dreiphasiger Wechselrichter speist auf alle drei Phasen ein."""
+    optionen = _aufbau(
+        plants=[_anlage("a1", "l123"), _anlage("a2", "l3")],
+    )
+    _, s = _sensoren(optionen)
+    # L1 und L2: nur er - sein Drittel ist keine neue Information.
+    assert not _an(s, "phase_l1_pv_power")
+    assert not _an(s, "phase_l2_pv_power")
+    # L3: er und a2 zusammen - eine echte Summe.
+    assert _an(s, "phase_l3_pv_power")
+
+
+def test_der_dienst_kennt_die_phasen_eines_dreiphasigen():
+    """Abgeschaltet wird dieselbe Menge, die beim Anlegen aus war."""
+    optionen = _aufbau(plants=[_anlage("a1", "l123"), _anlage("a2", "l3")])
+    koordinator, sensoren = _sensoren(optionen)
+    vorsatz = f"{koordinator.config_entry.entry_id}_"
+    gelistet = {k.replace(vorsatz, "") for k in sensor.spiegel_kennungen(koordinator)}
+    assert "phase_l1_pv_power" in gelistet
+    assert "phase_l3_pv_power" not in gelistet
+
+
 def test_der_dienst_findet_genau_die_abgeschalteten():
     """Was der Dienst abschalten würde, ist genau das, was schon aus ist."""
     koordinator, sensoren = _sensoren()

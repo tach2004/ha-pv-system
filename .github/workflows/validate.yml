@@ -113,6 +113,14 @@ jobs:
               cf._mit_vorschlag(getattr(cf, name)(), {})
               print(f"  ok  {name}")
 
+          # Sitzt schon ein Wechselrichter in Reihe, ist der Schalter bei den
+          # übrigen ausgegraut - über read_only am Selektor. Das ist ein
+          # anderer Selektor als im Normalfall und entsteht erst ab der
+          # zweiten Anlage; fiele er durch, ließe sich deren Dialog nicht
+          # öffnen.
+          cf._mit_vorschlag(cf._felder_wechselrichter(reihe_frei=False), {})
+          print("  ok  _felder_wechselrichter(reihe_frei=False)")
+
           # Der Überschussschritt wächst mit der Zahl der Leistungssensoren.
           # Einmal ohne, einmal voll besetzt und einmal darüber hinaus: Ein
           # Selektor, der erst beim sechsten Verbraucher entsteht, fiele sonst

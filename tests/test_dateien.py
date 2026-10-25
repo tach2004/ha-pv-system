@@ -378,7 +378,7 @@ def test_auswahlwerte_stimmen_mit_den_konstanten_ueberein():
     """Die Liste im Dialog muss zu dem passen, was topology.py durchlässt.
 
     const.py wird dafür wirklich geladen und nicht durchsucht: Die Listen
-    verweisen aufeinander (PHASES besteht aus PHASE_L1 und Geschwistern), und
+    verweisen aufeinander (INVERTER_PHASES besteht aus PHASES und PHASE_ALL), und
     ein regulärer Ausdruck fände dort nur Namen statt Werten.
     """
     lader = importlib.util.spec_from_file_location(
@@ -394,7 +394,7 @@ def test_auswahlwerte_stimmen_mit_den_konstanten_ueberein():
     paare = {
         "system_voltage": "SYSTEM_VOLTAGES",
         "chemistry": "CHEMISTRIES",
-        "phase": "PHASES",
+        "phase": "INVERTER_PHASES",
         "grid_sign": "GRID_SIGNS",
         "battery_sign": "BATTERY_SIGNS",
     }

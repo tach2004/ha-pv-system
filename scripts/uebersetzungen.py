@@ -171,6 +171,7 @@ AUSWAHL: dict[str, dict[str, T]] = {
         "l1": ("L1", "L1"),
         "l2": ("L2", "L2"),
         "l3": ("L3", "L3"),
+        "l123": ("L1 + L2 + L3 (dreiphasig)", "L1 + L2 + L3 (three-phase)"),
     },
     "phase_count": {
         "1": ("Einphasig", "Single phase"),
@@ -284,6 +285,11 @@ FELDER: dict[str, T] = {
     "rated_power_w": ("Nennleistung", "Rated power"),
     "phase": ("Phase", "Phase"),
     "hybrid": ("Hybrid-Wechselrichter", "Hybrid inverter"),
+    "in_series": (
+        "In Reihe zwischen Zähler und Haus",
+        "In series between meter and house",
+    ),
+    "ac_input_power_entity": ("Eingangsleistung (AC)", "Input power (AC)"),
     "ac_voltage_entity": ("AC-Spannung", "AC voltage"),
     "ac_current_entity": ("AC-Strom", "AC current"),
     "dc_voltage_entity": ("DC-Spannung", "DC voltage"),
@@ -448,8 +454,12 @@ HINWEISE: dict[str, T] = {
         "Discharge stops here. Remaining runtime is calculated against this limit.",
     ),
     "phase": (
-        "Auf welcher Phase dieser einphasige Wechselrichter einspeist.",
-        "Which phase this single-phase inverter feeds into.",
+        "Auf welcher Phase dieser Wechselrichter einspeist - oder auf allen "
+        "dreien, wenn er dreiphasig ist. Die Karte zeichnet dann hinter dem "
+        "Kasten drei Leitungen und teilt die Leistung gleichmäßig auf.",
+        "Which phase this inverter feeds into - or all three if it is "
+        "three-phase. The card then draws three lines below the box and "
+        "splits the power evenly.",
     ),
     "calculate": (
         "Verbrauch = Wechselrichterleistung + Netzleistung. Ein gemessener "
@@ -525,6 +535,10 @@ FELDNAMEN_JE_SCHRITT: dict[str, dict[str, T]] = {
     },
     "inverter": {
         "power_entity": ("Ausgangsleistung (AC)", "Output power (AC)"),
+        "ac_input_power_entity": (
+            "Eingangsleistung vom Netz (AC)",
+            "Input power from grid (AC)",
+        ),
         "ac_voltage_entity": ("Ausgangsspannung (AC)", "Output voltage (AC)"),
         "ac_current_entity": ("Ausgangsstrom (AC)", "Output current (AC)"),
         "dc_voltage_entity": ("Eingangsspannung (DC)", "Input voltage (DC)"),
@@ -775,10 +789,14 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         "energy_entity": (
             "Z\u00e4hlerstand in kWh f\u00fcr das, was dieses Ger\u00e4t insgesamt "
             "abgegeben hat. Die Kostenrechnung nimmt ihn als Erzeugung - "
-            "nur was der Wechselrichter abgibt, kann ins Netz gehen.",
+            "nur was der Wechselrichter abgibt, kann ins Netz gehen. In "
+            "Reihe geschaltet z\u00e4hlt er auch den durchgereichten "
+            "Netzstrom; als Ertrag gilt dann der Ertragsz\u00e4hler der Module.",
             "kWh meter for what this device has delivered in total. The cost "
             "calculation uses it as generation - only what the inverter "
-            "delivers can go to the grid.",
+            "delivers can go to the grid. In series it also counts the grid "
+            "power passed through; the module yield meter then counts as "
+            "generation instead.",
         ),
         "mode_entity": (
             "Die Betriebsart als Text, z. B. \u201eNetzparallel\u201c oder "
@@ -792,9 +810,38 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
         "power_entity": (
             "Die abgegebene AC-Leistung - der interne Sensor oder ein "
             "Zwischenzähler davor. Aus dieser Zahl entsteht der "
-            "Hausverbrauch.",
-            "AC output power - the built-in sensor or an inline meter such as a "
-            "inline meter. House consumption is derived from this figure.",
+            "Hausverbrauch. Dreiphasig: die Summe aller drei Phasen. In "
+            "Reihe: was am Ausgang zum Haus hinausgeht.",
+            "AC output power - the built-in sensor or an inline meter. House "
+            "consumption is derived from this figure. Three-phase: the total "
+            "of all three phases. In series: what leaves the output towards "
+            "the house.",
+        ),
+        "in_series": (
+            "An, wenn das Gerät nicht neben dem Netz einspeist, sondern das "
+            "Netz an seinem Eingang hängt und das Haus an seinem Ausgang - "
+            "ein Inselwechselrichter mit Netzvorrang oder ein Gerät im "
+            "USV-Betrieb. Die Karte setzt ihn direkt neben den Zähler; "
+            "weitere Anlagen hängen dahinter. Gerechnet wird mit Ausgang "
+            "minus Eingang. Nur ein Wechselrichter kann so sitzen - bei den "
+            "übrigen ist der Schalter dann ausgegraut.",
+            "On when the device does not feed in alongside the grid but has "
+            "the grid on its input and the house on its output - an off-grid "
+            "inverter with grid bypass or a device in UPS mode. The card "
+            "places it right next to the meter; other plants hang behind it. "
+            "The calculation uses output minus input. Only one inverter can "
+            "sit like this - for the others the switch is then greyed out.",
+        ),
+        "ac_input_power_entity": (
+            "Nur in Reihe: was das Gerät gerade aus dem Netz zieht. Leer "
+            "heißt: Es ist das, was der Zähler auf seinen Phasen misst - "
+            "dreiphasig die Gesamtleistung, einphasig die Leistung seiner "
+            "Phase. Nötig, wenn nur ein Teil des Hauses hinter dem Gerät "
+            "hängt.",
+            "Series only: what the device currently draws from the grid. "
+            "Empty means: what the meter measures on its phases - the total "
+            "when three-phase, the power of its phase when single-phase. "
+            "Needed when only part of the house hangs behind the device.",
         ),
         "voltage_entity": (
             "Nicht benutzt - hier zählen AC- und DC-Spannung weiter unten.",
@@ -1506,8 +1553,8 @@ BATTERIEFELDER = [
     "cycles_entity", "charged_energy_entity", "discharged_energy_entity",
 ]
 WRFELDER = [
-    "enabled", "name", "manufacturer", "model", "rated_power_w", "phase", "hybrid",
-    "power_entity", "ac_voltage_entity", "ac_current_entity", "dc_voltage_entity",
+    "enabled", "name", "manufacturer", "model", "rated_power_w", "phase",
+    "in_series", "hybrid", "power_entity", "ac_input_power_entity", "ac_voltage_entity", "ac_current_entity", "dc_voltage_entity",
     "frequency_entity", "temperature_entity", "temp_cold", "temp_warm", "temp_hot",
     "energy_entity", "mode_entity",
 ]
@@ -1706,10 +1753,16 @@ def baum(sprache) -> dict:
                     "title": s(("Wechselrichter – {plant}", "Inverter – {plant}")),
                     "description": s(
                         (
-                            "Ausgelegt für einphasige Wechselrichter im "
-                            "Netzparallelbetrieb." + OPTIONAL[0],
-                            "Designed for single-phase inverters running in "
-                            "parallel with the grid." + OPTIONAL[1],
+                            "Einphasig auf L1, L2 oder L3 - oder dreiphasig "
+                            "auf allen dreien. Netzparallel oder in Reihe "
+                            "zwischen Zähler und Haus. In Reihe kann nur ein "
+                            "Wechselrichter sitzen, derzeit: {series_plant}."
+                            + OPTIONAL[0],
+                            "Single-phase on L1, L2 or L3 - or three-phase on "
+                            "all of them. In parallel with the grid or in "
+                            "series between meter and house. Only one "
+                            "inverter can sit in series, currently: "
+                            "{series_plant}." + OPTIONAL[1],
                         )
                     ),
                     "data": _felder(WRFELDER, s, "inverter"),
@@ -2001,6 +2054,15 @@ def baum(sprache) -> dict:
                 },
             },
             "error": {
+                "series_taken": s(
+                    (
+                        "Zwischen Zähler und Haus sitzt schon der "
+                        "Wechselrichter einer anderen Anlage. Dort zuerst "
+                        "ausschalten.",
+                        "Another plant's inverter already sits between meter "
+                        "and house. Switch it off there first.",
+                    )
+                ),
                 "temperature_order": s(
                     (
                         "Die Temperaturschwellen müssen aufsteigen: "

@@ -91,6 +91,11 @@ const UMLEITER_SCHIENE = 11;  // Abstand der Sammelschiene unter dem Haus
 const KLEMM_ABSTAND = 44;
 const MINDESTBREITE = ZAEHLER_B + HAUS_B + 200;
 const WRBALKEN = M.spalte - 54;
+// Abstand der Leitungen unter einem Wechselrichter, der an mehr als einer
+// Stelle auf die Phasen geht - dreiphasig drei nebeneinander, in Reihe je
+// ein Ein- und ein Ausgang. Weit genug, dass zwei Flusslinien bei voller
+// Breite nicht ineinanderlaufen.
+const AC_ABSTAND = 11;
 
 // Der Richtungspfeil: ein Winkel, kein gefülltes Dreieck. Ein Winkel wird
 // gestrichen, nicht gefüllt - damit erbt er dieselbe Farbe wie die Flusslinie,
@@ -117,6 +122,57 @@ function _umleiterMitLeistung(d) {
   return (umleiter.loads || []).filter(
     (v) => v && v.power !== null && v.power !== undefined
   );
+}
+
+const PHASEN = ["l1", "l2", "l3"];
+
+/** Sitzt der Wechselrichter dieser Anlage in Reihe zwischen Zähler und Haus? */
+function _inReihe(anlage) {
+  const wr = (anlage && anlage.inverter) || {};
+  return Boolean(wr.enabled && wr.series);
+}
+
+/**
+ * Die Phasenzeilen, auf die ein Wechselrichter geht - von oben nach unten.
+ *
+ * Gezeichnet werden nur so viele Phasen, wie der Anschluss hat; ein
+ * dreiphasiger Wechselrichter an einer einzigen Leitung geht dann eben auf
+ * diese eine. Jede Zeile kommt nur einmal vor.
+ */
+function _zeilenDesWr(wr, phasen) {
+  const liste = wr.phases && wr.phases.length ? wr.phases : [wr.phase || "l1"];
+  const zeilen = new Set(
+    liste.map((p) => Math.min(Math.max(0, PHASEN.indexOf(p)), phasen - 1))
+  );
+  return [...zeilen].sort((a, b) => a - b);
+}
+
+/**
+ * Was ein Wechselrichter auf eine gezeichnete Phasenzeile gibt.
+ *
+ * ``feld`` ist der Anteil je Phase aus dem Rechenkern - die Abgabe
+ * ("phase_power"). Stehen weniger Zeilen da als Phasen, landet auf der
+ * untersten, was darunter keinen Platz hat.
+ */
+function _aufZeile(wr, zeile, phasen, feld = "phase_power") {
+  if (!wr) return null;
+  const anteile = wr[feld] || { [wr.phase || "l1"]: wr.power };
+  let summe = null;
+  for (const [p, wert] of Object.entries(anteile)) {
+    const n = zahl(wert);
+    if (n === null) continue;
+    if (Math.min(Math.max(0, PHASEN.indexOf(p)), phasen - 1) !== zeile) continue;
+    summe = (summe || 0) + n;
+  }
+  return summe;
+}
+
+/** Die Phase als Text: "L2" - oder dreiphasig alle drei. */
+function _phasenText(wr, kurz = false) {
+  if (wr.phases && wr.phases.length > 1) {
+    return kurz ? "3~" : "dreiphasig (L1, L2, L3)";
+  }
+  return String(wr.phase || "l1").toUpperCase();
 }
 
 const LEER = new Set(["unknown", "unavailable", "none", "None", "", null, undefined]);
@@ -428,6 +484,9 @@ class PvSystemCard extends HTMLElement {
         p.battery.enabled,
         p.inverter.enabled,
         p.inverter.phase,
+        // In Reihe wandert die Anlage nach links neben den Zähler, und ihre
+        // Phase wird an ihr unterbrochen - ein anderes Bild.
+        Boolean(p.inverter.series),
       ]),
     ]);
   }
@@ -818,12 +877,18 @@ class PvSystemCard extends HTMLElement {
 
   _diagramm() {
     const d = this._daten;
-    const anlagen = d.plants;
+    // Der Wechselrichter in Reihe sitzt direkt neben dem Zähler - durch ihn
+    // läuft, was vom Netz kommt. Seine Anlage steht deshalb links außen,
+    // gleich welche Reihenfolge eingestellt ist. Die übrigen behalten ihre.
+    const anlagen = [...d.plants].sort((a, b) => _inReihe(b) - _inReihe(a));
     const zeigeStrings = d.display.show_strings !== false;
     // Ohne Phasen bleibt eine einzige Wechselstromleitung übrig. Die
     // Wechselrichter hängen dann alle an ihr, und der Zähler zeigt nur noch
     // die Summe - das ist die Karte für eine einphasige Anlage.
     const zeigePhasen = d.display.show_phases !== false;
+    const phasen = zeigePhasen
+      ? Math.min(3, Math.max(1, d.grid.phases_count || 3))
+      : 1;
 
     // Zeilen bestimmen: Ein Laderegler bekommt nur dann eine eigene Zeile,
     // wenn ihn wenigstens eine Anlage hat. Sonst bliebe eine leere Spur
@@ -850,9 +915,6 @@ class PvSystemCard extends HTMLElement {
     // ohne diesen Zuschlag stieße ihre Oberkante an den Wechselrichter.
     y += M.wrH + M.zeileLuecke + BAND_OBEN;
     const yBus = y;
-    const phasen = zeigePhasen
-      ? Math.min(3, Math.max(1, d.grid.phases_count || 3))
-      : 1;
     // Der Zähler- und der Hauskasten umschließen die Phasenzeilen: oben Platz
     // für Titel und Modell, unten etwas Luft, mindestens aber so hoch, dass im
     // Haus vier Zeilen stehen können.
@@ -874,7 +936,15 @@ class PvSystemCard extends HTMLElement {
     // Seine Leitung käme aus dem Kasten heraus statt aus der Phase. Also
     // bekommen beide Seiten so viel Platz, dass der äußerste Strang daneben
     // liegt - und sei die Karte dafür etwas breiter.
-    const randLinks = Math.max(0, ZAEHLER_B + KLEMM_ABSTAND - M.trunk);
+    //
+    // Sitzt ein Wechselrichter in Reihe, kommt seine Leitung vom Zähler
+    // links neben seinem Strang herein. Damit das Stück dazwischen so lang
+    // bleibt wie sonst, rückt die erste Spalte um genau diese Breite ab.
+    const reihe = anlagen.find(_inReihe);
+    const reiheBreite = reihe
+      ? Math.max(_zeilenDesWr(reihe.inverter, phasen).length, 2) * AC_ABSTAND
+      : 0;
+    const randLinks = Math.max(0, ZAEHLER_B + KLEMM_ABSTAND - M.trunk) + reiheBreite;
     const randRechts = Math.max(
       0, HAUS_B + KLEMM_ABSTAND - (M.spalte - M.trunk)
     );
@@ -895,6 +965,7 @@ class PvSystemCard extends HTMLElement {
 
     const zaehlerX = M.rand;
     const hausX = breite - M.rand - HAUS_B;
+    const { punkte, anschluesse } = this._abgriffe(anlagen, startX, phasen);
 
     this._geo = {
       ySpaltenkopf, yModul, yLaderegler, yBatterie, yWr, yBus,
@@ -905,7 +976,9 @@ class PvSystemCard extends HTMLElement {
       netzSteig: zaehlerX + ZAEHLER_B / 2,
       // Wo welcher Wechselrichter auf seiner Phase hängt - daraus entstehen
       // die Abschnitte der Phasenlinien.
-      abgriffe: this._abgriffe(anlagen, startX, phasen),
+      abgriffe: punkte,
+      // Und dieselben Stellen je Anlage, für die Leitungen vom Kasten hinab.
+      anschluesse,
     };
 
     const svg = e("svg", {
@@ -947,19 +1020,55 @@ class PvSystemCard extends HTMLElement {
    * Aus diesen Punkten entstehen die Abschnitte der Phasenlinie: Zwischen zwei
    * Punkten fließt immer die Summe dessen, was links davon eingespeist wurde.
    * Genau so rechnet ein Knotenpunkt auch in Wirklichkeit.
+   *
+   * Drei Arten von Abgriff gibt es:
+   *
+   * * "wr" - netzparallel. Einphasig eine Leitung unter dem Strang,
+   *   dreiphasig drei nebeneinander, je eine auf L1, L2 und L3.
+   * * "rein" und "raus" - in Reihe. Die Phase wird am Wechselrichter
+   *   unterbrochen: Links geht sie hinauf in den Kasten, rechts kommt sie
+   *   wieder heraus. Dreiphasig liegen die drei Paare ineinander - L1 außen,
+   *   L3 innen -, so kreuzt keine Leitung eine andere.
+   *
+   * Werden die Phasen nicht gezeigt, hängen alle an derselben Leitung.
    */
   _abgriffe(anlagen, startX, phasen) {
     const punkte = [[], [], []];
+    const anschluesse = new Map();
     anlagen.forEach((anlage, i) => {
-      if (!anlage.inverter.enabled) return;
-      const nummer = { l1: 0, l2: 1, l3: 2 }[anlage.inverter.phase] || 0;
-      // Werden die Phasen nicht gezeigt, hängen alle an derselben Leitung.
-      punkte[Math.min(nummer, phasen - 1)].push({
-        x: startX + i * (M.spalte + M.luecke) + M.trunk,
-        id: anlage.id,
-      });
+      const wr = anlage.inverter;
+      const trunk = startX + i * (M.spalte + M.luecke) + M.trunk;
+      const zeilen = _zeilenDesWr(wr, phasen);
+      const liste = [];
+      if (!wr.enabled) {
+        // Kein Wechselrichter: Der Strang läuft wie bisher bis zu seiner
+        // Phase durch, aber ohne Abgriff - dort speist nichts ein.
+        liste.push({ zeile: zeilen[0], x: trunk, art: "leer" });
+      } else if (_inReihe(anlage)) {
+        const breite = Math.max(zeilen.length, 2);
+        zeilen.forEach((zeile, j) => {
+          const weite = (breite - j) * AC_ABSTAND;
+          liste.push({ zeile, x: trunk - weite, art: "rein" });
+          liste.push({ zeile, x: trunk + weite, art: "raus" });
+        });
+      } else {
+        zeilen.forEach((zeile, j) => {
+          liste.push({
+            zeile,
+            x: trunk + (j - (zeilen.length - 1) / 2) * AC_ABSTAND,
+            art: "wr",
+          });
+        });
+      }
+      anschluesse.set(anlage.id, liste);
+      for (const a of liste) {
+        if (a.art !== "leer") punkte[a.zeile].push({ x: a.x, id: anlage.id, art: a.art });
+      }
     });
-    return punkte.map((liste) => liste.sort((a, b) => a.x - b.x));
+    return {
+      punkte: punkte.map((liste) => liste.sort((a, b) => a.x - b.x)),
+      anschluesse,
+    };
   }
 
   _modulHoehe(anlage, zeigeStrings) {
@@ -1290,12 +1399,27 @@ class PvSystemCard extends HTMLElement {
       );
     }
 
-    /* --- vom Wechselrichter auf seine Phase ---------------------------- */
-    const phaseIndex = { l1: 0, l2: 1, l3: 2 }[anlage.inverter.phase] || 0;
-    const yPhase = this._geo.yBus + Math.min(phaseIndex, this._geo.phasen - 1) * M.busAbstand;
-    this._leitung(
-      leitungen, trunk, g.yWr + M.wrH, trunk, yPhase, `${id}:ac`, "f-solar"
-    );
+    /* --- vom Wechselrichter auf seine Phasen --------------------------- */
+    // Erst hinter dem Kasten: Darüber ist Gleichstrom, und der hat keine
+    // Phasen. Netzparallel geht je eine Leitung hinab, in Reihe kommt die
+    // Phase links herauf und geht rechts wieder hinunter - beide Leitungen
+    // sind so gezeichnet, dass der Pfeil im Normalfall richtig herum steht:
+    // Bezug hinauf in den Wechselrichter, Abgabe hinunter zum Haus.
+    for (const a of g.anschluesse.get(id) || []) {
+      const yPhase = g.yBus + a.zeile * M.busAbstand;
+      if (a.art === "rein") {
+        this._leitung(
+          leitungen, a.x, yPhase, a.x, g.yWr + M.wrH, `${id}:ein:${a.zeile}`, "f-bezug"
+        );
+      } else {
+        this._leitung(
+          leitungen,
+          a.x, g.yWr + M.wrH, a.x, yPhase,
+          `${id}:${a.art === "raus" ? "aus" : "ac"}:${a.zeile}`,
+          a.art === "raus" ? "f-haus" : "f-solar"
+        );
+      }
+    }
   }
 
   /**
@@ -1430,12 +1554,15 @@ class PvSystemCard extends HTMLElement {
       // erweitert sie einfach.
       const punkte = [
         { x: links, art: "netz" },
-        ...g.abgriffe[i].map((a) => ({ x: a.x, art: "wr", id: a.id })),
+        ...g.abgriffe[i].map((a) => ({ x: a.x, art: a.art, id: a.id })),
         { x: rechts, art: "haus" },
       ].sort((a, b) => a.x - b.x);
       this._busPunkte.push(punkte);
 
       for (let k = 0; k < punkte.length - 1; k++) {
+        // Zwischen Ein- und Ausgang eines Wechselrichters in Reihe gibt es
+        // keine Leitung: Der Strom geht durch das Gerät, nicht daran vorbei.
+        if (punkte[k].art === "rein") continue;
         const von = punkte[k].x;
         const bis = punkte[k + 1].x;
         leitungen.appendChild(
@@ -2299,9 +2426,12 @@ class PvSystemCard extends HTMLElement {
       if (anlage.inverter.enabled) {
         const w = anlage.inverter;
         this._setzen(`${id}:inverter:power`, watt(w.power, l));
+        // In Reihe steht es gleich vorn dabei: Die Zahl darüber ist dann,
+        // was zum Haus hinausgeht - durchgereichter Netzstrom eingeschlossen.
+        const geraet = [w.manufacturer, w.model || w.name].filter(Boolean).join(" ");
         this._setzen(
           `${id}:inverter:name`,
-          [w.manufacturer, w.model || w.name].filter(Boolean).join(" ")
+          w.series ? (geraet ? `In Reihe · ${geraet}` : "In Reihe") : geraet
         );
         const last = Math.max(0, Math.min(100, zahl(w.load) || 0));
         this._attr(`${id}:inverter:balken`, "width", (WRBALKEN * last) / 100);
@@ -2313,7 +2443,7 @@ class PvSystemCard extends HTMLElement {
             ? `max ${watt(w.rated_power, l)}`
             : `${prozent(w.load, l)} von ${watt(w.rated_power, l)}`
         );
-        this._setzen(`${id}:inverter:phase`, String(w.phase || "l1").toUpperCase());
+        this._setzen(`${id}:inverter:phase`, _phasenText(w, true));
         // Ganze Grad wie beim Akku; die Detailtabelle zeigt die Nachkommastelle.
         this._setzen(
           `${id}:inverter:temp`,
@@ -2326,14 +2456,9 @@ class PvSystemCard extends HTMLElement {
           "class",
           `mini rechts ${_waerme(w.temperature, w.temperature_limits)}`
         );
-        // Das Vorzeichen entscheidet über Richtung und Farbe. Minus heißt,
-        // der Wechselrichter nimmt von der Phase statt abzugeben - im
-        // Leerlauf ein paar Watt, beim Laden aus dem Netz mehr. Vorher lief
-        // die Linie in beiden Fällen abwärts zur Phase, und der Pfeil
-        // behauptete eine Einspeisung, die es nicht gab.
-        const zieht = (zahl(w.power) || 0) < 0;
-        this._flussfarbe(`${id}:ac`, zieht ? "f-bezug" : "f-solar");
-        this._fluss(`${id}:ac`, w.power, bezug, zieht);
+        // Die Leitungen unter dem Kasten setzt _phasenFluss: Dort ist
+        // bekannt, was auf jeder Phase ankommt - und in Reihe, was von links
+        // hereinfließt.
       }
     }
 
@@ -2341,8 +2466,11 @@ class PvSystemCard extends HTMLElement {
     const phasen = (d.grid && d.grid.phases) || {};
     if (this._geo && this._geo.zeigePhasen === false) {
       // Eine einzige Wechselstromleitung: Über ihr steht, was alle
-      // Wechselrichter zusammen abgeben.
-      const alle = zahl(t.inverter_power);
+      // Wechselrichter zusammen abgeben. Einer in Reihe zählt mit seinem
+      // Beitrag - der durchgereichte Netzstrom ist keine Erzeugung.
+      const alle = zahl(
+        t.inverter_net !== undefined ? t.inverter_net : t.inverter_power
+      );
       // Wie bei den einzelnen Phasen sagt das Vorzeichen die Richtung. Ein
       // Aufwärtspfeil über einer Summe, die ins Minus gerutscht ist, wäre
       // schlicht falsch.
@@ -2523,12 +2651,21 @@ class PvSystemCard extends HTMLElement {
    * Beispiel L1 mit 980 W Einspeisung und einem Wechselrichter mit 1820 W:
    * Zwischen Zähler und Wechselrichter fließen 980 W nach links ins Netz,
    * rechts davon 840 W nach rechts ins Haus. Genau das zeigt die Karte dann.
+   *
+   * Ein dreiphasiger Wechselrichter gibt auf jede seiner Phasen seinen
+   * Anteil. Einer in Reihe setzt die Summe neu: Links von ihm fließt, was
+   * vom Zähler kommt, und das geht hinauf in den Kasten; rechts von ihm
+   * fließt, was er zum Haus hin abgibt.
    */
   _phasenFluss(netzleistung, phasen) {
     const g = this._geo;
-    const leistungJeWr = new Map();
+    const t = this._daten.totals || {};
+    // Die Leitungen unter den Kästen laufen im selben Takt wie die Stränge
+    // darüber - gemessen an der Spitzenleistung, nicht am Hausanschluss.
+    const bezug = Math.max(1000, zahl(t.pv_peak) || 0);
+    const wechselrichter = new Map();
     for (const anlage of this._daten.plants) {
-      leistungJeWr.set(anlage.id, anlage.inverter.enabled ? zahl(anlage.inverter.power) : null);
+      if (anlage.inverter.enabled) wechselrichter.set(anlage.id, anlage.inverter);
     }
 
     for (let i = 0; i < g.phasen; i++) {
@@ -2545,10 +2682,39 @@ class PvSystemCard extends HTMLElement {
       const punkte = (this._busPunkte || [])[i] || [];
       const netzIndex = punkte.findIndex((k) => k.art === "netz");
       let summe = 0;
-      for (let k = 0; k < punkte.length - 1; k++) {
+      for (let k = 0; k < punkte.length; k++) {
         const knoten = punkte[k];
+        const wr = wechselrichter.get(knoten.id);
         if (knoten.art === "netz") summe += netzHier || 0;
-        if (knoten.art === "wr") summe += leistungJeWr.get(knoten.id) || 0;
+        if (knoten.art === "wr") {
+          // Das Vorzeichen entscheidet über Richtung und Farbe. Minus heißt,
+          // der Wechselrichter nimmt von der Phase statt abzugeben - im
+          // Leerlauf ein paar Watt, beim Laden aus dem Netz mehr.
+          const anteil = _aufZeile(wr, i, g.phasen);
+          const zieht = (anteil || 0) < 0;
+          this._flussfarbe(`${knoten.id}:ac:${i}`, zieht ? "f-bezug" : "f-solar");
+          this._fluss(`${knoten.id}:ac:${i}`, anteil, bezug, zieht);
+          summe += anteil || 0;
+        }
+        if (knoten.art === "rein") {
+          // Was bis hierher fließt, geht hinauf in den Wechselrichter: rot
+          // bei Bezug, blau und abwärts, wenn er ins Netz zurückgibt.
+          const name = `${knoten.id}:ein:${i}`;
+          this._faerben(name, summe > 0);
+          this._fluss(name, summe, 3000, summe < 0);
+          // Bis zum Ausgang gibt es keinen Abschnitt.
+          continue;
+        }
+        if (knoten.art === "raus") {
+          // Ab hier fließt, was er zum Haus hin abgibt. Negativ heißt: Die
+          // Anlagen dahinter schieben Strom in ihn zurück.
+          const abgabe = _aufZeile(wr, i, g.phasen);
+          const name = `${knoten.id}:aus:${i}`;
+          this._faerben(name, false, (abgabe || 0) < 0 ? "f-netz" : "f-haus");
+          this._fluss(name, abgabe, 3000, (abgabe || 0) < 0);
+          summe = abgabe || 0;
+        }
+        if (k === punkte.length - 1) break;
         // Die Farbe sagt, woher der Strom in diesem Abschnitt kommt: nach
         // links heißt ins Netz (blau), der Abschnitt direkt hinter dem Zähler
         // bei Bezug kommt aus dem Netz (rot), alles Übrige geht Richtung Haus.
@@ -2812,11 +2978,38 @@ class PvSystemCard extends HTMLElement {
       ];
     } else if (art === "inverter" && anlage) {
       const w = anlage.inverter;
+      const dreiphasig = Boolean(w.phases && w.phases.length > 1);
       zeilen = [
-        ["Leistung", watt(w.power, l), w.entities.power],
+        [w.series ? "Leistung zum Haus" : "Leistung", watt(w.power, l), w.entities.power],
+        // In Reihe: was hineingeht und was das Gerät selbst dazutut. Der
+        // Eingang ist entweder sein eigener Sensor oder der Zähler daneben -
+        // dann steht das dabei, denn gemessen hat es der Zähler.
+        ...(w.series
+          ? [
+              [
+                "Eingang vom Netz",
+                w.input_power === null || w.input_power === undefined
+                  ? "–"
+                  : `${watt(w.input_power, l)}${
+                      w.input_source === "meter" ? " (Zähler)" : ""
+                    }`,
+                w.input_source === "sensor" ? w.entities.ac_input_power : null,
+              ],
+              ["Eigener Beitrag", wattVz(w.net_power, l)],
+            ]
+          : []),
         ["Auslastung", prozent(w.load, l)],
         ["Nennleistung", watt(w.rated_power, l)],
-        ["Phase", String(w.phase || "").toUpperCase()],
+        ["Phase", _phasenText(w)],
+        ["Schaltung", w.series ? "in Reihe zwischen Zähler und Haus" : "netzparallel"],
+        // Dreiphasig: was auf jede Phase geht. Zu gleichen Teilen - so
+        // speisen die üblichen Geräte ein.
+        ...(dreiphasig
+          ? PHASEN.map((p) => [
+              `${p.toUpperCase()} Leistung`,
+              watt((w.phase_power || {})[p], l),
+            ])
+          : []),
         ["AC-Spannung", einheit(w.ac_voltage, "V", 1, l), w.entities.ac_voltage],
         ["AC-Strom", einheit(w.ac_current, "A", 2, l), w.entities.ac_current],
         ["DC-Spannung", einheit(w.dc_voltage, "V", 2, l), w.entities.dc_voltage],
@@ -2826,8 +3019,9 @@ class PvSystemCard extends HTMLElement {
         // Was hinter dem Wechselrichter angekommen ist und was es eingebracht
         // hat - heute, diesen Monat, dieses Jahr. Nur wenn wirklich dieser
         // Zähler die Anlage zählt; sonst stammte die Menge von den Modulen,
-        // also von vor dem Wechselrichter.
-        ...(w.entities.energy
+        // also von vor dem Wechselrichter. In Reihe zählt er auch den
+        // durchgereichten Netzstrom und ist darum nie der Ertragszähler.
+        ...(w.entities.energy && !w.series
           ? this._ertragZeilen(anlage, "", l)
           : []),
         ["Betriebsart", w.mode || "–", w.entities.mode],
@@ -3201,7 +3395,9 @@ class PvSystemCard extends HTMLElement {
     // Leitung und Wechselrichter, also um deren Verluste zu hoch. Das soll
     // dann auch dranstehen.
     const quelle =
-      anlage.inverter.enabled && anlage.inverter.entities.energy ? "" : " (Module)";
+      anlage.inverter.enabled && anlage.inverter.entities.energy && !anlage.inverter.series
+        ? ""
+        : " (Module)";
     const zeilen = [
       ["Leistung jetzt", watt(m.power, l), m.entities.power],
       // Zum Vergleich der Anlagen untereinander: die Menge immer, das Geld,
@@ -3211,9 +3407,11 @@ class PvSystemCard extends HTMLElement {
       [
         "Wechselrichter",
         anlage.inverter.enabled
-          ? `${watt(anlage.inverter.power, l)} auf ${String(
-              anlage.inverter.phase || ""
-            ).toUpperCase()}`
+          ? `${watt(anlage.inverter.power, l)} auf ${
+              anlage.inverter.phases && anlage.inverter.phases.length > 1
+                ? "L1–L3"
+                : String(anlage.inverter.phase || "").toUpperCase()
+            }${anlage.inverter.series ? ", in Reihe" : ""}`
           : "–",
       ],
       [
