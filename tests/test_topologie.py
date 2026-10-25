@@ -323,6 +323,23 @@ def test_eingangssensor_wird_beobachtet():
     assert "sensor.wr_ein" in topology.quellen(daten)
 
 
+
+def test_neue_felder_am_wechselrichter_haben_vorgaben():
+    """Davor aus, keine Phasensensoren - ältere Einträge bleiben, wie sie waren."""
+    wr = topology.wechselrichter_normalisieren({})
+    assert wr["before_series"] is False
+    assert (wr["l1_power_entity"], wr["l2_power_entity"], wr["l3_power_entity"]) == (
+        None, None, None,
+    )
+
+
+def test_phasensensoren_des_wechselrichters_werden_beobachtet():
+    daten = topology.normalisieren(
+        {"plants": [{"id": "a", "inverter": {"phase": "l123", "l2_power_entity": "sensor.wr_l2"}}]}
+    )
+    assert "sensor.wr_l2" in topology.quellen(daten)
+
+
 if __name__ == "__main__":
     _alle_tests()
     print("alle Struktur-Tests bestanden")

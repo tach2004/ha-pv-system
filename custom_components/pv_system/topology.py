@@ -94,6 +94,7 @@ from .const import (
     CONF_INVERTER_AC_CURRENT,
     CONF_INVERTER_AC_INPUT,
     CONF_INVERTER_AC_VOLTAGE,
+    CONF_INVERTER_BEFORE_SERIES,
     CONF_INVERTER_DC_VOLTAGE,
     CONF_INVERTER_ENERGY,
     CONF_INVERTER_FREQUENCY,
@@ -102,6 +103,7 @@ from .const import (
     CONF_INVERTER_MODE,
     CONF_INVERTER_MODEL,
     CONF_INVERTER_NAME,
+    CONF_INVERTER_PHASE_POWER,
     CONF_INVERTER_POWER,
     CONF_INVERTER_SERIES,
     CONF_INVERTER_TEMPERATURE,
@@ -209,6 +211,8 @@ INVERTER_ENTITIES = (
     CONF_INVERTER_ENERGY,
     CONF_INVERTER_MODE,
     CONF_INVERTER_AC_INPUT,
+    # Die Abgabe je Phase - nur dreiphasig von Belang.
+    *(CONF_INVERTER_PHASE_POWER.format(phase=phase) for phase in PHASES),
 )
 
 
@@ -408,6 +412,7 @@ def wechselrichter_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         CONF_PHASE: _auswahl(roh.get(CONF_PHASE), INVERTER_PHASES, PHASE_L1),
         CONF_INVERTER_HYBRID: bool(roh.get(CONF_INVERTER_HYBRID, False)),
         CONF_INVERTER_SERIES: bool(roh.get(CONF_INVERTER_SERIES, False)),
+        CONF_INVERTER_BEFORE_SERIES: bool(roh.get(CONF_INVERTER_BEFORE_SERIES, False)),
         **temperaturgrenzen(roh),
     }
     for feld in INVERTER_ENTITIES:

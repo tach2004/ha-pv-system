@@ -290,6 +290,10 @@ FELDER: dict[str, T] = {
         "In series between meter and house",
     ),
     "ac_input_power_entity": ("Eingangsleistung (AC)", "Input power (AC)"),
+    "before_series": (
+        "Vor dem Wechselrichter in Reihe (Netzseite)",
+        "Before the series inverter (grid side)",
+    ),
     "ac_voltage_entity": ("AC-Spannung", "AC voltage"),
     "ac_current_entity": ("AC-Strom", "AC current"),
     "dc_voltage_entity": ("DC-Spannung", "DC voltage"),
@@ -539,6 +543,9 @@ FELDNAMEN_JE_SCHRITT: dict[str, dict[str, T]] = {
             "Eingangsleistung vom Netz (AC)",
             "Input power from grid (AC)",
         ),
+        "l1_power_entity": ("Ausgangsleistung L1 (dreiphasig)", "Output power L1 (three-phase)"),
+        "l2_power_entity": ("Ausgangsleistung L2 (dreiphasig)", "Output power L2 (three-phase)"),
+        "l3_power_entity": ("Ausgangsleistung L3 (dreiphasig)", "Output power L3 (three-phase)"),
         "ac_voltage_entity": ("Ausgangsspannung (AC)", "Output voltage (AC)"),
         "ac_current_entity": ("Ausgangsstrom (AC)", "Output current (AC)"),
         "dc_voltage_entity": ("Eingangsspannung (DC)", "Input voltage (DC)"),
@@ -822,26 +829,58 @@ HINWEISE_JE_SCHRITT: dict[str, dict[str, T]] = {
             "Netz an seinem Eingang hängt und das Haus an seinem Ausgang - "
             "ein Inselwechselrichter mit Netzvorrang oder ein Gerät im "
             "USV-Betrieb. Die Karte setzt ihn direkt neben den Zähler; "
-            "weitere Anlagen hängen dahinter. Gerechnet wird mit Ausgang "
-            "minus Eingang. Nur ein Wechselrichter kann so sitzen - bei den "
-            "übrigen ist der Schalter dann ausgegraut.",
+            "weitere Anlagen hängen dahinter - oder davor, wenn sie es so "
+            "eingestellt haben. Gerechnet wird mit Ausgang minus Eingang. "
+            "Nur ein Wechselrichter kann so sitzen - bei den übrigen ist der "
+            "Schalter dann ausgegraut.",
             "On when the device does not feed in alongside the grid but has "
             "the grid on its input and the house on its output - an off-grid "
             "inverter with grid bypass or a device in UPS mode. The card "
-            "places it right next to the meter; other plants hang behind it. "
-            "The calculation uses output minus input. Only one inverter can "
-            "sit like this - for the others the switch is then greyed out.",
+            "places it right next to the meter; other plants hang behind it - "
+            "or before it, if set up that way. The calculation uses output "
+            "minus input. Only one inverter can sit like this - for the "
+            "others the switch is then greyed out.",
         ),
         "ac_input_power_entity": (
             "Nur in Reihe: was das Gerät gerade aus dem Netz zieht. Leer "
             "heißt: Es ist das, was der Zähler auf seinen Phasen misst - "
             "dreiphasig die Gesamtleistung, einphasig die Leistung seiner "
-            "Phase. Nötig, wenn nur ein Teil des Hauses hinter dem Gerät "
-            "hängt.",
+            "Phase -, plus was Anlagen davor einspeisen. Nötig, wenn nur ein "
+            "Teil des Hauses hinter dem Gerät hängt.",
             "Series only: what the device currently draws from the grid. "
             "Empty means: what the meter measures on its phases - the total "
-            "when three-phase, the power of its phase when single-phase. "
-            "Needed when only part of the house hangs behind the device.",
+            "when three-phase, the power of its phase when single-phase - "
+            "plus what plants before it feed in. Needed when only part of "
+            "the house hangs behind the device.",
+        ),
+        "before_series": (
+            "Nur wenn eine andere Anlage in Reihe sitzt: An, wenn dieser "
+            "Wechselrichter zwischen Zähler und ihrem Eingang einspeist statt "
+            "dahinter auf der Hausseite. Die Karte setzt ihn links vor sie, "
+            "und was er einspeist, fließt in ihren Eingang. Ohne Anlage in "
+            "Reihe ist der Schalter ausgegraut.",
+            "Only when another plant sits in series: on when this inverter "
+            "feeds in between the meter and its input instead of behind it on "
+            "the house side. The card places it to the left of it, and what "
+            "it feeds in flows into its input. Without a plant in series the "
+            "switch is greyed out.",
+        ),
+        "l1_power_entity": (
+            "Nur dreiphasig: was das Gerät auf L1 abgibt. Leer heißt: ein "
+            "Drittel der Gesamtleistung - oder, wenn die anderen Phasen "
+            "gemessen sind, der Rest. Ohne Gesamtleistung ist die Summe der "
+            "Phasen die Leistung.",
+            "Three-phase only: what the device delivers on L1. Empty means: "
+            "a third of the total - or the remainder if the other phases are "
+            "measured. Without a total power the sum of the phases is used.",
+        ),
+        "l2_power_entity": (
+            "Wie L1, für L2.",
+            "Like L1, for L2.",
+        ),
+        "l3_power_entity": (
+            "Wie L1, für L3.",
+            "Like L1, for L3.",
         ),
         "voltage_entity": (
             "Nicht benutzt - hier zählen AC- und DC-Spannung weiter unten.",
@@ -1554,7 +1593,9 @@ BATTERIEFELDER = [
 ]
 WRFELDER = [
     "enabled", "name", "manufacturer", "model", "rated_power_w", "phase",
-    "in_series", "hybrid", "power_entity", "ac_input_power_entity", "ac_voltage_entity", "ac_current_entity", "dc_voltage_entity",
+    "in_series", "before_series", "hybrid", "power_entity",
+    "l1_power_entity", "l2_power_entity", "l3_power_entity",
+    "ac_input_power_entity", "ac_voltage_entity", "ac_current_entity", "dc_voltage_entity",
     "frequency_entity", "temperature_entity", "temp_cold", "temp_warm", "temp_hot",
     "energy_entity", "mode_entity",
 ]

@@ -836,6 +836,164 @@ def test_in_reihe_eigenverbrauch_ohne_modulsensor_nimmt_den_beitrag():
     assert daten["house"]["self_consumption"] == 100.0
 
 
+# ---------------------------------------------- Leistung je Phase, davor
+
+
+def test_dreiphasig_mit_sensor_je_phase():
+    """Meldet das Gerät seine Phasen, gelten die - nicht die Drittel."""
+    optionen = _mit(
+        _aufbau(), 2, phase="l123",
+        l1_power_entity="sensor.wr3_l1",
+        l2_power_entity="sensor.wr3_l2",
+        l3_power_entity="sensor.wr3_l3",
+    )
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3", 2700, "W")
+    hass.states.setzen("sensor.wr3_l1", 1200, "W")
+    hass.states.setzen("sensor.wr3_l2", 0.9, "kW")
+    hass.states.setzen("sensor.wr3_l3", 600, "W")
+    hass.states.setzen("sensor.wr1", 180, "W")
+    hass.states.setzen("sensor.wr2", 470, "W")
+    daten = k._berechnen()
+    wr = daten["plants"][2]["inverter"]
+    assert wr["phase_power"] == {"l1": 1200, "l2": 900, "l3": 600}
+    phasen = daten["grid"]["phases"]
+    assert phasen["l1"]["pv_power"] == 1200
+    assert phasen["l3"]["pv_power"] == 600 + 180 + 470
+    # Allein auf L1 und gemessen: Die Zeile führt zu seinem Phasensensor.
+    assert phasen["l1"]["entities"]["pv_power"] == "sensor.wr3_l1"
+    assert phasen["l3"]["entities"]["pv_power"] is None   # drei Geräte
+
+
+def test_dreiphasig_ungemessene_phasen_teilen_sich_den_rest():
+    """Eine Phase gemessen: Die beiden anderen bekommen, was übrig bleibt."""
+    optionen = _mit(_aufbau(), 2, phase="l123", l1_power_entity="sensor.wr3_l1")
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3", 3000, "W")
+    hass.states.setzen("sensor.wr3_l1", 1500, "W")
+    wr = k._berechnen()["plants"][2]["inverter"]
+    assert wr["phase_power"] == {"l1": 1500, "l2": 750, "l3": 750}
+
+
+def test_dreiphasig_stummer_phasensensor_verteilt_nichts_um():
+    """Schweigt ein eingetragener Sensor, wird seine Phase nicht geraten."""
+    optionen = _mit(_aufbau(), 2, phase="l123", l1_power_entity="sensor.wr3_l1")
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3", 3000, "W")
+    wr = k._berechnen()["plants"][2]["inverter"]
+    assert wr["phase_power"] == {"l1": None, "l2": None, "l3": None}
+    # Die Gesamtleistung bleibt davon unberührt.
+    assert wr["power"] == 3000
+
+
+def test_dreiphasig_ohne_gesamtsensor_ist_die_summe_die_leistung():
+    """Wie beim Zähler: Ohne Summe zählen die Phasen zusammen."""
+    optionen = _mit(
+        _aufbau(), 2, phase="l123", power_entity=None,
+        l1_power_entity="sensor.wr3_l1",
+        l2_power_entity="sensor.wr3_l2",
+        l3_power_entity="sensor.wr3_l3",
+    )
+    k, hass = _koordinator(optionen)
+    for phase, wert in (("l1", 1000), ("l2", 1100), ("l3", 900)):
+        hass.states.setzen(f"sensor.wr3_{phase}", wert, "W")
+    hass.states.setzen("sensor.netz", -1000, "W")
+    daten = k._berechnen()
+    assert daten["plants"][2]["inverter"]["power"] == 3000
+    assert daten["house"]["house_power"] == 2000
+    # Auch ohne Gesamtsensor führt die Phasenzeile zum Phasensensor.
+    assert daten["grid"]["phases"]["l2"]["entities"]["pv_power"] == "sensor.wr3_l2"
+
+
+def test_drehstrom_rechnet_mit_drei_phasen():
+    """P = 3 · U · I: 6900 W bei 230 V sind 10 A je Phase, nicht 30 A."""
+    optionen = _mit(
+        _aufbau(), 2, phase="l123",
+        ac_voltage_entity="sensor.wr3_u", ac_current_entity="sensor.wr3_i",
+    )
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3", 6900, "W")
+    hass.states.setzen("sensor.wr3_u", 230, "V")
+    assert k._berechnen()["plants"][2]["inverter"]["ac_current"] == 10.0
+
+    # Außenleiterspannung: √3 statt 3.
+    hass.states.setzen("sensor.wr3_u", 400, "V")
+    assert k._berechnen()["plants"][2]["inverter"]["ac_current"] == round(
+        6900 / (3 ** 0.5 * 400), 2
+    )
+
+    # Und umgekehrt: Ohne Leistungssensor entsteht sie aus Spannung und Strom.
+    optionen["plants"][2]["inverter"]["power_entity"] = None
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr3_u", 230, "V")
+    hass.states.setzen("sensor.wr3_i", 10, "A")
+    assert k._berechnen()["plants"][2]["inverter"]["power"] == 6900
+
+
+def test_vor_der_reihe_fliesst_in_ihren_eingang():
+    """Was zwischen Zähler und Reihe eingespeist wird, geht in deren Eingang.
+
+    Der Zähler speist 500 W ein, die Anlage davor erzeugt 1500 W: In den
+    Wechselrichter in Reihe gehen 1000 W. Er gibt 2500 W zum Haus ab, dahinter
+    kommen 470 W dazu - im Haus kommen 2970 W an.
+    """
+    optionen = _mit(_aufbau(), 2, phase="l123", in_series=True)
+    optionen["plants"][0]["inverter"]["before_series"] = True
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.netz", -500, "W")
+    hass.states.setzen("sensor.wr1", 1500, "W")
+    hass.states.setzen("sensor.wr2", 470, "W")
+    hass.states.setzen("sensor.wr3", 2500, "W")
+    daten = k._berechnen()
+    reihe = daten["plants"][2]["inverter"]
+    assert daten["plants"][0]["inverter"]["before_series"] is True
+    assert reihe["input_power"] == 1000
+    assert reihe["net_power"] == 1500
+    assert daten["house"]["house_power"] == 2500 + 470
+    # Je Phase: ein Drittel des Zählers, und auf L3 die Anlage davor.
+    assert reihe["input_phase_power"] == {
+        "l1": round(-500 / 3, 1),
+        "l2": round(-500 / 3, 1),
+        "l3": round(-500 / 3 + 1500, 1),
+    }
+
+
+def test_vor_der_reihe_einphasig_auf_ihrer_phase():
+    """Einphasig in Reihe zählt nur, was davor auf ihrer Phase einspeist."""
+    optionen = _mit(_aufbau(), 2, phase="l1", in_series=True)
+    optionen["plants"][0]["inverter"].update(phase="l1", before_series=True)
+    optionen["plants"][1]["inverter"].update(before_series=True)   # liegt auf L3
+    optionen["grid"] = {
+        "power_sign": "positive_import",
+        "phases": 3,
+        "l1_power_entity": "sensor.l1",
+        "l2_power_entity": "sensor.l2",
+        "l3_power_entity": "sensor.l3",
+    }
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.l1", -200, "W")
+    hass.states.setzen("sensor.l2", 300, "W")
+    hass.states.setzen("sensor.l3", -100, "W")
+    hass.states.setzen("sensor.wr1", 700, "W")
+    hass.states.setzen("sensor.wr2", 400, "W")
+    hass.states.setzen("sensor.wr3", 900, "W")
+    reihe = k._berechnen()["plants"][2]["inverter"]
+    assert reihe["input_power"] == 500
+    assert reihe["net_power"] == 400
+
+
+def test_vor_einer_reihe_die_es_nicht_gibt_ist_gewoehnlich():
+    """Ohne Wechselrichter in Reihe bedeutet der Haken nichts."""
+    optionen = _aufbau()
+    optionen["plants"][0]["inverter"]["before_series"] = True
+    k, hass = _koordinator(optionen)
+    hass.states.setzen("sensor.wr1", 180, "W")
+    hass.states.setzen("sensor.netz", 100, "W")
+    daten = k._berechnen()
+    assert daten["plants"][0]["inverter"]["before_series"] is False
+    assert daten["house"]["house_power"] == 280
+
+
 if __name__ == "__main__":
     _alle_tests()
     print("alle Rechentests bestanden")

@@ -104,8 +104,16 @@ CONF_INVERTER_HYBRID: Final = "hybrid"
 # Stelle frei, an der der ganze Strom durch ein Gerät läuft.
 CONF_INVERTER_SERIES: Final = "in_series"
 # Was er dabei aus dem Netz zieht. Ohne den Sensor ist es das, was der Zähler
-# auf seinen Phasen misst - es hängt ja nichts dazwischen.
+# auf seinen Phasen misst - plus was netzparallele Anlagen davor einspeisen.
 CONF_INVERTER_AC_INPUT: Final = "ac_input_power_entity"
+# Netzparallel, aber vor dem Wechselrichter in Reihe: zwischen Zähler und
+# dessen Eingang statt dahinter auf der Hausseite. Was hier eingespeist wird,
+# fließt in seinen Eingang. Ohne Wechselrichter in Reihe bedeutungslos.
+CONF_INVERTER_BEFORE_SERIES: Final = "before_series"
+# Dreiphasig die Abgabe je Phase, falls das Gerät sie meldet - dieselben
+# Schlüssel wie am Netz ("l1_power_entity" ...), nur am Wechselrichter. Ohne
+# sie wird gleichmäßig aufgeteilt.
+CONF_INVERTER_PHASE_POWER: Final = "{phase}_power_entity"
 
 # ----------------------------------------------------------------- Temperatur
 # Ab wann die Karte bei der Temperatur warnt - je Batterie und je

@@ -37,8 +37,9 @@ und einbringt.
   einer Phase – oder auf allen dreien –, und die Karte zeichnet ihn auf genau
   diese Schienen. Erst unter dem Kasten, denn darüber ist Gleichstrom:
   Einphasig geht eine Leitung hinab, dreiphasig drei nebeneinander, und jede
-  trägt ihren Anteil. Drei Wechselrichter auf zwei Phasen sind der Normalfall,
-  und ein- und dreiphasige dürfen beliebig gemischt sein.
+  trägt ihren Anteil – zu gleichen Teilen, oder gemessen, wenn das Gerät seine
+  Leistung je Phase meldet. Drei Wechselrichter auf zwei Phasen sind der
+  Normalfall, und ein- und dreiphasige dürfen beliebig gemischt sein.
 * **Netzparallel oder in Reihe**: Ein Wechselrichter darf auch zwischen Zähler
   und Haus sitzen – das Netz an seinem Eingang, das Haus an seinem Ausgang,
   wie bei einem Inselwechselrichter mit Netzvorrang oder im USV-Betrieb. Die
@@ -46,7 +47,9 @@ und einbringt.
   ihm: links geht der Netzstrom hinauf in den Kasten, rechts kommt heraus, was
   er zum Haus abgibt. Gerechnet wird mit Ausgang minus Eingang. Das geht für
   genau einen Wechselrichter; bei den übrigen Anlagen ist der Schalter dann
-  ausgegraut.
+  ausgegraut. Die übrigen hängen netzparallel dahinter auf der Hausseite –
+  oder davor, zwischen Zähler und seinem Eingang. Dann stehen sie in der Karte
+  links von ihm, und was sie einspeisen, fließt in seinen Eingang.
 * **Laderegler** mit Eingangs- und Ausgangsspannung und einstellbarer
   Systemspannung (12/24/48/96 V oder Hochvolt).
 * **Batterien** mit Ladestand, Leistung, Spannung, Temperatur, Zyklen,
@@ -1178,8 +1181,10 @@ Optionsdialog kennt keine wiederholbaren Blöcke – das ist der Preis dafür.
 | **Nennleistung** | W | Bezugsgröße für die Auslastung | Kein Balken |
 | **Phase** | L1/L2/L3 oder alle drei | Auf welcher Schiene er einspeist – dreiphasig auf allen dreien, zu gleichen Teilen. Bestimmt, wo er in der Karte abgreift und wie die Phasenflüsse aufgehen | L1 |
 | **In Reihe zwischen Zähler und Haus** | an/aus | Das Netz hängt an seinem Eingang, das Haus an seinem Ausgang. Die Karte setzt ihn neben den Zähler, gerechnet wird mit Ausgang minus Eingang – siehe unten. Nur einer kann so sitzen | aus (netzparallel) |
+| **Vor dem Wechselrichter in Reihe** | an/aus | Nur bedienbar, wenn eine andere Anlage in Reihe sitzt: Dieser speist zwischen Zähler und ihrem Eingang ein statt dahinter. Steht in der Karte links von ihr | aus (dahinter) |
 | **Leistung** | W | **Die Abgabe auf der Wechselstromseite**, dreiphasig die Summe. In Reihe: was zum Haus hinausgeht. Geht in Hausverbrauch, Autarkie und die Phasenrechnung ein | Kein Hausverbrauch |
-| **Eingangsleistung vom Netz** | W | Nur in Reihe: was das Gerät aus dem Netz zieht. Nötig, wenn nur ein Teil des Hauses dahinter hängt | Was der Zähler auf seinen Phasen misst |
+| **Ausgangsleistung L1/L2/L3** | W | Nur dreiphasig: die Abgabe je Phase. Ist nur ein Teil eingetragen, teilen sich die übrigen Phasen den Rest. Ohne Gesamtleistung ist ihre Summe die Leistung | Gleichmäßig aufgeteilt |
+| **Eingangsleistung vom Netz** | W | Nur in Reihe: was das Gerät aus dem Netz zieht. Nötig, wenn nur ein Teil des Hauses dahinter hängt | Was der Zähler auf seinen Phasen misst, plus die Anlagen davor |
 | **Ertragszähler** | kWh | Grundlage für Ertrag und Amortisation dieser Anlage. In Reihe zählt er den durchgereichten Netzstrom mit und wird dafür nicht genommen | Der Modulertrag wird genommen |
 | **Hybrid** | an/aus | Sagt: Er kann die Batterie aus dem Netz laden. Was davon wirklich gespeichert wird, zählt dann **nicht** als Hausverbrauch – siehe unten | aus |
 | **AC-Spannung/-Strom**, **DC-Spannung**, **Frequenz**, **Temperatur**, **Betriebsart** | | Nur Anzeige. Die DC-Spannung dient ohne Laderegler als Strangspannung | nichts |
@@ -1509,6 +1514,18 @@ vom Netz:
 
 Weitere Anlagen hängen in der Karte **hinter** ihm, also auf seiner Hausseite.
 Was sie einspeisen, kommt zum Ausgang dazu.
+
+Speist eine Anlage **vor** ihm ein – zwischen Zähler und seinem Eingang –,
+stellst du das bei ihr ein: *Vor dem Wechselrichter in Reihe*. Dann fließt ihre
+Leistung in seinen Eingang:
+
+    Eingang = Zähler + was davor eingespeist wird
+
+Speist der Zähler 500 W ein und davor erzeugt eine Anlage 1500 W, gehen 1000 W
+in den Wechselrichter. Am Hausverbrauch ändert das nichts – er ist weiterhin
+sein Ausgang plus das, was dahinter dazukommt. In der Karte steht die Anlage
+links von ihm, und seine Eingangsleitung ist nur dort rot, wo der Strom direkt
+vom Zähler kommt; nach einer Anlage davor ist es kein Netzbezug.
 
 Sein **Ertragszähler** zählt den durchgereichten Netzstrom mit. Als Ertrag der
 Anlage gilt deshalb der Ertragszähler der Module – sonst stünde der Netzbezug

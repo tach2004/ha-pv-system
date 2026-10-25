@@ -107,6 +107,7 @@ from .const import (
     CONF_INVERTER_AC_CURRENT,
     CONF_INVERTER_AC_INPUT,
     CONF_INVERTER_AC_VOLTAGE,
+    CONF_INVERTER_BEFORE_SERIES,
     CONF_INVERTER_DC_VOLTAGE,
     CONF_INVERTER_ENERGY,
     CONF_INVERTER_FREQUENCY,
@@ -115,6 +116,7 @@ from .const import (
     CONF_INVERTER_MODE,
     CONF_INVERTER_MODEL,
     CONF_INVERTER_NAME,
+    CONF_INVERTER_PHASE_POWER,
     CONF_INVERTER_POWER,
     CONF_INVERTER_SERIES,
     CONF_INVERTER_TEMPERATURE,
@@ -385,6 +387,13 @@ def _felder_batterie() -> dict[Any, Any]:
     }
 
 
+def _schalter(frei: bool) -> Any:
+    """Ein Schalter - oder derselbe ausgegraut, wenn er gerade nichts bedeutet."""
+    if frei:
+        return bool
+    return selector.BooleanSelector(selector.BooleanSelectorConfig(read_only=True))
+
+
 def _felder_wechselrichter(reihe_frei: bool = True) -> dict[Any, Any]:
     """Die Felder des Wechselrichters.
 
@@ -392,6 +401,10 @@ def _felder_wechselrichter(reihe_frei: bool = True) -> dict[Any, Any]:
     ist. Sitzt dort schon der Wechselrichter einer anderen Anlage, bleibt der
     Schalter sichtbar, lässt sich aber nicht umlegen - ausgegraut statt
     verschwunden, damit niemand ihn sucht.
+
+    Der Schalter "vor dem Wechselrichter in Reihe" ist das Gegenstück: Er
+    bedeutet nur etwas, wenn eine andere Anlage in Reihe sitzt. Von den
+    beiden ist deshalb immer genau einer bedienbar.
     """
     return {
         vol.Optional(CONF_ENABLED): bool,
@@ -400,15 +413,15 @@ def _felder_wechselrichter(reihe_frei: bool = True) -> dict[Any, Any]:
         vol.Optional(CONF_INVERTER_MODEL): _text(),
         vol.Optional(CONF_RATED_POWER): _zahl(50, 100000, 10, "W"),
         vol.Optional(CONF_PHASE): _auswahl(INVERTER_PHASES, "phase"),
-        vol.Optional(CONF_INVERTER_SERIES): (
-            bool
-            if reihe_frei
-            else selector.BooleanSelector(
-                selector.BooleanSelectorConfig(read_only=True)
-            )
-        ),
+        vol.Optional(CONF_INVERTER_SERIES): _schalter(reihe_frei),
+        vol.Optional(CONF_INVERTER_BEFORE_SERIES): _schalter(not reihe_frei),
         vol.Optional(CONF_INVERTER_HYBRID): bool,
         vol.Optional(CONF_INVERTER_POWER): _sensor("power"),
+        # Nur dreiphasig: die Abgabe je Phase, falls das Gerät sie meldet.
+        **{
+            vol.Optional(CONF_INVERTER_PHASE_POWER.format(phase=phase)): _sensor("power")
+            for phase in PHASES
+        },
         vol.Optional(CONF_INVERTER_AC_INPUT): _sensor("power"),
         vol.Optional(CONF_INVERTER_AC_VOLTAGE): _sensor("voltage"),
         vol.Optional(CONF_INVERTER_AC_CURRENT): _sensor("current"),
