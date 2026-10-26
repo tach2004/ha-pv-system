@@ -12,6 +12,7 @@ mitten im Aufbau der Entitäten aber nicht zwangsläufig für alle Quellen.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import timedelta
 from typing import Any
 
@@ -93,7 +94,9 @@ from .const import (
     CONF_ID,
     CONF_INVERTER,
     CONF_INVERTER_AC_CURRENT,
+    CONF_INVERTER_AC_INPUT,
     CONF_INVERTER_AC_VOLTAGE,
+    CONF_INVERTER_BEFORE_SERIES,
     CONF_INVERTER_DC_VOLTAGE,
     CONF_INVERTER_ENERGY,
     CONF_INVERTER_FREQUENCY,
@@ -102,7 +105,9 @@ from .const import (
     CONF_INVERTER_MODE,
     CONF_INVERTER_MODEL,
     CONF_INVERTER_NAME,
+    CONF_INVERTER_PHASE_POWER,
     CONF_INVERTER_POWER,
+    CONF_INVERTER_SERIES,
     CONF_INVERTER_TEMPERATURE,
     CONF_INVESTMENT,
     CONF_METER_MODEL,
@@ -139,6 +144,7 @@ from .const import (
     DEFAULT_DIVERTER_EFFICIENCY,
     FUEL_ELECTRICITY,
     HEIZWERT,
+    PHASE_ALL,
     PHASES,
     SIGN_POSITIVE_DISCHARGE,
     SIGN_POSITIVE_EXPORT,
@@ -260,7 +266,12 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _berechnen(self) -> dict[str, Any]:
         anlagen = [self._anlage(anlage) for anlage in self.config.get(CONF_PLANTS, [])]
-        netz = self._netz(anlagen)
+        # Erst der Zähler, dann der Wechselrichter in Reihe, dann der Rest des
+        # Netzes: Was durch ihn hindurchläuft, misst der Zähler - und was er
+        # auf jede Phase gibt, braucht die Rechnung je Phase.
+        messung = self._netzmessung()
+        self._reihe(anlagen, messung)
+        netz = self._netz(anlagen, messung)
         summen = self._summen(anlagen, netz)
         haus = self._haus(anlagen, summen, netz)
         summen.update(haus)
@@ -380,7 +391,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Momentan selbst genutzt: was erzeugt wird und nicht ins Netz geht.
         erzeugt_jetzt = units.first(
-            summen["pv_power"], self._ac_erzeugung(summen["inverter_power"])
+            summen["pv_power"], self._ac_erzeugung(summen["inverter_net"])
         )
         eigen_jetzt = None
         if erzeugt_jetzt is not None:
@@ -787,10 +798,23 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ac_spannung = units.volt(self.hass, conf[CONF_INVERTER_AC_VOLTAGE])
         ac_strom = units.ampere(self.hass, conf[CONF_INVERTER_AC_CURRENT])
         dc_spannung = units.volt(self.hass, conf[CONF_INVERTER_DC_VOLTAGE])
+        phasen = list(PHASES) if conf[CONF_PHASE] == PHASE_ALL else [conf[CONF_PHASE]]
+        dreiphasig = len(phasen) > 1
 
-        leistung, ac_spannung, ac_strom = self._dreieck(
-            leistung, ac_spannung, ac_strom
-        )
+        # Dreiphasig darf die Abgabe je Phase gemessen sein. Ohne
+        # Gesamtsensor ist ihre Summe die Leistung - wie beim Zähler.
+        gemessen = self._je_phase_gemessen(conf) if dreiphasig else {}
+        if leistung is None and gemessen:
+            leistung = units.add(*gemessen.values())
+
+        if dreiphasig:
+            leistung, ac_spannung, ac_strom = self._drehstrom(
+                leistung, ac_spannung, ac_strom
+            )
+        else:
+            leistung, ac_spannung, ac_strom = self._dreieck(
+                leistung, ac_spannung, ac_strom
+            )
         # Der DC-Strom aus AC-Leistung und Batteriespannung. Die
         # Wandlungsverluste bleiben außen vor - in Wirklichkeit fließt etwas
         # mehr. Als Größenordnung ist die Zahl trotzdem nützlich, und kaum ein
@@ -803,6 +827,10 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         auslastung = None
         if leistung is not None and nenn:
             auslastung = round(100.0 * leistung / nenn, 1)
+        # In Reihe zählt nur ein Gerät, das auch eingeschaltet ist. Wer den
+        # Wechselrichter vorübergehend abschaltet, behält den Haken - aber
+        # gerechnet und gezeichnet wird, als hinge er nicht im Strompfad.
+        reihe = bool(conf[CONF_ENABLED] and conf[CONF_INVERTER_SERIES])
         return {
             "dc_current": units.rund(dc_strom, 2),
             "enabled": conf[CONF_ENABLED],
@@ -811,8 +839,34 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "model": conf[CONF_INVERTER_MODEL],
             "rated_power": nenn,
             "phase": conf[CONF_PHASE],
+            # Die Phasen, an denen er hängt: eine oder alle drei. Alles, was
+            # nach Phasen fragt, fragt hier - nicht nach "phase".
+            "phases": phasen,
             "hybrid": conf[CONF_INVERTER_HYBRID],
+            "series": reihe,
             "power": units.rund(leistung),
+            # Was davon auf jede Phase geht. Dreiphasig gemessen, wo es
+            # Sensoren gibt, sonst zu gleichen Teilen - so speisen die
+            # üblichen Geräte ein.
+            "phase_power": _je_phase(leistung, phasen, gemessen),
+            # Netzparallel, aber zwischen Zähler und dem Wechselrichter in
+            # Reihe. Ob es den überhaupt gibt, weiß erst _reihe.
+            "before_series": bool(
+                conf[CONF_ENABLED] and not reihe and conf[CONF_INVERTER_BEFORE_SERIES]
+            ),
+            # Was das Gerät selbst beiträgt: netzparallel seine Leistung, in
+            # Reihe Ausgang minus Eingang. Den Eingang kennt erst _reihe -
+            # bis dahin bleibt es dort offen.
+            "net_power": None if reihe else units.rund(leistung),
+            # Nur in Reihe: was aus dem Netz hineingeht, gesamt und je Phase,
+            # und woher die Zahl stammt ("sensor" oder "meter").
+            "input_power": (
+                units.rund(units.watt(self.hass, conf[CONF_INVERTER_AC_INPUT]))
+                if reihe
+                else None
+            ),
+            "input_phase_power": {},
+            "input_source": None,
             "load": auslastung,
             "ac_voltage": units.rund(ac_spannung, 1),
             "ac_current": units.rund(ac_strom, 2),
@@ -837,13 +891,168 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     CONF_INVERTER_TEMPERATURE,
                     CONF_INVERTER_ENERGY,
                     CONF_INVERTER_MODE,
+                    CONF_INVERTER_AC_INPUT,
+                    *(CONF_INVERTER_PHASE_POWER.format(phase=p) for p in PHASES),
                 )
             },
         }
 
+    def _je_phase_gemessen(self, conf: dict[str, Any]) -> dict[str, float | None]:
+        """Die eingetragenen Phasensensoren eines Wechselrichters und ihre Werte.
+
+        Nur die eingetragenen: Ein Sensor, der fehlt, ist etwas anderes als
+        einer, der gerade schweigt - siehe _je_phase.
+        """
+        return {
+            phase: units.watt(self.hass, conf[CONF_INVERTER_PHASE_POWER.format(phase=phase)])
+            for phase in PHASES
+            if conf[CONF_INVERTER_PHASE_POWER.format(phase=phase)]
+        }
+
+    @staticmethod
+    def _drehstrom(
+        leistung: float | None, spannung: float | None, strom: float | None
+    ) -> tuple[float | None, float | None, float | None]:
+        """P = 3 · U · I - dasselbe wie _dreieck, nur für drei Phasen.
+
+        Ein dreiphasiges Gerät meldet Spannung und Strom je Phase. Die
+        Leistung ist dann das Dreifache von U · I, nicht das Einfache; ohne
+        diese Unterscheidung stünde ein Drittel da, und der errechnete Strom
+        wäre dreimal zu groß.
+
+        Manche Geräte melden statt der Strangspannung (um 230 V) die
+        Spannung zwischen zwei Außenleitern (um 400 V). Dann gilt √3 statt 3.
+        Welche es ist, sagt die Zahl selbst - dazwischen liegt nichts.
+        """
+
+        def faktor(u: float) -> float:
+            return 3.0 if abs(u) < 300 else math.sqrt(3)
+
+        if leistung is None and spannung is not None and strom is not None:
+            leistung = faktor(spannung) * spannung * strom
+        elif strom is None and leistung is not None and spannung and abs(spannung) > 1:
+            strom = leistung / (faktor(spannung) * spannung)
+        elif spannung is None and leistung is not None and strom and abs(strom) > 0.05:
+            spannung = leistung / (3.0 * strom)
+        return leistung, spannung, strom
+
+    # ------------------------------------------------------------- Reihe
+
+    def _reihe(self, anlagen: list[dict[str, Any]], messung: dict[str, Any]) -> None:
+        """Den Wechselrichter, der in Reihe sitzt, zu Ende rechnen.
+
+        Netzparallel speist ein Wechselrichter neben dem Netz ein, und seine
+        Leistung ist das, was er beiträgt. In Reihe hängt das Netz an seinem
+        Eingang und das Haus an seinem Ausgang: Was er abgibt, ist zum Teil
+        durchgereichter Netzstrom. Beitragen tut er nur den Unterschied -
+        Ausgang minus Eingang. Ist der positiv, kommt er aus Batterie und
+        Modulen; ist er negativ, lädt das Gerät aus dem Netz oder versorgt
+        sich selbst.
+
+        Der Eingang kommt aus seinem eigenen Sensor, wenn einer eingetragen
+        ist. Sonst ist es das, was der Zähler auf seinen Phasen misst, plus
+        was netzparallele Anlagen zwischen Zähler und ihm einspeisen: Mehr
+        hängt dort nicht. Welche Quelle gilt, entscheidet die Konfiguration -
+        schweigt der eingetragene Sensor, bleibt der Eingang unbekannt, statt
+        auf den Zähler zu springen.
+        """
+        gibt_reihe = any(a["inverter"]["series"] for a in anlagen)
+        davor: dict[str, float] = {}
+        for anlage in anlagen:
+            wechselrichter = anlage["inverter"]
+            # Vor einem Wechselrichter in Reihe, den es nicht gibt, sitzt
+            # niemand - dann ist es ein ganz gewöhnlicher netzparalleler.
+            wechselrichter["before_series"] = (
+                wechselrichter["before_series"] and gibt_reihe
+            )
+            if not wechselrichter["before_series"]:
+                continue
+            for phase, beitrag in _netto_je_phase(wechselrichter).items():
+                if beitrag is not None:
+                    davor[phase] = davor.get(phase, 0.0) + beitrag
+
+        for anlage in anlagen:
+            wechselrichter = anlage["inverter"]
+            if not wechselrichter["series"]:
+                continue
+            if wechselrichter["entities"]["ac_input_power"]:
+                eingang = wechselrichter["input_power"]
+                je_phase = _aufteilen(eingang, wechselrichter["phases"])
+                quelle = "sensor"
+            else:
+                eingang, je_phase = self._durch_den_zaehler(
+                    wechselrichter["phases"], messung, davor
+                )
+                quelle = "meter"
+            wechselrichter["input_power"] = units.rund(eingang)
+            wechselrichter["input_phase_power"] = je_phase
+            wechselrichter["input_source"] = quelle
+            if wechselrichter["power"] is not None and eingang is not None:
+                wechselrichter["net_power"] = units.rund(
+                    wechselrichter["power"] - eingang
+                )
+            # Der Gleichstrang folgt dem Beitrag, nicht der Ausgangsleistung:
+            # Im Netzbetrieb gibt das Gerät viel ab und zieht doch nichts
+            # aus der Batterie.
+            wechselrichter["dc_power"] = self._dc_strang(anlage)
+
+    def _durch_den_zaehler(
+        self,
+        phasen: list[str],
+        messung: dict[str, Any],
+        davor: dict[str, float],
+    ) -> tuple[float | None, dict[str, float | None]]:
+        """Was zwischen Zähler und diesem Wechselrichter auf seinen Phasen ankommt.
+
+        Das ist der Zähler plus ``davor`` - was netzparallele Anlagen auf der
+        Netzseite des Wechselrichters je Phase einspeisen. Speist der Zähler
+        500 W ein und davor erzeugt eine Anlage 1500 W, gehen 1000 W in den
+        Wechselrichter.
+
+        Hängt er an allen Phasen des Anschlusses - dreiphasig, oder an einem
+        einphasigen Anschluss -, läuft der ganze Netzbezug durch ihn. Je Phase
+        gilt dann der Phasensensor des Zählers, sonst ein Drittel.
+
+        Einphasig an einem dreiphasigen Anschluss ist es nur seine Phase. Ohne
+        Phasensensor am Zähler ist die nicht bekannt - und bleibt es: Ein
+        Drittel der Summe wäre eine Zahl, die so niemand gemessen hat. Dann
+        hilft der Sensor "Eingangsleistung" am Wechselrichter.
+        """
+        anschluss = PHASES[: self.config[CONF_GRID][CONF_PHASES] or len(PHASES)]
+        if len(anschluss) <= 1 or set(anschluss) <= set(phasen):
+            netz = messung["power"]
+            if netz is None:
+                return None, _aufteilen(None, phasen)
+            einzeln = [messung["phases"][p] for p in phasen]
+            if len(phasen) > 1 and all(w is not None for w in einzeln):
+                je_phase = {p: messung["phases"][p] + davor.get(p, 0.0) for p in phasen}
+            else:
+                je_phase = {
+                    p: netz / len(phasen) + davor.get(p, 0.0) for p in phasen
+                }
+            # Gesamt zählt alles, was davor eingespeist wird - an einem
+            # einphasigen Anschluss liegt jede Phase auf derselben Leitung.
+            gesamt = netz + sum(davor.values())
+            return gesamt, {p: units.rund(w) for p, w in je_phase.items()}
+        je_phase = {
+            p: (
+                messung["phases"][p] + davor.get(p, 0.0)
+                if messung["phases"][p] is not None
+                else None
+            )
+            for p in phasen
+        }
+        eingang = units.add(*(je_phase[p] for p in phasen if p in anschluss))
+        return eingang, {p: units.rund(w) for p, w in je_phase.items()}
+
     # ------------------------------------------------------------- Netz
 
-    def _netz(self, anlagen: list[dict[str, Any]]) -> dict[str, Any]:
+    def _netzmessung(self) -> dict[str, Any]:
+        """Was der Zähler misst - gesamt und je Phase, positiv bei Bezug.
+
+        Vom Rest der Netzrechnung getrennt, weil der Wechselrichter in Reihe
+        es vorher braucht: Was durch ihn hindurchgeht, ist genau das.
+        """
         conf = self.config[CONF_GRID]
 
         leistung = units.watt(self.hass, conf[CONF_GRID_POWER])
@@ -859,14 +1068,36 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if leistung is None and (bezug_sensor is not None or einspeisung_sensor is not None):
             leistung = (bezug_sensor or 0.0) - (einspeisung_sensor or 0.0)
 
-        phasen: dict[str, Any] = {}
-        phasen_summe: list[float] = []
+        je_phase: dict[str, float | None] = {}
         for phase in PHASES:
             p = units.watt(self.hass, conf[CONF_PHASE_POWER.format(phase=phase)])
             if p is not None and conf[CONF_POWER_SIGN] == SIGN_POSITIVE_EXPORT:
                 p = -p
-            if p is not None:
-                phasen_summe.append(p)
+            je_phase[phase] = p
+
+        # Kein Summenzähler, aber Einzelphasen: dann ist die Summe der Wert.
+        phasen_summe = [p for p in je_phase.values() if p is not None]
+        if leistung is None and phasen_summe:
+            leistung = sum(phasen_summe)
+
+        return {
+            "power": leistung,
+            "import": bezug_sensor,
+            "export": einspeisung_sensor,
+            "phases": je_phase,
+        }
+
+    def _netz(
+        self, anlagen: list[dict[str, Any]], messung: dict[str, Any]
+    ) -> dict[str, Any]:
+        conf = self.config[CONF_GRID]
+        leistung = messung["power"]
+        bezug_sensor = messung["import"]
+        einspeisung_sensor = messung["export"]
+
+        phasen: dict[str, Any] = {}
+        for phase in PHASES:
+            p = messung["phases"][phase]
             erzeugung = self._phasen_erzeugung(anlagen, phase)
             # Was auf dieser Phase im Haus bleibt - dieselbe Rechnung wie für
             # das ganze Haus, nur eine Etage tiefer: Was die Wechselrichter
@@ -895,10 +1126,6 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "pv_power": self._phasen_quelle(anlagen, phase),
                 },
             }
-
-        # Kein Summenzähler, aber Einzelphasen: dann ist die Summe der Wert.
-        if leistung is None and phasen_summe:
-            leistung = sum(phasen_summe)
 
         return {
             "name": conf["name"],
@@ -949,15 +1176,33 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @staticmethod
     def _phasen_quelle(anlagen: list[dict[str, Any]], phase: str) -> str | None:
-        """Die Entität hinter der Erzeugung dieser Phase - wenn es nur eine gibt."""
+        """Die Entität hinter der Erzeugung dieser Phase - wenn es nur eine gibt.
+
+        Und nur, wenn ihr Wert auch wirklich die Zahl ist: Ein dreiphasiger
+        Wechselrichter gibt auf diese Phase ein Drittel seines Sensors, einer
+        in Reihe den Unterschied zwischen Aus- und Eingang. Ein Verweis auf
+        den Sensor zeigte dann eine andere Zahl als die Zeile daneben.
+        """
         quellen = [
-            anlage["inverter"]["entities"]["power"]
+            anlage["inverter"]
             for anlage in anlagen
             if anlage["inverter"]["enabled"]
-            and anlage["inverter"]["phase"] == phase
-            and anlage["inverter"]["entities"]["power"]
+            and phase in anlage["inverter"]["phases"]
+            and (
+                anlage["inverter"]["entities"]["power"]
+                or anlage["inverter"]["entities"].get(f"{phase}_power")
+            )
         ]
-        return quellen[0] if len(quellen) == 1 else None
+        if len(quellen) != 1:
+            return None
+        wechselrichter = quellen[0]
+        if wechselrichter["series"]:
+            return None
+        if len(wechselrichter["phases"]) == 1:
+            return wechselrichter["entities"]["power"]
+        # Dreiphasig mit eigenem Sensor für diese Phase: Dann ist die Zahl
+        # genau dessen Wert, und die Zeile darf dorthin führen.
+        return wechselrichter["entities"].get(f"{phase}_power")
 
     @staticmethod
     def _phasen_erzeugung(anlagen: list[dict[str, Any]], phase: str) -> float | None:
@@ -966,13 +1211,16 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Bei mehreren einphasigen Wechselrichtern auf verschiedenen Phasen ist
         das die interessante Zahl - der Netzzähler zeigt pro Phase nur das, was
         nach dem Verbrauch übrig bleibt.
+
+        Gezählt wird, was jedes Gerät auf dieser Phase beiträgt: ein
+        dreiphasiges sein Drittel, eines in Reihe Ausgang minus Eingang. So
+        ergibt "Erzeugung plus Netz" je Phase wieder, was dort im Haus ankommt.
         """
         werte = [
-            anlage["inverter"]["power"]
+            beitrag
             for anlage in anlagen
             if anlage["inverter"]["enabled"]
-            and anlage["inverter"]["phase"] == phase
-            and anlage["inverter"]["power"] is not None
+            and (beitrag := _netto_je_phase(anlage["inverter"]).get(phase)) is not None
         ]
         return sum(werte) if werte else None
 
@@ -1019,6 +1267,14 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 *(a["inverter"]["energy"] for a in anlagen if a["inverter"]["enabled"])
             ),
             "inverter_power": units.rund(wr),
+            # Was die Wechselrichter selbst beitragen. Netzparallel dieselbe
+            # Zahl wie darüber; einer in Reihe zählt hier nur Ausgang minus
+            # Eingang - der durchgereichte Netzstrom ist keine Erzeugung.
+            "inverter_net": units.rund(
+                units.add(
+                    *(a["inverter"]["net_power"] for a in anlagen if a["inverter"]["enabled"])
+                )
+            ),
             "inverter_rated": units.rund(nenn),
             "inverter_load": (
                 round(100.0 * wr / nenn, 1) if wr is not None and nenn else None
@@ -1063,7 +1319,9 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         negative Zahl ist dann immer Eigenverbrauch des Geräts.
         """
         wechselrichter = anlage["inverter"]
-        leistung = wechselrichter["power"]
+        # Der Beitrag, nicht die Ausgangsleistung: In Reihe ist ein Teil davon
+        # durchgereichter Netzstrom, der den Gleichstrang nie berührt.
+        leistung = wechselrichter["net_power"]
         if leistung is None or not wechselrichter["enabled"]:
             return None
         if leistung >= 0:
@@ -1124,7 +1382,9 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Karte und der Hausverbrauch irgendwann Verschiedenes zeigen.
         """
         wechselrichter = anlage["inverter"]
-        leistung = wechselrichter["power"]
+        # In Reihe ist es Ausgang minus Eingang - der Netzbezug, der durch
+        # das Gerät hindurchläuft, steht ja schon in der Netzleistung.
+        leistung = wechselrichter["net_power"]
         if leistung is None:
             return None
         if leistung >= 0:
@@ -1299,7 +1559,7 @@ class PvSystemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # alles davon im Haus bleibt. Ohne Modulsensor bleibt die Abgabe des
         # Wechselrichters die beste verfügbare Größe.
         eigenverbrauch = None
-        erzeugung = units.first(summen["pv_power"], self._ac_erzeugung(summen["inverter_power"]))
+        erzeugung = units.first(summen["pv_power"], self._ac_erzeugung(summen["inverter_net"]))
         if erzeugung is not None and erzeugung > 0:
             einspeisung = netz["export_power"] or 0.0
             eigenverbrauch = round(
@@ -1530,7 +1790,7 @@ def _anlagenzaehler(anlage: dict[str, Any]) -> float | None:
     ehrliche Auskunft, und die Rechnung wartet, statt zu raten.
     """
     wr = anlage["inverter"]
-    if wr["enabled"] and (wr.get("entities") or {}).get("energy"):
+    if _zaehlt_ertrag(wr):
         return wr["energy"]
     return anlage["modules"]["energy"]
 
@@ -1544,8 +1804,9 @@ def _anlagenleistung(anlage: dict[str, Any]) -> float | None:
     Abgabe - die Rechnung macht daraus null.
     """
     wr = anlage["inverter"]
-    if wr["enabled"] and wr.get("power") is not None:
-        return wr["power"]
+    # Der Beitrag: In Reihe gehört der durchgereichte Netzstrom keiner Anlage.
+    if wr["enabled"] and wr.get("net_power") is not None:
+        return wr["net_power"]
     return anlage["modules"].get("power")
 
 
@@ -1558,9 +1819,24 @@ def _ertragszaehler_entitaet(anlage: dict[str, Any]) -> str | None:
     aussieht - siehe _kosten.
     """
     wr = anlage["inverter"]
-    if wr["enabled"] and (wr.get("entities") or {}).get("energy"):
+    if _zaehlt_ertrag(wr):
         return wr["entities"]["energy"]
     return (anlage["modules"].get("entities") or {}).get("energy")
+
+
+def _zaehlt_ertrag(wr: dict[str, Any]) -> bool:
+    """Zählt der Ertragszähler dieses Wechselrichters wirklich Ertrag?
+
+    Netzparallel ja: Was er abgibt, hat er erzeugt. In Reihe nicht - sein
+    Zähler läuft auch mit, wenn er nur Netzstrom zum Haus durchreicht, und
+    die Kostenrechnung buchte den Netzbezug als Ertrag. Dann zählen die
+    Module.
+    """
+    return bool(
+        wr["enabled"]
+        and not wr.get("series")
+        and (wr.get("entities") or {}).get("energy")
+    )
 
 
 def _abrechnungsertrag(anlagen: list[dict[str, Any]]) -> float | None:
@@ -1590,4 +1866,65 @@ def _temperaturgrenzen(conf: dict[str, Any]) -> dict[str, float]:
         "cold": conf[CONF_TEMP_COLD],
         "warm": conf[CONF_TEMP_WARM],
         "hot": conf[CONF_TEMP_HOT],
+    }
+
+
+def _je_phase(
+    leistung: float | None,
+    phasen: list[str],
+    gemessen: dict[str, float | None],
+) -> dict[str, float | None]:
+    """Die Abgabe je Phase - gemessen, wo es geht, sonst geteilt.
+
+    Ohne Phasensensoren zu gleichen Teilen. Sind alle drei eingetragen,
+    gelten sie. Sind es nur ein oder zwei, bekommen die übrigen Phasen zu
+    gleichen Teilen, was von der Gesamtleistung übrig bleibt - das ist dann
+    keine Schätzung, sondern die Differenz zweier Messungen.
+
+    Schweigt ein eingetragener Sensor, bleibt seine Phase unbekannt, und mit
+    ihr der Rest: Sonst landete der fehlende Wert stillschweigend auf den
+    anderen Phasen.
+    """
+    if not gemessen:
+        return _aufteilen(leistung, phasen)
+    offen = [phase for phase in phasen if phase not in gemessen]
+    rest = None
+    if offen and leistung is not None and all(w is not None for w in gemessen.values()):
+        rest = (leistung - sum(gemessen.values())) / len(offen)
+    return {
+        phase: units.rund(gemessen[phase] if phase in gemessen else rest)
+        for phase in phasen
+    }
+
+
+def _aufteilen(leistung: float | None, phasen: list[str]) -> dict[str, float | None]:
+    """Eine Leistung zu gleichen Teilen auf Phasen verteilen.
+
+    Einphasig bekommt die eine Phase alles. Dreiphasig speisen die üblichen
+    Geräte symmetrisch ein - ein Drittel je Phase ist dort keine Schätzung,
+    sondern die Bauart.
+    """
+    if leistung is None:
+        return {phase: None for phase in phasen}
+    return {phase: round(leistung / len(phasen), 1) for phase in phasen}
+
+
+def _netto_je_phase(wechselrichter: dict[str, Any]) -> dict[str, float | None]:
+    """Was ein Wechselrichter auf jeder seiner Phasen beiträgt.
+
+    Netzparallel ist das seine Leistung auf der Phase. In Reihe ist es, was
+    er dort abgibt, minus dem, was er dort aus dem Netz nimmt - fehlt eines
+    davon, ist der Beitrag unbekannt.
+    """
+    abgabe = wechselrichter.get("phase_power") or {}
+    if not wechselrichter.get("series"):
+        return abgabe
+    eingang = wechselrichter.get("input_phase_power") or {}
+    return {
+        phase: (
+            round(wert - eingang[phase], 1)
+            if wert is not None and eingang.get(phase) is not None
+            else None
+        )
+        for phase, wert in abgabe.items()
     }

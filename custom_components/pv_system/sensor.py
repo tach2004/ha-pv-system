@@ -845,11 +845,23 @@ def spiegel_kennungen(coordinator: PvSystemCoordinator) -> set[str]:
         darauf = [
             a
             for a in daten.get("plants", [])
-            if a["inverter"]["enabled"] and a["inverter"]["phase"] == phase
+            if _auf_phase(a, phase)
         ]
         if len(darauf) < 2:
             gefunden.add(f"{kennung}_phase_{phase}_pv_power")
     return gefunden
+
+
+def _auf_phase(anlage: dict[str, Any], phase: str) -> bool:
+    """Speist der Wechselrichter dieser Anlage auf diese Phase ein?
+
+    Ein dreiphasiger hängt an allen dreien - und zählt auf jeder mit. Einer
+    allein auf einer Phase ist dort weiter seine eigene Summe, auch wenn es
+    nur sein Drittel ist: Eine neue Information steckt darin nicht.
+    """
+    wechselrichter = anlage["inverter"]
+    phasen = wechselrichter.get("phases") or [wechselrichter.get("phase")]
+    return bool(wechselrichter["enabled"]) and phase in phasen
 
 
 def aufraeumen(hass: HomeAssistant, entry: PvSystemConfigEntry) -> list[str]:
@@ -918,10 +930,7 @@ async def async_setup_entry(
         if netz.get("phases", {}).get(phase, {}).get("entities", {}).get("power"):
             sensoren.append(PhasenSensor(coordinator, phase, "power", standort.id))
             sensoren.append(PhasenSensor(coordinator, phase, "voltage", standort.id))
-        if any(
-            anlage["inverter"]["enabled"] and anlage["inverter"]["phase"] == phase
-            for anlage in daten.get("plants", [])
-        ):
+        if any(_auf_phase(anlage, phase) for anlage in daten.get("plants", [])):
             sensoren.append(PhasenSensor(coordinator, phase, "pv_power", standort.id))
 
     async_add_entities(sensoren)
@@ -1381,7 +1390,7 @@ class PhasenSensor(PvBasis):
             darauf = [
                 a
                 for a in anlagen
-                if a["inverter"]["enabled"] and a["inverter"]["phase"] == phase
+                if _auf_phase(a, phase)
             ]
             if len(darauf) < 2:
                 self._attr_entity_registry_enabled_default = False

@@ -97,6 +97,23 @@ CONF_INVERTER_TEMPERATURE: Final = "temperature_entity"
 CONF_INVERTER_ENERGY: Final = "energy_entity"
 CONF_INVERTER_MODE: Final = "mode_entity"
 CONF_INVERTER_HYBRID: Final = "hybrid"
+# Nicht netzparallel, sondern in Reihe: Das Netz geht in den Wechselrichter
+# hinein, und das Haus hängt an seinem Ausgang - ein Inselwechselrichter mit
+# Netzvorrang oder ein Gerät im USV-Betrieb. Die Karte setzt ihn direkt neben
+# den Zähler. Es kann nur einen geben: Hinter dem Zähler ist genau eine
+# Stelle frei, an der der ganze Strom durch ein Gerät läuft.
+CONF_INVERTER_SERIES: Final = "in_series"
+# Was er dabei aus dem Netz zieht. Ohne den Sensor ist es das, was der Zähler
+# auf seinen Phasen misst - plus was netzparallele Anlagen davor einspeisen.
+CONF_INVERTER_AC_INPUT: Final = "ac_input_power_entity"
+# Netzparallel, aber vor dem Wechselrichter in Reihe: zwischen Zähler und
+# dessen Eingang statt dahinter auf der Hausseite. Was hier eingespeist wird,
+# fließt in seinen Eingang. Ohne Wechselrichter in Reihe bedeutungslos.
+CONF_INVERTER_BEFORE_SERIES: Final = "before_series"
+# Dreiphasig die Abgabe je Phase, falls das Gerät sie meldet - dieselben
+# Schlüssel wie am Netz ("l1_power_entity" ...), nur am Wechselrichter. Ohne
+# sie wird gleichmäßig aufgeteilt.
+CONF_INVERTER_PHASE_POWER: Final = "{phase}_power_entity"
 
 # ----------------------------------------------------------------- Temperatur
 # Ab wann die Karte bei der Temperatur warnt - je Batterie und je
@@ -341,6 +358,11 @@ PHASE_L1: Final = "l1"
 PHASE_L2: Final = "l2"
 PHASE_L3: Final = "l3"
 PHASES: Final = [PHASE_L1, PHASE_L2, PHASE_L3]
+# Ein Wechselrichter hängt an einer der drei Phasen - oder an allen dreien.
+# Eine eigene Wahl statt einer zweiten Angabe "Phasenzahl": So gibt es keine
+# Kombination, die nichts bedeutet, etwa "dreiphasig auf L2".
+PHASE_ALL: Final = "l123"
+INVERTER_PHASES: Final = [*PHASES, PHASE_ALL]
 
 SYSTEM_VOLTAGES: Final = ["12", "24", "48", "96", "hv"]
 CHEMISTRIES: Final = ["lifepo4", "li_ion", "nmc", "lead_acid", "agm", "gel", "other"]

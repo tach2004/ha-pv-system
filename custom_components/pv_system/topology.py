@@ -92,7 +92,9 @@ from .const import (
     CONF_ID,
     CONF_INVERTER,
     CONF_INVERTER_AC_CURRENT,
+    CONF_INVERTER_AC_INPUT,
     CONF_INVERTER_AC_VOLTAGE,
+    CONF_INVERTER_BEFORE_SERIES,
     CONF_INVERTER_DC_VOLTAGE,
     CONF_INVERTER_ENERGY,
     CONF_INVERTER_FREQUENCY,
@@ -101,7 +103,9 @@ from .const import (
     CONF_INVERTER_MODE,
     CONF_INVERTER_MODEL,
     CONF_INVERTER_NAME,
+    CONF_INVERTER_PHASE_POWER,
     CONF_INVERTER_POWER,
+    CONF_INVERTER_SERIES,
     CONF_INVERTER_TEMPERATURE,
     CONF_INVESTMENT,
     CONF_METER_MODEL,
@@ -163,6 +167,7 @@ from .const import (
     DIVERTER_ICONS,
     DIVERTER_PRICE_UNITS,
     GRID_SIGNS,
+    INVERTER_PHASES,
     PHASE_L1,
     PHASES,
     SIGN_POSITIVE_CHARGE,
@@ -205,6 +210,9 @@ INVERTER_ENTITIES = (
     CONF_INVERTER_TEMPERATURE,
     CONF_INVERTER_ENERGY,
     CONF_INVERTER_MODE,
+    CONF_INVERTER_AC_INPUT,
+    # Die Abgabe je Phase - nur dreiphasig von Belang.
+    *(CONF_INVERTER_PHASE_POWER.format(phase=phase) for phase in PHASES),
 )
 
 
@@ -399,8 +407,12 @@ def wechselrichter_normalisieren(roh: dict[str, Any] | None) -> dict[str, Any]:
         CONF_INVERTER_MANUFACTURER: roh.get(CONF_INVERTER_MANUFACTURER) or None,
         CONF_INVERTER_MODEL: roh.get(CONF_INVERTER_MODEL) or None,
         CONF_RATED_POWER: _zahl(roh.get(CONF_RATED_POWER), DEFAULT_RATED_POWER),
-        CONF_PHASE: _auswahl(roh.get(CONF_PHASE), PHASES, PHASE_L1),
+        # L1, L2, L3 oder alle drei. Was vorher gespeichert war, ist eine der
+        # ersten drei und bleibt, was es war.
+        CONF_PHASE: _auswahl(roh.get(CONF_PHASE), INVERTER_PHASES, PHASE_L1),
         CONF_INVERTER_HYBRID: bool(roh.get(CONF_INVERTER_HYBRID, False)),
+        CONF_INVERTER_SERIES: bool(roh.get(CONF_INVERTER_SERIES, False)),
+        CONF_INVERTER_BEFORE_SERIES: bool(roh.get(CONF_INVERTER_BEFORE_SERIES, False)),
         **temperaturgrenzen(roh),
     }
     for feld in INVERTER_ENTITIES:
@@ -601,6 +613,7 @@ def normalisieren(optionen: dict[str, Any] | None) -> dict[str, Any]:
         for nummer, anlage in enumerate(anlagen, start=1)
     ]
     fertig.sort(key=lambda a: (a[CONF_ORDER], a[CONF_NAME]))
+    _eine_reihe(fertig)
     return {
         CONF_PLANTS: fertig,
         CONF_GRID: netz_normalisieren(optionen.get(CONF_GRID)),
@@ -610,6 +623,39 @@ def normalisieren(optionen: dict[str, Any] | None) -> dict[str, Any]:
             optionen.get(CONF_COSTS), optionen.get(CONF_DISPLAY)
         ),
     }
+
+
+def _eine_reihe(anlagen: list[dict[str, Any]]) -> None:
+    """Höchstens ein Wechselrichter sitzt in Reihe zwischen Zähler und Haus.
+
+    Der Dialog lässt keinen zweiten zu. Kommt trotzdem einer an - über einen
+    Dienstaufruf, eine von Hand bearbeitete Konfiguration -, behält ihn die
+    Anlage, die in der Reihenfolge vorn steht. Zwei Geräte, durch die beide
+    der ganze Strom des Hauses läuft, gibt es nicht; die Rechnung bekäme den
+    Netzbezug sonst zweimal abgezogen.
+    """
+    vergeben = False
+    for anlage in anlagen:
+        wechselrichter = anlage[CONF_INVERTER]
+        if wechselrichter[CONF_INVERTER_SERIES] and vergeben:
+            wechselrichter[CONF_INVERTER_SERIES] = False
+        vergeben = vergeben or wechselrichter[CONF_INVERTER_SERIES]
+
+
+def reihe_anlage(
+    daten: dict[str, Any], ausser: str | None = None
+) -> dict[str, Any] | None:
+    """Die Anlage, deren Wechselrichter in Reihe sitzt - außer der genannten.
+
+    ``ausser`` ist die Kennung der Anlage, die gerade bearbeitet wird: Für sie
+    selbst ist der Platz nicht belegt, sie hat ihn ja.
+    """
+    for anlage in daten.get(CONF_PLANTS, []):
+        if anlage.get(CONF_ID) == ausser:
+            continue
+        if (anlage.get(CONF_INVERTER) or {}).get(CONF_INVERTER_SERIES):
+            return anlage
+    return None
 
 
 def anlage_suchen(daten: dict[str, Any], kennung: str | None) -> dict[str, Any] | None:

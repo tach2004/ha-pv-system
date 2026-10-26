@@ -85,6 +85,96 @@ gemessen ist.
 Bei einem Hybridwechselrichter, der die Batterie aus dem Netz lädt, wird seine
 Leistung negativ – die Formel stimmt dann von selbst weiter.
 
+## Ein- und dreiphasig, netzparallel und in Reihe
+
+### Eine Auswahl statt zweier
+
+Ob ein Wechselrichter einphasig ist und auf welcher Phase er liegt, steht in
+einem einzigen Feld: L1, L2, L3 oder alle drei. Zwei Felder – Phasenzahl und
+Phase – ließen Kombinationen zu, die nichts bedeuten, etwa „dreiphasig auf
+L2“. Gespeicherte Einträge sind eine der ersten drei Möglichkeiten und bleiben
+unverändert, was sie waren.
+
+Dreiphasig wird die Leistung zu gleichen Teilen auf die Phasen verteilt. Das
+ist keine Schätzung, sondern die Bauart der üblichen Geräte. Wer einen
+Wechselrichter mit ungleicher Last hat, trägt seine Leistung je Phase ein.
+Sind nur ein oder zwei Phasen gemessen, teilen sich die übrigen den Rest der
+Gesamtleistung – die Differenz zweier Messungen, keine Annahme. Schweigt ein
+eingetragener Phasensensor, bleibt seine Phase unbekannt und der Rest mit ihr;
+sonst landete der fehlende Wert still auf den anderen Phasen.
+
+Aus Spannung und Strom wird dreiphasig mit dem Dreifachen gerechnet, nicht
+mit dem Einfachen: P = 3 · U · I. Meldet ein Gerät die Spannung zwischen zwei
+Außenleitern (um 400 V) statt der Strangspannung (um 230 V), gilt √3. Welche
+es ist, sagt die Zahl selbst.
+
+Im Rechenkern fragt alles, was nach Phasen fragt, nach `phases` – der Liste,
+an der das Gerät hängt –, nicht mehr nach `phase`. Für die einphasigen ändert
+sich dadurch nichts: Ihre Liste hat genau einen Eintrag.
+
+### In Reihe: Ausgang minus Eingang
+
+Netzparallel speist ein Wechselrichter neben dem Netz ein, und seine Leistung
+ist sein Beitrag. In Reihe hängt das Netz an seinem Eingang und das Haus an
+seinem Ausgang; was er abgibt, ist zum Teil durchgereichter Netzstrom. Sein
+Beitrag ist der Unterschied, und genau diese Zahl (`net_power`) nimmt die
+Rechnung überall dort, wo sie bisher die Leistung nahm: im Hausverbrauch, im
+Gleichstrang, in der Erzeugung je Phase, in der Zuordnung der Einspeisung zu
+den Anlagen. Netzparallel ist `net_power` dieselbe Zahl wie `power` – deshalb
+ändert sich für alle bisherigen Anlagen kein einziger Wert.
+
+Was hineingeht, misst ohne eigenen Sensor der Zähler – plus was netzparallele
+Anlagen zwischen Zähler und ihm einspeisen. Mehr hängt dort nicht: Verbraucher
+sitzen in der Karte hinter ihm, im Haus. Einphasig an einem
+dreiphasigen Anschluss ist es nur seine Phase. Fehlt dafür der Phasensensor,
+bleibt der Eingang unbekannt – ein Drittel der Summe wäre eine Zahl, die so
+niemand gemessen hat. Der Beitrag fehlt dann im Hausverbrauch, der Netzbezug
+nicht.
+
+Sein Ertragszähler zählt den durchgereichten Netzstrom mit. Als Ertrag der
+Anlage gilt deshalb der Modulzähler; sonst stünde Netzbezug in der
+Amortisation.
+
+### Nur einer, und der Schalter wird grau
+
+Zwischen Zähler und Haus ist genau eine Stelle frei, durch die der ganze Strom
+eines Phasenstrangs läuft. Zwei Geräte dort bekämen den Netzbezug zweimal
+abgezogen. Der Dialog graut den Schalter deshalb bei allen übrigen Anlagen aus
+(`read_only` am Selektor) und prüft beim Speichern noch einmal – ein Frontend,
+das das Ausgrauen nicht kennt, schickt ihn sonst mit. Kommt trotzdem ein
+zweiter an, über einen Dienst oder eine von Hand bearbeitete Konfiguration,
+behält ihn beim Normalisieren die Anlage, die vorn steht.
+
+Der Schalter gehört zum Wechselrichter, nicht zum Standort: Er beschreibt, wie
+dieses eine Gerät angeschlossen ist.
+
+Sein Gegenstück, „vor dem Wechselrichter in Reihe“, bedeutet nur etwas, wenn
+eine *andere* Anlage in Reihe sitzt. Es ist deshalb genau dann bedienbar, wenn
+„In Reihe“ ausgegraut ist, und umgekehrt – von beiden ist immer genau einer
+zu haben. Fällt der Wechselrichter in Reihe weg, bleibt der Haken stehen, wird
+aber nicht beachtet.
+
+### Wie die Karte es zeichnet
+
+Phasen gibt es erst unter dem Wechselrichterkasten – darüber ist Gleichstrom.
+Einphasig geht eine Leitung hinab, dreiphasig drei nebeneinander.
+
+Die Anlage in Reihe steht links außen, gleich welche Reihenfolge eingestellt
+ist, denn sie sitzt neben dem Zähler; links von ihr nur, wer davor einspeist.
+Die Reihenfolge im Bild ist die, in der der Strom vom Zähler zum Haus an den
+Anlagen vorbeikommt. Ihre Phasen werden an ihr unterbrochen:
+Links geht die Leitung hinauf in den Kasten, rechts kommt sie wieder heraus.
+Dreiphasig liegen die drei Paare ineinander – L1 außen, L3 innen. Weil die
+Phase zwischen Ein- und Ausgang gar nicht gezeichnet wird, kreuzt so keine
+Leitung eine andere. Steht sie ganz links, rückt die erste Spalte um die
+Breite dieser Paare nach rechts, damit das Stück vom Zähler bis zum Eingang so
+lang bleibt wie sonst der Abstand zum ersten Abgriff; steht sie ganz rechts,
+rückt das Haus um dieselbe Breite ab.
+
+Die Leitung hinauf in den Eingang trägt die Farbe des Abschnitts, aus dem sie
+kommt: rot, wenn der Strom direkt vom Zähler kommt, sonst die des Abschnitts
+hinter einer Anlage davor. Deren Einspeisung ist kein Netzbezug.
+
 ## Der gemeinsame Ladestand
 
 Bei mehreren Batterien wird nicht der Mittelwert der Ladestände gebildet,

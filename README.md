@@ -33,9 +33,23 @@ und einbringt.
   sind – vier in Reihe, zwei Strings parallel (4S2P) sieht man dem Bild an.
 * **Aktuelle Leistung und Spitzenleistung** nebeneinander: Was liefert die
   Anlage gerade, und was wäre möglich?
-* **Einphasige Wechselrichter im Netzparallelbetrieb**: Jeder Wechselrichter
-  liegt auf einer Phase, und die Karte zeichnet ihn auf genau diese Schiene.
-  Drei Wechselrichter auf zwei Phasen sind der Normalfall, nicht die Ausnahme.
+* **Ein- und dreiphasige Wechselrichter**: Jeder Wechselrichter liegt auf
+  einer Phase – oder auf allen dreien –, und die Karte zeichnet ihn auf genau
+  diese Schienen. Erst unter dem Kasten, denn darüber ist Gleichstrom:
+  Einphasig geht eine Leitung hinab, dreiphasig drei nebeneinander, und jede
+  trägt ihren Anteil – zu gleichen Teilen, oder gemessen, wenn das Gerät seine
+  Leistung je Phase meldet. Drei Wechselrichter auf zwei Phasen sind der
+  Normalfall, und ein- und dreiphasige dürfen beliebig gemischt sein.
+* **Netzparallel oder in Reihe**: Ein Wechselrichter darf auch zwischen Zähler
+  und Haus sitzen – das Netz an seinem Eingang, das Haus an seinem Ausgang,
+  wie bei einem Inselwechselrichter mit Netzvorrang oder im USV-Betrieb. Die
+  Karte setzt ihn dann direkt neben den Zähler und unterbricht seine Phasen an
+  ihm: links geht der Netzstrom hinauf in den Kasten, rechts kommt heraus, was
+  er zum Haus abgibt. Gerechnet wird mit Ausgang minus Eingang. Das geht für
+  genau einen Wechselrichter; bei den übrigen Anlagen ist der Schalter dann
+  ausgegraut. Die übrigen hängen netzparallel dahinter auf der Hausseite –
+  oder davor, zwischen Zähler und seinem Eingang. Dann stehen sie in der Karte
+  links von ihm, und was sie einspeisen, fließt in seinen Eingang.
 * **Laderegler** mit Eingangs- und Ausgangsspannung und einstellbarer
   Systemspannung (12/24/48/96 V oder Hochvolt).
 * **Batterien** mit Ladestand, Leistung, Spannung, Temperatur, Zyklen,
@@ -157,7 +171,7 @@ PV-System
 │             │              ├── Module      Anzahl, Wp, Verschaltung, Sensoren
 │             │              ├── Laderegler  Systemspannung, Ein-/Ausgang
 │             │              ├── Batterie    Kapazität, Ladestand, Temperatur
-│             │              ├── Wechselr.   Nennleistung, Phase, Sensoren
+│             │              ├── Wechselr.   Nennleistung, Phase(n), in Reihe?
 │             │              └── Kosten      Investition, Inbetriebnahme, Satz
 │             └── Anlage 2 ...
 ├── Netz und Zähler          Gesamt- und Phasenleistung, Vorzeichen
@@ -1165,9 +1179,13 @@ Optionsdialog kennt keine wiederholbaren Blöcke – das ist der Preis dafür.
 |---|---|---|---|
 | **Vorhanden** | an/aus | Ohne ihn endet die Anlage am Gleichstrom | an |
 | **Nennleistung** | W | Bezugsgröße für die Auslastung | Kein Balken |
-| **Phase** | L1/L2/L3 | Auf welcher Schiene er einspeist. Bestimmt, wo er in der Karte abgreift und wie die Phasenflüsse aufgehen | L1 |
-| **Leistung** | W | **Die Abgabe auf der Wechselstromseite.** Geht in Hausverbrauch, Autarkie und die Phasenrechnung ein | Kein Hausverbrauch |
-| **Ertragszähler** | kWh | Grundlage für Ertrag und Amortisation dieser Anlage | Der Modulertrag wird genommen |
+| **Phase** | L1/L2/L3 oder alle drei | Auf welcher Schiene er einspeist – dreiphasig auf allen dreien, zu gleichen Teilen. Bestimmt, wo er in der Karte abgreift und wie die Phasenflüsse aufgehen | L1 |
+| **In Reihe zwischen Zähler und Haus** | an/aus | Das Netz hängt an seinem Eingang, das Haus an seinem Ausgang. Die Karte setzt ihn neben den Zähler, gerechnet wird mit Ausgang minus Eingang – siehe unten. Nur einer kann so sitzen | aus (netzparallel) |
+| **Vor dem Wechselrichter in Reihe** | an/aus | Nur bedienbar, wenn eine andere Anlage in Reihe sitzt: Dieser speist zwischen Zähler und ihrem Eingang ein statt dahinter. Steht in der Karte links von ihr | aus (dahinter) |
+| **Leistung** | W | **Die Abgabe auf der Wechselstromseite**, dreiphasig die Summe. In Reihe: was zum Haus hinausgeht. Geht in Hausverbrauch, Autarkie und die Phasenrechnung ein | Kein Hausverbrauch |
+| **Ausgangsleistung L1/L2/L3** | W | Nur dreiphasig: die Abgabe je Phase. Ist nur ein Teil eingetragen, teilen sich die übrigen Phasen den Rest. Ohne Gesamtleistung ist ihre Summe die Leistung | Gleichmäßig aufgeteilt |
+| **Eingangsleistung vom Netz** | W | Nur in Reihe: was das Gerät aus dem Netz zieht. Nötig, wenn nur ein Teil des Hauses dahinter hängt | Was der Zähler auf seinen Phasen misst, plus die Anlagen davor |
+| **Ertragszähler** | kWh | Grundlage für Ertrag und Amortisation dieser Anlage. In Reihe zählt er den durchgereichten Netzstrom mit und wird dafür nicht genommen | Der Modulertrag wird genommen |
 | **Hybrid** | an/aus | Sagt: Er kann die Batterie aus dem Netz laden. Was davon wirklich gespeichert wird, zählt dann **nicht** als Hausverbrauch – siehe unten | aus |
 | **AC-Spannung/-Strom**, **DC-Spannung**, **Frequenz**, **Temperatur**, **Betriebsart** | | Nur Anzeige. Die DC-Spannung dient ohne Laderegler als Strangspannung | nichts |
 | **Kälteschwelle**, **warm ab**, **heiß ab** | °C | Wie bei der Batterie: wann die Temperatur blau blinkt, orange wird und rot blinkt | 5 / 30 / 40 °C |
@@ -1469,6 +1487,50 @@ Dann wird mit Haken das Laden angenommen – das ist der Grund, aus dem jemand
 den Haken überhaupt setzt. Wer es genau haben will, trägt die
 Batterieleistung ein.
 
+### In Reihe zwischen Zähler und Haus
+
+Netzparallel speist ein Wechselrichter **neben** dem Netz ein. In Reihe läuft
+der Netzstrom **durch** ihn hindurch: Was er zum Haus abgibt, ist zum Teil
+durchgereichter Netzstrom. Selbst beigetragen hat er nur den Unterschied:
+
+    Beitrag = Ausgang − Eingang
+
+Sein Eingang ist ohne eigenen Sensor genau das, was der Zähler auf seinen
+Phasen misst – in der Karte sitzt er direkt daneben, dazwischen hängt nichts.
+Dreiphasig ist das die Gesamtleistung, einphasig die Leistung seiner Phase.
+Fehlt am Zähler der Phasensensor, bleibt der Eingang eines einphasigen Geräts
+unbekannt: Ein Drittel der Summe wäre geraten. Dann hilft der Sensor
+*Eingangsleistung vom Netz* – den braucht es auch, wenn nur ein Teil des
+Hauses hinter dem Gerät hängt.
+
+Mit dem Beitrag geht die Rechnung weiter wie immer. Drei Beispiele, 1000 W
+vom Netz:
+
+| Ausgang | Beitrag | Was passiert | Hausverbrauch |
+|---|---|---|---|
+| 2500 W | +1500 W | Batterie und Module legen dazu | 2500 W |
+| 980 W | −20 W | Er reicht nur durch und versorgt sich selbst | 1000 W |
+| 0 W, Batterie lädt mit 1000 W | −1000 W | Mit Haken *Hybrid*: Netzladung, kein Verbrauch | 0 W |
+
+Weitere Anlagen hängen in der Karte **hinter** ihm, also auf seiner Hausseite.
+Was sie einspeisen, kommt zum Ausgang dazu.
+
+Speist eine Anlage **vor** ihm ein – zwischen Zähler und seinem Eingang –,
+stellst du das bei ihr ein: *Vor dem Wechselrichter in Reihe*. Dann fließt ihre
+Leistung in seinen Eingang:
+
+    Eingang = Zähler + was davor eingespeist wird
+
+Speist der Zähler 500 W ein und davor erzeugt eine Anlage 1500 W, gehen 1000 W
+in den Wechselrichter. Am Hausverbrauch ändert das nichts – er ist weiterhin
+sein Ausgang plus das, was dahinter dazukommt. In der Karte steht die Anlage
+links von ihm, und seine Eingangsleitung ist nur dort rot, wo der Strom direkt
+vom Zähler kommt; nach einer Anlage davor ist es kein Netzbezug.
+
+Sein **Ertragszähler** zählt den durchgereichten Netzstrom mit. Als Ertrag der
+Anlage gilt deshalb der Ertragszähler der Module – sonst stünde der Netzbezug
+in der Amortisation.
+
 ### Autarkie und Eigenverbrauch
 
 **Was sie messen**
@@ -1538,7 +1600,7 @@ Stundensensor oder rechnet ihn aus den Leistungssensoren, die es einzeln gibt.
 | `pv_system.set_modules`   | Anzahl, Leistung und Verschaltung der Module  |
 | `pv_system.set_battery`   | Kapazität und Nennspannung                    |
 | `pv_system.set_charger`   | Systemspannung und Ladestrom                  |
-| `pv_system.set_inverter`  | Nennleistung und Phase                        |
+| `pv_system.set_inverter`  | Nennleistung und Phase (auch `l123`)          |
 | `pv_system.add_plant`     | Weitere Anlage anlegen                        |
 | `pv_system.remove_plant`  | Anlage entfernen                              |
 | `pv_system.tidy_entities` | Doppelte Sensoren abschalten                  |
@@ -1560,6 +1622,7 @@ data:
 
 ```
 Hausverbrauch   = Wechselrichterleistung + Netzleistung   (positiv = Bezug)
+                  in Reihe zählt der Wechselrichter mit Ausgang − Eingang
 Autarkie        = (Verbrauch − Netzbezug) / Verbrauch
 Eigenverbrauch  = (Erzeugung − Einspeisung) / Erzeugung
 Speicherinhalt  = Kapazität × Ladestand

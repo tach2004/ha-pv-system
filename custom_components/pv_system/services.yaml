@@ -131,7 +131,7 @@ set_inverter:
       selector:
         select:
           translation_key: phase
-          options: ["l1", "l2", "l3"]
+          options: ["l1", "l2", "l3", "l123"]
 
 add_plant:
   target:

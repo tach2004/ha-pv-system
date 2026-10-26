@@ -249,6 +249,7 @@
   },
   "options": {
     "error": {
+      "series_taken": "Another plant's inverter already sits between meter and house. Switch it off there first.",
       "temperature_order": "The temperature thresholds must rise: cold threshold below “warm from”, “warm from” below “hot from”."
     },
     "step": {
@@ -462,12 +463,18 @@
       "inverter": {
         "data": {
           "ac_current_entity": "Output current (AC)",
+          "ac_input_power_entity": "Input power from grid (AC)",
           "ac_voltage_entity": "Output voltage (AC)",
+          "before_series": "Before the series inverter (grid side)",
           "dc_voltage_entity": "Input voltage (DC)",
           "enabled": "Present",
           "energy_entity": "Yield meter (AC)",
           "frequency_entity": "Frequency",
           "hybrid": "Hybrid inverter",
+          "in_series": "In series between meter and house",
+          "l1_power_entity": "Output power L1 (three-phase)",
+          "l2_power_entity": "Output power L2 (three-phase)",
+          "l3_power_entity": "Output power L3 (three-phase)",
           "manufacturer": "Manufacturer",
           "mode_entity": "Operating mode",
           "model": "Model",
@@ -482,25 +489,31 @@
         },
         "data_description": {
           "ac_current_entity": "Output current on the grid side, in A.",
+          "ac_input_power_entity": "Series only: what the device currently draws from the grid. Empty means: what the meter measures on its phases - the total when three-phase, the power of its phase when single-phase - plus what plants before it feed in. Needed when only part of the house hangs behind the device.",
           "ac_voltage_entity": "Grid voltage at the output, typically around 230 V.",
+          "before_series": "Only when another plant sits in series: on when this inverter feeds in between the meter and its input instead of behind it on the house side. The card places it to the left of it, and what it feeds in flows into its input. Without a plant in series the switch is greyed out.",
           "dc_voltage_entity": "DC voltage at the input - the battery voltage on a battery inverter.",
           "enabled": "Off when this plant has no inverter of its own.",
-          "energy_entity": "kWh meter for what this device has delivered in total. The cost calculation uses it as generation - only what the inverter delivers can go to the grid.",
+          "energy_entity": "kWh meter for what this device has delivered in total. The cost calculation uses it as generation - only what the inverter delivers can go to the grid. In series it also counts the grid power passed through; the module yield meter then counts as generation instead.",
           "frequency_entity": "Grid frequency as measured by this device - around 50 Hz.",
           "hybrid": "On when the device can also charge the battery from the grid. Negative power is then no longer simply own consumption: whatever the battery sensor shows as actually stored counts as charging rather than household use - the rest stays consumption. Without the option, negative power is always standby.",
+          "in_series": "On when the device does not feed in alongside the grid but has the grid on its input and the house on its output - an off-grid inverter with grid bypass or a device in UPS mode. The card places it right next to the meter; other plants hang behind it - or before it, if set up that way. The calculation uses output minus input. Only one inverter can sit like this - for the others the switch is then greyed out.",
+          "l1_power_entity": "Three-phase only: what the device delivers on L1. Empty means: a third of the total - or the remainder if the other phases are measured. Without a total power the sum of the phases is used.",
+          "l2_power_entity": "Like L1, for L2.",
+          "l3_power_entity": "Like L1, for L3.",
           "manufacturer": "Display only - the card shows manufacturer and model together.",
           "mode_entity": "Operating mode as text, e.g. “grid-tied” or “off-grid”.",
           "model": "Display only, e.g. the type designation from the label.",
           "name": "Name of this inverter, e.g. “GTN1000 L3”.",
-          "phase": "Which phase this single-phase inverter feeds into.",
-          "power_entity": "AC output power - the built-in sensor or an inline meter such as a inline meter. House consumption is derived from this figure.",
+          "phase": "Which phase this inverter feeds into - or all three if it is three-phase. The card then draws three lines below the box and splits the power evenly.",
+          "power_entity": "AC output power - the built-in sensor or an inline meter. House consumption is derived from this figure. Three-phase: the total of all three phases. In series: what leaves the output towards the house.",
           "rated_power_w": "Continuous rating from the label. The load bar is based on it.",
           "temp_cold": "Below this the temperature on the card turns blue and blinks. A lithium cell must not be charged below about 5 °C. Empty: 5 °C.",
           "temp_hot": "From here red and blinking. For an inverter the data sheet says when it starts to throttle. Empty: 40 °C.",
           "temp_warm": "From here orange - not a problem yet, but worth a look. Empty: 30 °C.",
           "temperature_entity": "Temperature of the inverter itself."
         },
-        "description": "Designed for single-phase inverters running in parallel with the grid.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
+        "description": "Single-phase on L1, L2 or L3 - or three-phase on all of them. In parallel with the grid or in series between meter and house. Only one inverter can sit in series, currently: {series_plant}.\n\nAlmost everything may be left empty. What you leave out simply is not shown on the card - only the fields marked with * are required.",
         "title": "Inverter – {plant}"
       },
       "modules": {
@@ -718,6 +731,7 @@
     "phase": {
       "options": {
         "l1": "L1",
+        "l123": "L1 + L2 + L3 (three-phase)",
         "l2": "L2",
         "l3": "L3"
       }
@@ -817,7 +831,7 @@
           "name": "Present"
         },
         "phase": {
-          "description": "Which phase this single-phase inverter feeds into.",
+          "description": "Which phase this inverter feeds into - or all three if it is three-phase. The card then draws three lines below the box and splits the power evenly.",
           "name": "Phase"
         },
         "plant": {
